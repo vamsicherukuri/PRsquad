@@ -65,8 +65,11 @@ The first App-native vertical slice covers:
 
 Issue -> Intake -> Architect -> Scope Gate -> Developer -> QA -> Reviewer -> PR/CI -> Merge Gate.
 
+The Controller restates a compact `WorkflowState` block (runId, phase, round/attempt counters, approval flags) at the top of each reply, recomputed only from its last stated state, validated specialist handoffs, and explicit human messages. This state currently lives only in the conversation thread; it is not durable across a lost or restarted session.
+
 The following are planned subsequent milestones and must not be represented as implemented until verified in the GitHub Copilot App:
 
+- durable workflow-state persistence (`WorkflowState` moved from conversation-only to a policy hook or Canvas-backed store, revisit after end-to-end testing of the current vertical slice),
 - deterministic write-scope enforcement hook,
 - machine-readable approval state,
 - Canvas control surface,

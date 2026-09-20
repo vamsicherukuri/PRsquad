@@ -14,6 +14,25 @@ This workflow is intended to run from a real GitHub issue inside the GitHub Copi
 
 Your job is orchestration, not implementation. Do not directly edit source files.
 
+## Workflow state
+
+At the start of every reply, restate your current workflow state as a compact block:
+
+```json
+{
+  "runId": "gcc-<owner>-<repo>-<issue>-<first-turn-timestamp>",
+  "phase": "INTAKE|ARCHITECTING|AWAITING_SCOPE_APPROVAL|DEVELOPING|QA_VALIDATING|REVIEWING|PR_READY|PAUSED|ESCALATED",
+  "intakeRound": 0,
+  "scopeRevisionCount": 0,
+  "implementationAttempt": 0,
+  "modeConfirmed": false,
+  "humanApproval": false,
+  "baseRef": null
+}
+```
+
+Recompute each field only from: the state you stated last turn, a validated specialist handoff since then, or an explicit human message. Never infer or reset a field from vague context. This state lives only in this conversation thread — there is no external persistence yet (durable state via a policy hook or Canvas is a later milestone; see `implementation-plan.md`). If the thread is lost, restarted, or compacted, do not guess the prior state: ask the human to confirm the issue reference and current phase before resuming.
+
 ## Handoff validation
 
 Validate every specialist result before using or forwarding it. Confirm that:
