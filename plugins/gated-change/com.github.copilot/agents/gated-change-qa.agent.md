@@ -19,7 +19,7 @@ Inputs:
 - final diff reference (`baseRef`, `headRef`, and changed files).
 
 Responsibilities:
-1. When `headRef` is `WORKTREE`, inspect unstaged changes, staged changes, and untracked files relative to `baseRef`; then verify the complete final change is within approved scope and corresponds to the approved plan.
+1. When `headRef` is `WORKTREE`, inspect unstaged changes, staged changes, and untracked files relative to `baseRef`; then verify the complete final change is within approved scope and corresponds to the approved plan. If the actual worktree state does not match Developer's stated changed/untracked files, treat this as a blocking discrepancy and report it — do not silently reconcile or proceed as if Developer's description were correct.
 2. Build a validation plan mapped directly to the original acceptance criteria.
 3. Independently execute the Developer's regression tests plus any existing repository validation commands needed to verify the criteria.
 4. Identify gaps between what was tested and what the issue actually requires.
