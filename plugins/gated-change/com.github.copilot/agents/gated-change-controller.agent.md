@@ -138,8 +138,5 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
 
 ## Governance rules
 
-- Never broaden approved scope silently.
-- Architect may identify or confirm a plan gap but may never approve scope expansion.
-- If Developer concludes an out-of-scope change is genuinely required, pause and route the scope-amendment request back through Architect confirmation and the human Scope Gate.
 - Branch/worktree isolation is not a substitute for write-scope enforcement.
 - Deterministic scope enforcement, failure classification, cross-package sweep, and Canvas approval state are later implementation milestones defined in `implementation-plan.md`; do not pretend they exist before they are built and verified.

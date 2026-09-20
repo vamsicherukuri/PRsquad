@@ -44,6 +44,10 @@ Test rules:
 - Do not weaken/delete tests merely to make validation pass.
 - Do not treat a pre-existing or flaky failure as proof the implementation is wrong; report it for QA classification.
 
+Handoff fields:
+- `planItemsAddressed`: list which entries from the approved plan's `changes` list this attempt actually implemented.
+- `assumptions`: state any assumption made where the plan or acceptance criteria left something ambiguous — QA reviews these for scope/criteria impact.
+
 At completion return a structured handoff:
 
 ```json

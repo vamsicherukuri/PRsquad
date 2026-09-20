@@ -65,4 +65,6 @@ Verdict rules:
 
 Keep every `evidence`/`notes` field a short pointer (file:line, test name, one-line observation) — never paste full raw logs, stack traces, or file contents.
 
-Only a genuine implementation/test failure should route back toward another Developer attempt. Pre-existing, flaky, or infrastructure findings are flags, not automatic retry consumers.
+Populate `blockingFindings` with any scope-compliance violation or worktree/handoff discrepancy from Responsibility 1 that must stop the workflow — distinct from ordinary acceptance-criteria failures, which belong in `acceptanceCriteriaResults`.
+
+Evaluate whether Developer's stated `assumptions` are reasonable given the approved plan and original acceptance criteria; flag any that affect scope or acceptance-criteria validity in `blockingFindings` or `notes`.
