@@ -512,6 +512,7 @@ single issue-retrieval boundary; Architect receives Intake's verified issue payl
 | Extra technical approver for High blast-radius plans | **Parked** | Revisit after full workflow is designed |
 | Real token figures per stage | **Pending** | Week 2, via existing cost/observability collector |
 | Durable workflow-state persistence (move `WorkflowState` from conversation-only to a policy hook or Canvas-backed store) | **Backlog** | Revisit after end-to-end testing of the current five-agent vertical slice; ties to implementation-order items 7-8 |
+| Whether an approved scope amendment resets the implementation-attempt counter | **Backlog** | Currently undocumented; likely rare in a simple bug-fix scenario, revisit only if it's hit in live testing |
 | Diagram/table update for Step 1.5 | **Done** (2026-09-16) | Artifact updated |
 | Diagram/table update to remove Impact Auditor (Step 7.5 cut) | **Done** (2026-09-16) | Artifact reverted to 11-step layout, wide-scope legend/permission row removed |
 
