@@ -68,6 +68,8 @@ title alone.
     answer.
 - **Bounded:** capped at 2 clarification rounds, then escalates to the PM to supply the missing info or
   close/deprioritize the issue.
+- Round numbering is explicit: `0` is the initial Intake check; rounds `1` and `2` are two actual human
+  clarification opportunities and re-checks. The maximum is therefore three Intake invocations.
 - **Rationale:** same "don't spend expensive tokens on an ill-defined target" principle as the retry cap — reuse
   this framing in the submission narrative as a second, cheaper example of the same discipline.
 
@@ -149,6 +151,10 @@ speculatively during an earlier revision round.
 | **2. Genuinely needed, plan gap, Architect agrees** | Developer sends a scope-amendment request to Architect first (agent-to-agent, cheap, fast, no PM involved yet). If Architect agrees the plan was incomplete, it **cannot approve the expansion itself** — its agreement triggers a Scope-gate revision round, reusing the same ≤2-round mechanism from §5a. Only the PM can authorize an actual scope expansion. |
 | **3. Genuinely needed, plan gap, Architect disagrees** | Treated like case 1 — Developer's belief was wrong, proceeds without it, no PM involvement. |
 
+**Scope-amendment contracts:** Developer returns `SCOPE_AMENDMENT_REQUIRED` with requested paths, reason, and
+impact if rejected. Architect returns `SCOPE_AMENDMENT_CONFIRMED` with a revised plan/proposed scope, or
+`SCOPE_AMENDMENT_REJECTED` with a reason. Confirmation returns to the human Scope gate; it is never approval.
+
 **The governance rule this preserves:** Architect may *confirm* the original scope was sufficient (resolving a
 request without escalation), but may never *unilaterally approve* a scope expansion — only the PM can, via the
 Scope gate. Without this line, two agents could jointly expand scope with zero human involvement, which would
@@ -168,6 +174,14 @@ Scope-gate revision cap) instead of inventing a third or fourth bounded-loop typ
 test-to-acceptance-criterion coverage, commands/results from the Developer's narrow validation, a base/head diff
 reference, any scope-amendment request, assumptions, and residual risk. The Developer copies original acceptance
 criteria verbatim when mapping tests; it never rewrites them.
+
+Developer status is a closed enum: `IMPLEMENTED`, `BLOCKED`, or `SCOPE_AMENDMENT_REQUIRED`. Only `IMPLEMENTED`
+reaches QA. `BLOCKED` pauses; it consumes an implementation attempt only when partial work exists.
+`SCOPE_AMENDMENT_REQUIRED` follows the Architect/Scope-gate path above.
+
+**Diff protocol:** Developer captures `baseRef` with `git rev-parse HEAD` before its first edit and returns
+`headRef: WORKTREE`. QA and Reviewer inspect unstaged changes, staged changes, and untracked files relative to that
+base; implementation need not be committed before validation.
 
 **Controller → QA package:** the complete Developer handoff, approved Architect plan, original acceptance criteria
 from Intake, approved scope, Architect risk/blast-radius data, and final diff reference. QA reads the actual diff
@@ -195,13 +209,27 @@ from those refs rather than receiving an LLM-generated diff summary.
   Steps 5–7 retry loop — no new mechanism.
 
 **QA → Controller handoff:** verdict, final-diff scope compliance, criterion-level results with evidence, executed
-test results, failure classifications, blocking findings, and notes.
+test results, criterion-mapped validation plan, failure classifications, blocking findings, and notes. QA verdict
+is a closed enum: `PASS`, `FAIL`, or `BLOCKED`. Only `PASS` reaches Reviewer. `FAIL` is reserved for scope failure
+or repeatable fix-caused failure and consumes an implementation attempt. `BLOCKED` pauses without consuming one.
+`INFRASTRUCTURE` and `UNKNOWN` are failure classifications that require overall verdict `BLOCKED`.
 
 **Controller → Reviewer package:** approved Architect plan, original acceptance criteria, complete final Developer
 handoff, approved scope, final diff reference, complete QA result/evidence, Architect risk/blast-radius data, and
 any deterministic cross-package hits available. Reviewer reads the actual final diff, performs code review, and
 uses QA's evidence without re-running tests. Reviewer has shell access only for non-mutating git inspection needed
 to reconstruct that diff; it must not execute tests/builds or any command that changes files, the index, or refs.
+Reviewer assessment is `CLEAR` or `CONCERNS`; both proceed to the human Merge gate because concerns are
+informational and never autonomously trigger a retry.
+
+## 5c.1 Handoff contract validation
+
+The Controller validates every specialist return before routing it: schema shape, required fields, allowed enum,
+status-specific fields, and internal consistency. A malformed result gets one same-agent correction invocation
+limited to repairing the handoff (no new analysis, edits, or tests). If still invalid, the workflow stops with a
+handoff-contract failure. Correction-only invocations do not consume workflow retry budget. Missing fields are
+never inferred or fabricated. Deterministic JSON Schema enforcement is a later hardening milestone; this first
+vertical slice enforces the contract through Controller instructions.
 
 ## 5d. Step 06 — Tests run: scope and failure classification
 

@@ -11,8 +11,8 @@ Use this skill when a user wants to take a real GitHub issue through the governe
 
 1. The Controller receives the user's issue reference and delegates it to Intake. The Controller orchestrates only; it does not fetch or evaluate issue content.
 2. Intake uses its read-only GitHub issue tools to fetch the title, body, metadata, and comments, then returns `FETCH_FAILED`, `EMPTY`, `NOT_READY`, or `READY`. It never reconstructs issue content from memory or inference.
-3. For `EMPTY` or `NOT_READY`, the Controller asks the user to update the issue and reply `done`, then invokes Intake once more with the same reference. After two unsuccessful checks, stop and escalate.
-4. For `READY`, the Controller passes Intake's complete structured result, including the verified issue payload, to Architect for the technical + impact specification.
+3. For `EMPTY` or `NOT_READY`, the Controller asks the user to update the issue and reply `done`. Intake check `0` is initial; clarification rounds `1` and `2` provide two human update/re-check opportunities. If round `2` remains insufficient, stop and escalate.
+4. For `READY`, the Controller passes Intake's complete structured result to Architect. Architect returns `PLAN_READY`; scope-amendment reviews return `SCOPE_AMENDMENT_CONFIRMED` or `SCOPE_AMENDMENT_REJECTED`.
 5. Stop at the human Scope Gate. No code changes before explicit approval. Approval is a two-part act: the human switches the session from Plan mode to Agent mode (the environment-enforced control — Developer's write tools stay inert in Plan mode no matter what is typed) AND explicitly confirms both the mode switch and approval in their reply. Do not delegate to Developer speculatively to test whether the mode switch happened — that wastes a full Developer turn on a foregone conclusion; wait for the human's confirming reply instead.
 6. After approval, implement in the Copilot App session's isolated workspace/worktree through the Developer agent.
 7. Developer writes the fix and regression tests.
@@ -38,6 +38,15 @@ Use this skill when a user wants to take a real GitHub issue through the governe
 - Developer -> QA -> Reviewer implementation attempts: <= 3.
 - A Developer invocation that never started (routing/tool-level failure, no side effects) does not consume an implementation attempt \u2014 retry it directly. A Developer stall mid-task (real edits may already exist) does consume one attempt, and must resume by first checking the actual git state rather than assuming a clean worktree.
 - Escalate rather than loop beyond a bound.
+
+## Handoff rules
+
+- Controller validates every specialist return for schema, required fields, allowed enum, status-specific fields, and internal consistency before routing it.
+- A malformed handoff gets one same-agent correction attempt limited to formatting/data repair. A second invalid result stops the workflow; Controller never invents missing values.
+- Developer status: `IMPLEMENTED` -> QA; `BLOCKED` -> pause; `SCOPE_AMENDMENT_REQUIRED` -> Architect confirmation and, if confirmed, Human Scope Gate.
+- QA verdict: `PASS` -> Reviewer; `FAIL` -> Developer retry for scope or genuine fix-caused failure; `BLOCKED` -> pause without retry consumption.
+- Reviewer assessment `CLEAR` or `CONCERNS` always goes to the Human Merge Gate; concerns remain informational.
+- Developer captures `baseRef` before editing and returns `headRef: WORKTREE`. QA and Reviewer inspect unstaged, staged, and untracked changes relative to that base.
 
 ## Efficiency rules
 
@@ -65,3 +74,4 @@ The following are planned subsequent milestones and must not be represented as i
 - deterministic cross-package sweep,
 - Release-helper and post-merge auto-revert flow,
 - token/cost instrumentation.
+- deterministic JSON Schema enforcement for specialist handoffs.

@@ -19,7 +19,7 @@ Inputs:
 - final diff reference (`baseRef`, `headRef`, and changed files).
 
 Responsibilities:
-1. Read the actual final diff from the supplied refs, then verify it is within approved scope and corresponds to the approved plan.
+1. When `headRef` is `WORKTREE`, inspect unstaged changes, staged changes, and untracked files relative to `baseRef`; then verify the complete final change is within approved scope and corresponds to the approved plan.
 2. Build a validation plan mapped directly to the original acceptance criteria.
 3. Independently execute the Developer's regression tests plus any existing repository validation commands needed to verify the criteria.
 4. Identify gaps between what was tested and what the issue actually requires.
@@ -39,6 +39,9 @@ Return only a structured QA result:
 {
   "verdict": "PASS|FAIL|BLOCKED",
   "scopeCompliance": "PASS|FAIL",
+  "validationPlan": [
+    { "criterion": "verbatim original criterion", "commands": ["..."] }
+  ],
   "acceptanceCriteriaResults": [
     { "criterion": "...", "result": "PASS|FAIL|NOT_VERIFIED", "evidence": "..." }
   ],
@@ -52,5 +55,10 @@ Return only a structured QA result:
   "notes": []
 }
 ```
+
+Verdict rules:
+- `PASS`: scope compliance is `PASS` and every original acceptance criterion is verified as `PASS`.
+- `FAIL`: scope compliance failed or a repeatable `GENUINE_FIX_CAUSED` failure exists.
+- `BLOCKED`: required validation could not complete. Use classification `INFRASTRUCTURE` for a known environment/tool/service cause and `UNKNOWN` when evidence cannot support a safe classification.
 
 Only a genuine implementation/test failure should route back toward another Developer attempt. Pre-existing, flaky, or infrastructure findings are flags, not automatic retry consumers.

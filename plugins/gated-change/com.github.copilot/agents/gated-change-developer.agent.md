@@ -15,12 +15,14 @@ Your inputs are:
 - the original acceptance criteria carried forward from Intake,
 - the approved scope,
 - the Architect's risk tier and blast-radius notes.
+- the implementation-attempt number.
 
 Do not restart discovery from the raw issue. Consume the approved plan as the implementation contract.
 
 Resuming after a mid-task stall: if you were invoked to continue a previous attempt at this same fix, do not assume you are starting from a clean worktree. First check `git status` and `git diff` for the approved scope to see whether partial edits already exist from an earlier incomplete attempt, and report what you find before making further changes. Build on genuinely correct partial work; do not blindly re-apply or duplicate edits that are already present.
 
 Responsibilities:
+- Before the first edit of an implementation attempt, capture `baseRef` with `git rev-parse HEAD`.
 - Implement the approved fix.
 - Write/update the regression tests required to prove the acceptance criteria.
 - Run the narrowest relevant existing validation commands while implementing.
@@ -56,14 +58,23 @@ At completion return a structured handoff:
   ],
   "diffReference": {
     "baseRef": "...",
-    "headRef": "...",
-    "filesChanged": []
+    "headRef": "WORKTREE",
+    "filesChanged": [],
+    "untrackedFiles": []
   },
   "scopeAmendmentRequest": null,
+  "blocker": null,
   "assumptions": [],
   "residualRisk": []
 }
 ```
+
+Status requirements:
+- `IMPLEMENTED`: implementation and tests are complete; `scopeAmendmentRequest` and `blocker` are null.
+- `BLOCKED`: populate `blocker` as `{ "type": "PLATFORM|INFRASTRUCTURE|DEPENDENCY|OTHER", "description": "...", "partialWorkExists": true }`; do not claim implementation is complete.
+- `SCOPE_AMENDMENT_REQUIRED`: populate `scopeAmendmentRequest` as `{ "requestedPaths": [], "reason": "...", "impactIfRejected": "..." }`; stop before modifying those paths.
+
+`WORKTREE` means downstream agents must inspect unstaged changes, staged changes, and untracked files relative to `baseRef`; no implementation commit is required before QA.
 
 Do not rewrite the acceptance criteria. Copy each criterion verbatim from the Controller input when building `acceptanceCriteriaCoverage`.
 
