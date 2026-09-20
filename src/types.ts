@@ -27,6 +27,45 @@ export interface Plan {
   plainLanguageSummary: string;
 }
 
+/**
+ * Matches the real plugin's gated-change-intake schema (plugins/gated-change/com.github.copilot/
+ * agents/gated-change-intake.agent.md) - distinct from the older TriageResult above, which
+ * src/actions/*.ts still uses against the separate harness/agents/*.agent.md copies.
+ */
+export interface PluginTriageResult {
+  status: "FETCH_FAILED" | "EMPTY" | "NOT_READY" | "READY";
+  clarificationRound: number;
+  issue: {
+    owner: string;
+    repo: string;
+    number: number;
+    title: string;
+    body: string;
+    comments: string[];
+  };
+  problem: string | null;
+  acceptanceCriteria: string[];
+  declaredScope: string | null;
+  missing: string[];
+  clarifyingQuestion: string | null;
+  fetchError: string | null;
+}
+
+/** Matches the real plugin's gated-change-architect initial-planning schema. */
+export interface PluginPlan {
+  status: "PLAN_READY" | "BLOCKED";
+  rootCause: string;
+  changes: PlanChange[];
+  proposedScope: string;
+  blastRadius: {
+    risk: "Low" | "Medium" | "High";
+    affectedOutsideScope: string[];
+  };
+  validationPlan: string[];
+  plainLanguageSummary: string;
+  blockedReason: string | null;
+}
+
 export type ScopeGateDecision =
   | { kind: "approve" }
   | { kind: "revise"; feedback: string }

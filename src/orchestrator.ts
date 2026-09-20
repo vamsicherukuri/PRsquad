@@ -2,46 +2,52 @@ import { readFileSync } from "node:fs";
 import { CopilotClient } from "@github/copilot-sdk";
 import { loadAgent, type AgentDefinition } from "./loadAgent.js";
 import { makeScopedReadTool } from "./scopeTool.js";
+import { makeMockGithubTools } from "./mockGithubTools.js";
 import { askScopeGate } from "./scopeGate.js";
 import { runAgentJSON } from "./copilotAgent.js";
 import {
   INTAKE_TRIAGE_MAX_ROUNDS,
   SCOPE_GATE_MAX_ROUNDS,
   type Issue,
-  type Plan,
-  type TriageResult,
+  type PluginPlan,
+  type PluginTriageResult,
 } from "./types.js";
 
 const ROOT = process.cwd();
+const REPO_OWNER = "local";
+const REPO_NAME = "sample-repo";
 
 /** Step 01.5 - Intake Triage, capped at INTAKE_TRIAGE_MAX_ROUNDS per implementation-plan.md §4. */
 async function runIntakeTriage(
   client: CopilotClient,
   agent: AgentDefinition,
   issue: Issue
-): Promise<TriageResult | "ESCALATE_TO_PM"> {
-  let context = `Issue #${issue.id}: ${issue.title}\n\n${issue.body}`;
+): Promise<PluginTriageResult | "ESCALATE_TO_PM"> {
+  const tools = makeMockGithubTools(issue);
 
-  for (let round = 1; round <= INTAKE_TRIAGE_MAX_ROUNDS; round++) {
-    const result = await runAgentJSON<TriageResult>(client, agent, context);
+  for (let round = 0; round < INTAKE_TRIAGE_MAX_ROUNDS + 1; round++) {
+    const prompt =
+      `Repository owner: ${REPO_OWNER}\nRepository name: ${REPO_NAME}\n` +
+      `Issue number: ${issue.id}\nClarification round: ${round}`;
+    const result = await runAgentJSON<PluginTriageResult>(client, agent, prompt, tools);
     console.log(`\n[Intake Triage round ${round}]`, result);
 
-    if (result.ready) return result;
+    if (result.status === "READY") return result;
 
     if (round === INTAKE_TRIAGE_MAX_ROUNDS) {
       console.log(
-        `\nIntake Triage did not reach "ready" within ${INTAKE_TRIAGE_MAX_ROUNDS} rounds - ` +
+        `\nIntake Triage did not reach "READY" within ${INTAKE_TRIAGE_MAX_ROUNDS} clarification rounds - ` +
           "escalating to PM (implementation-plan.md §4)."
       );
       return "ESCALATE_TO_PM";
     }
 
-    // In a real deployment this posts as a GitHub issue comment and awaits the reporter's reply
-    // (see implementation-plan.md §4 - routing is still explicitly DEFERRED). Here we simulate a
-    // single round-trip by re-prompting with the same context plus the open question, so the loop
-    // and its cap are still real and observable.
+    if (result.status === "FETCH_FAILED") {
+      console.log("\nIntake Triage reported FETCH_FAILED - escalating.");
+      return "ESCALATE_TO_PM";
+    }
+
     console.log(`Clarifying question that would be posted: ${result.clarifyingQuestion}`);
-    context += `\n\n(Round ${round} follow-up - reporter did not add further detail in this demo run.)`;
   }
 
   return "ESCALATE_TO_PM";
@@ -53,11 +59,11 @@ async function runArchitect(
   agent: AgentDefinition,
   issue: Issue,
   declaredScope: string
-): Promise<Plan> {
+): Promise<PluginPlan> {
   const tool = makeScopedReadTool(declaredScope, ROOT);
   const prompt =
     `Issue #${issue.id}: ${issue.title}\n\n${issue.body}\n\nDeclared scope: ${declaredScope}`;
-  return runAgentJSON<Plan>(client, agent, prompt, [tool]);
+  return runAgentJSON<PluginPlan>(client, agent, prompt, [tool]);
 }
 
 /** Step 03 - Scope gate, capped at SCOPE_GATE_MAX_ROUNDS per implementation-plan.md §5a. */
@@ -66,8 +72,8 @@ async function runScopeGate(
   architectAgent: AgentDefinition,
   issue: Issue,
   declaredScope: string,
-  initialPlan: Plan
-): Promise<{ approved: boolean; plan: Plan }> {
+  initialPlan: PluginPlan
+): Promise<{ approved: boolean; plan: PluginPlan }> {
   let plan = initialPlan;
 
   for (let round = 1; round <= SCOPE_GATE_MAX_ROUNDS; round++) {
@@ -96,7 +102,7 @@ async function runScopeGate(
       `Issue #${issue.id}: ${issue.title}\n\n${issue.body}\n\nDeclared scope: ${declaredScope}\n\n` +
       `Your previous plan:\n${JSON.stringify(plan, null, 2)}\n\n` +
       `PM feedback to incorporate (only re-analyze what this feedback touches): ${decision.feedback}`;
-    plan = await runAgentJSON<Plan>(
+    plan = await runAgentJSON<PluginPlan>(
       client,
       architectAgent,
       prompt,
@@ -115,8 +121,12 @@ async function main() {
   }
 
   const issue = JSON.parse(readFileSync(issuePath, "utf-8")) as Issue;
-  const intakeAgent = loadAgent("harness/agents/intake-triage.agent.md");
-  const architectAgent = loadAgent("harness/agents/architect.agent.md");
+  const intakeAgent = loadAgent(
+    "plugins/gated-change/com.github.copilot/agents/gated-change-intake.agent.md"
+  );
+  const architectAgent = loadAgent(
+    "plugins/gated-change/com.github.copilot/agents/gated-change-architect.agent.md"
+  );
 
   const client = new CopilotClient();
   await client.start();
@@ -136,6 +146,11 @@ async function main() {
   console.log(`\n=== Step 02: Plan drafted (Architect, scope = "${triage.declaredScope}") ===`);
   const plan = await runArchitect(client, architectAgent, issue, triage.declaredScope);
   console.log(plan);
+
+  if (plan.status === "BLOCKED") {
+    console.log(`\nPipeline paused: Architect returned BLOCKED - "${plan.blockedReason}". Stopping here (correct behavior, not a bug).`);
+    return;
+  }
 
   console.log("\n=== Step 03: Scope gate ===");
   const gateResult = await runScopeGate(client, architectAgent, issue, triage.declaredScope, plan);
