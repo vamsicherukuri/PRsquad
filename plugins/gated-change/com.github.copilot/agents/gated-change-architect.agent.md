@@ -26,7 +26,7 @@ Return only a structured plan:
 
 ```json
 {
-  "status": "PLAN_READY",
+  "status": "PLAN_READY|BLOCKED",
   "rootCause": "...",
   "changes": [
     { "file": "path", "type": "ADD", "reason": "..." }
@@ -37,9 +37,12 @@ Return only a structured plan:
     "affectedOutsideScope": []
   },
   "validationPlan": ["..."],
-  "plainLanguageSummary": "..."
+  "plainLanguageSummary": "...",
+  "blockedReason": null
 }
 ```
+
+Return `BLOCKED` instead of `PLAN_READY` when you cannot produce a confident plan — for example the declared scope path does not exist in the repository, the root cause cannot be determined from the available code, or the issue's requirements are technically contradictory. Populate `blockedReason` and leave `changes`/`proposedScope`/`validationPlan` empty rather than guessing.
 
 For a scope-amendment review, return only:
 

@@ -73,6 +73,7 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
    - Only after Intake returns READY, delegate to `gated-change-architect`.
    - Pass the complete structured Intake output forward, including its fetched issue payload; do not re-fetch, summarize, or ask Architect to re-derive requirements.
    - For initial planning, require Architect status `PLAN_READY` and a technical + impact specification, not code.
+   - `BLOCKED`: Architect could not produce a confident plan. Report its `blockedReason` to the human plainly and stop — do not proceed to the Human Scope Gate.
 
 3. **Human Scope Gate**
    - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, and plain-language summary.
