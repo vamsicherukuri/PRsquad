@@ -68,12 +68,14 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
    - Delegate the issue reference to `gated-change-intake` and route its status exactly as defined above.
    - Intake has read-only GitHub issue tools and no repository source access.
    - At most three Intake invocations are permitted: initial check (`0`) plus clarification rounds `1` and `2`.
+   - Done when: Intake has returned `READY` and its complete result has been passed to Architect, or a stop/escalation condition (`FETCH_FAILED`, or round `2` still `EMPTY`/`NOT_READY`) has been reported to the human.
 
 2. **Architect Plan**
    - Only after Intake returns READY, delegate to `gated-change-architect`.
    - Pass the complete structured Intake output forward, including its fetched issue payload; do not re-fetch, summarize, or ask Architect to re-derive requirements.
    - For initial planning, require Architect status `PLAN_READY` and a technical + impact specification, not code.
    - `BLOCKED`: Architect could not produce a confident plan. Report its `blockedReason` to the human plainly and stop — do not proceed to the Human Scope Gate.
+   - Done when: Architect has returned `PLAN_READY` (presented at the Human Scope Gate) or `BLOCKED` (reported to the human and stopped).
 
 3. **Human Scope Gate**
    - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, and plain-language summary.
@@ -83,6 +85,7 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
    - End the plan presentation with this exact instruction to the human: "To approve: switch this session from Plan mode to Agent mode, then reply confirming both that you've made the switch and that you approve this plan (e.g. 'Switched to Agent mode, approved')."
    - Do not delegate to `gated-change-developer` as a way to test or discover whether the mode switch happened. A failed/blocked Developer turn is wasted cost, not a valid detection mechanism.
    - Treat the human's reply as sufficient to proceed only if it explicitly confirms the mode switch (not just the word "approved" alone). If the reply only says "approved" without confirming the mode switch, stop and ask them to confirm they've switched to Agent mode before delegating — do not attempt Developer in the meantime.
+   - Done when: the human's reply explicitly confirms both the mode switch to Agent mode and approval of the plan — only then may Developer be delegated to.
 
 4. **Developer**
    - Only after both Scope Gate conditions are met (Agent mode AND explicit typed approval), delegate to `gated-change-developer`.
@@ -96,7 +99,8 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
     - For `SCOPE_AMENDMENT_REQUIRED`, route Architect response:
        - `SCOPE_AMENDMENT_CONFIRMED`: require a revised plan and `proposedScope`, then return to the Human Scope Gate. Architect confirmation never constitutes approval.
        - `SCOPE_AMENDMENT_REJECTED`: re-invoke Developer under the unchanged approved scope, carrying Architect's reason. This does not itself consume an implementation attempt.
-   - If Developer stops or errors out mid-task (as opposed to failing to invoke at all), treat this differently from the invocation-failure case above: real file edits may already exist in the worktree, so a blind fresh retry risks double-applying or corrupting them. Re-delegate to `gated-change-developer` with an explicit instruction to first check the current git status/diff of the approved scope and report what already exists before writing anything further \u2014 never assume a clean starting point. This resumed attempt consumes one of the bounded Developer -> QA -> Reviewer attempts below (unlike a pure invocation failure, which does not, since no real work happened). If the partial state looks ambiguous or risky, stop and let the human choose: resume from the existing diff, discard the partial changes and restart clean, or escalate \u2014 do not decide this unilaterally.
+   - If Developer stops or errors out mid-task (as opposed to failing to invoke at all), treat this differently from the invocation-failure case above: real file edits may already exist in the worktree, so a blind fresh retry risks double-applying or corrupting them. Re-delegate to `gated-change-developer` with an explicit instruction to first check the current git status/diff of the approved scope and report what already exists before writing anything further — never assume a clean starting point. This resumed attempt consumes one of the bounded Developer -> QA -> Reviewer attempts below (unlike a pure invocation failure, which does not, since no real work happened). If the partial state looks ambiguous or risky, stop and let the human choose: resume from the existing diff, discard the partial changes and restart clean, or escalate — do not decide this unilaterally.
+   - Done when: Developer has returned a validated `IMPLEMENTED` handoff (passed to QA), a `BLOCKED` pause reported to the human, or a `SCOPE_AMENDMENT_REQUIRED` routed to Architect.
 
 5. **QA**
    - Delegate to `gated-change-qa` only after Developer returns a valid `IMPLEMENTED` handoff.
@@ -109,17 +113,20 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
        - `FAIL`: only for scope-compliance failure or repeatable `GENUINE_FIX_CAUSED` failure; return to Developer and consume one implementation attempt.
        - `BLOCKED`: pause and report why validation could not complete. Do not invoke Reviewer and do not consume an implementation attempt.
     - `INFRASTRUCTURE` is a failure classification for a known environment/tool/service failure. `UNKNOWN` means evidence is insufficient to classify safely; either classification requires overall verdict `BLOCKED`, never `FAIL`.
+   - Done when: QA has returned a validated `PASS` (passed to Reviewer), `FAIL` (routed back to Developer, attempt consumed), or `BLOCKED` (paused, reported to the human).
 
 6. **Reviewer**
    - Delegate to `gated-change-reviewer` only after QA returns a valid `PASS`.
    - Pass the approved Architect plan, original acceptance criteria, complete final Developer handoff, approved scope, final diff reference, complete QA result/evidence, Architect risk/blast-radius data, and any deterministic cross-package hits available.
    - Reviewer reads and reviews the actual final diff. Reviewer is read-only, does not re-run QA tests, does not fix code, and does not autonomously consume retry budget.
    - Route both `CLEAR` and `CONCERNS` to the human Merge Gate. `CONCERNS` are informational flags and never trigger an automatic retry.
+   - Done when: Reviewer has returned `CLEAR` or `CONCERNS`, both routed to the Human Merge Gate.
 
 7. **PR / Merge Gate**
    - Summarize implementation, QA evidence, Reviewer flags, residual risks, and scope/audit information.
    - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Reviewer findings, and residual risks). Use a native create-PR capability only when it is actually available in the session; otherwise stop at `PR_READY` and never claim a PR was opened.
    - Do not merge automatically. Human developer technical review and PM business/scope review form the Merge Gate.
+   - Done when: the `PR_READY` package (or an actually opened native PR) has been presented to the human. Controller stops here and never merges automatically.
 
 ## Bounded-loop rules
 
