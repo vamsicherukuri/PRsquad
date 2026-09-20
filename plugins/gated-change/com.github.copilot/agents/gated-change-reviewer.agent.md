@@ -56,3 +56,5 @@ Return only a structured result:
   "mergeGateSummary": "plain-language summary for Dev + PM"
 }
 ```
+
+Keep every `evidence`/`finding`/`qualityNotes` entry a short pointer (file:line, one-line observation) — never paste full raw logs, stack traces, or file contents.

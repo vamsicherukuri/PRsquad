@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "gated-change",
   "description": "Governed issue-to-PR execution for the GitHub Copilot App with specialist agents, bounded loops, explicit scope approval, independent validation, and human merge review.",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "author": {
     "name": "Vamsi Cherukuri"
   },

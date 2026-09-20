@@ -61,4 +61,6 @@ Verdict rules:
 - `FAIL`: scope compliance failed or a repeatable `GENUINE_FIX_CAUSED` failure exists.
 - `BLOCKED`: required validation could not complete. Use classification `INFRASTRUCTURE` for a known environment/tool/service cause and `UNKNOWN` when evidence cannot support a safe classification.
 
+Keep every `evidence`/`notes` field a short pointer (file:line, test name, one-line observation) — never paste full raw logs, stack traces, or file contents.
+
 Only a genuine implementation/test failure should route back toward another Developer attempt. Pre-existing, flaky, or infrastructure findings are flags, not automatic retry consumers.
