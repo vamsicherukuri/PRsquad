@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "Governed GitHub Copilot App workflow patterns for enterprise software delivery",
-    "version": "0.1.37"
+    "version": "0.1.38"
   },
   "plugins": [
     {
       "name": "gated-change",
       "description": "A governed issue-to-PR workflow with specialist agents and explicit human gates.",
-      "version": "0.1.37",
+      "version": "0.1.38",
       "source": "./plugins/gated-change"
     }
   ]
