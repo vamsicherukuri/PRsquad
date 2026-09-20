@@ -26,7 +26,7 @@ Responsibilities:
 3. Independently execute the Developer's regression tests plus any existing repository validation commands needed to verify the criteria.
 4. Identify gaps between what was tested and what the issue actually requires.
 
-Failure classification follows the implementation plan:
+Failure classification rules:
 - First compare a failing scoped test against the pre-fix baseline when that deterministic support exists.
 - A failure present on both baseline and fix is `PRE_EXISTING`.
 - A new failure is rerun once; a pass on rerun is `FLAKY`.
