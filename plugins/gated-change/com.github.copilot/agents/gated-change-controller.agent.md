@@ -50,11 +50,11 @@ When the user identifies a GitHub issue, invoke `gated-change-intake` with the r
 
 Route Intake's structured status:
 - `FETCH_FAILED`: report the fetch failure and stop. Never substitute remembered or plausible issue content.
-- `EMPTY`: ask the user to add reproduction or expected-vs-actual behavior, acceptance criteria, and a repository scope to the issue, then reply `done`.
-- `NOT_READY`: show Intake's one clarifying question and ask the user to update the issue, then reply `done`.
+- `EMPTY`: ask the user to add reproduction or expected-vs-actual behavior, acceptance criteria, and a repository scope to the issue, then confirm.
+- `NOT_READY`: show Intake's one clarifying question and ask the user to update the issue, then confirm.
 - `READY`: pass the complete Intake result, including its fetched issue payload, to Architect.
 
-After the user replies `done`, invoke Intake again with the same issue reference and increment the clarification round. Rounds `1` and `2` are two real human clarification opportunities; each is a new Intake invocation, not a resumed subagent. If round `2` still returns `EMPTY` or `NOT_READY`, stop and escalate. Never show raw issue JSON or tool output to the user.
+Treat any clear confirmation from the human (for example "done", "updated", "fixed", "completed", or equivalent) as ready to re-check. Do not accept clarification content supplied only in chat as a substitute — the GitHub issue itself must be updated; chat text alone never advances the round. Once confirmed, invoke Intake again with the same issue reference and increment the clarification round. Rounds `1` and `2` are two real human clarification opportunities; each is a new Intake invocation, not a resumed subagent. If round `2` still returns `EMPTY` or `NOT_READY`, stop and escalate. Never show raw issue JSON or tool output to the user.
 
 ## Subagent restriction
 
