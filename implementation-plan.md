@@ -515,6 +515,14 @@ single issue-retrieval boundary; Architect receives Intake's verified issue payl
 | Whether an approved scope amendment resets the implementation-attempt counter | **Backlog** | Currently undocumented; likely rare in a simple bug-fix scenario, revisit only if it's hit in live testing |
 | Diagram/table update for Step 1.5 | **Done** (2026-09-16) | Artifact updated |
 | Diagram/table update to remove Impact Auditor (Step 7.5 cut) | **Done** (2026-09-16) | Artifact reverted to 11-step layout, wide-scope legend/permission row removed |
+| QA `acceptanceCriteriaResults[].result: NOT_VERIFIED` has no mapped overall verdict | **Backlog** | Verdict rules only define `PASS`/`FAIL` outcomes; a `NOT_VERIFIED` criterion with no test failure and compliant scope satisfies none of `PASS`/`FAIL`/`BLOCKED` cleanly |
+| Architect `revisedPlan`'s shape is undefined in the scope-amendment schema | **Backlog** | Presumably the same shape as the initial `PLAN_READY` object, but never stated; also raises a possible redundant `proposedScope` field |
+| Controller Governance-rules wording could misstate that failure classification doesn't exist yet | **Backlog** | Only the deterministic automation behind classification is unbuilt; the classification rules themselves are live in QA's file today |
+| `WorkflowState.intakeRound` vs Intake's own `clarificationRound` field name mismatch | **Backlog** | Presumably the same counter, never stated explicitly |
+| No explicit increment rule for `WorkflowState.implementationAttempt` | **Backlog** | Starts at 0; unclear whether the first Developer invocation is attempt 0 or attempt 1 |
+| Minor list-punctuation inconsistencies (Developer inputs list, SKILL.md milestone list) | **Backlog** | Cosmetic only, no functional impact |
+| QA `scopeCompliance` (`PASS|FAIL`) vs Reviewer `scopeCompliance` (`PASS|CONCERN`) vocabulary mismatch | **Backlog** | Likely intentional (Reviewer is informational-only), but worth confirming if either schema changes |
+| Developer `assumptions` reviewed by QA but not guaranteed to reach the human at the PR/Merge Gate | **Backlog** | Stage 7's summary doesn't explicitly require surfacing confirmed assumptions alongside residual risks |
 
 ---
 
