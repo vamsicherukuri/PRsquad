@@ -5,7 +5,7 @@ description: Run the repository's governed issue-to-PR workflow with specialist 
 
 # Gated Change
 
-Use this skill when a user wants to take a real GitHub issue through the governed change workflow implemented by this plugin's six agents (Controller, Intake, Architect, Developer, QA, Reviewer). The design is captured in this repository's `implementation-plan.md`, a maintainer-facing planning document.
+Use this skill when a user wants to take a real GitHub issue through the governed change workflow implemented by this plugin's six agents (Controller, Intake, Architect, Developer, QA, Reviewer).
 
 ## Where the rules live (single source of truth)
 
