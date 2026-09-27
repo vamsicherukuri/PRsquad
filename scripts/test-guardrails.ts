@@ -44,6 +44,13 @@ console.log("=======================================================\n");
 console.log("Suite 1: State Store & Lock Lifecycle");
 {
   const state = loadState();
+  state.issue = {
+    number: 999,
+    title: "Test Billing Issue",
+    declaredScope: "src/services/billing/",
+    fetchedAt: new Date().toISOString(),
+  };
+  saveState(state);
   assert(typeof state.sessionId === "string" && state.sessionId.length > 0, "State initializes with valid sessionId");
   assert(state.implementationAttempt >= 1, "Implementation attempt counter initialized");
 
@@ -79,7 +86,7 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
   // Attempt to invoke developer without lock -> Must fail
   try {
     const input = JSON.stringify({ tool: "agent", toolArgs: { name: "gated-change-developer" } });
-    execSync(`npx tsx scripts/guardrails/hook-verify-gate.ts`, {
+    execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
@@ -88,6 +95,16 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
   } catch (err: any) {
     assert(err.status === 1, "Hook exits with code 1 when lock is missing");
   }
+
+  // Ensure state issue matches
+  const state = loadState();
+  state.issue = {
+    number: 999,
+    title: "Test Billing Issue",
+    declaredScope: "src/services/billing/",
+    fetchedAt: new Date().toISOString(),
+  };
+  saveState(state);
 
   // Create active lock
   saveApprovalLock({
@@ -103,7 +120,7 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
   // Attempt to invoke developer with active lock -> Must succeed
   try {
     const input = JSON.stringify({ tool: "agent", toolArgs: { name: "gated-change-developer" } });
-    const stdout = execSync(`npx tsx scripts/guardrails/hook-verify-gate.ts`, {
+    const stdout = execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],

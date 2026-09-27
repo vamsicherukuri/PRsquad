@@ -1,6 +1,6 @@
 {
   "name": "gated-fix-pipeline",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "GitHub Copilot App Enterprise Challenge submission - narrow slice: Issue -> Intake Triage -> Architect -> Scope gate",
   "type": "module",
@@ -11,6 +11,7 @@
     "gate:reject": "tsx scripts/guardrails/gate-approve.ts --reject",
     "sweep": "tsx scripts/guardrails/ast-symbol-sweep.ts",
     "test:guardrails": "tsx scripts/test-guardrails.ts",
+    "test:e2e": "tsx scripts/test-e2e-simulation.ts",
     "run:ready": "tsx src/orchestrator.ts examples/sample-issue-ready.json",
     "run:vague": "tsx src/orchestrator.ts examples/sample-issue-vague.json"
   },
