@@ -1,3 +1,5 @@
+import { isAgentMatch } from "./stateStore.js";
+
 export interface BashValidationResult {
   allowed: boolean;
   reason?: string;
@@ -24,8 +26,8 @@ export function validateCommandForAgent(
 ): BashValidationResult {
   const trimmed = command.trim();
 
-  // 1. Reviewer Agent: Strict Allowlist
-  if (agent === "gated-change-reviewer") {
+  // 1. Reviewer Agent: Strict Allowlist (supports qualified names)
+  if (isAgentMatch(agent, "gated-change-reviewer")) {
     // Disallow output redirection
     if (trimmed.includes(">") || trimmed.includes(">>")) {
       return {
@@ -52,8 +54,8 @@ export function validateCommandForAgent(
     };
   }
 
-  // 3. QA Agent: Prevent mutating git repository state
-  if (agent === "gated-change-qa") {
+  // 3. QA Agent: Prevent mutating git repository state (supports qualified names)
+  if (isAgentMatch(agent, "gated-change-qa")) {
     if (MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
@@ -63,8 +65,8 @@ export function validateCommandForAgent(
     return { allowed: true };
   }
 
-  // 4. Developer Agent: Block git push to remotes
-  if (agent === "gated-change-developer") {
+  // 4. Developer Agent: Block git push to remotes (supports qualified names)
+  if (isAgentMatch(agent, "gated-change-developer")) {
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {
         allowed: false,

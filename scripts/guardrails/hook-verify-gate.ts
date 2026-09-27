@@ -5,7 +5,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { loadState, saveState, loadApprovalLock, revokeApprovalLock, appendAuditLog } from "../../src/guardrails/stateStore.js";
+import { loadState, saveState, loadApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -27,8 +27,8 @@ async function main() {
 
   const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
 
-  // Intercept Developer agent invocation
-  if (targetAgent === "gated-change-developer") {
+  // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
+  if (isAgentMatch(targetAgent, "gated-change-developer")) {
     const state = loadState();
     const lock = loadApprovalLock();
 

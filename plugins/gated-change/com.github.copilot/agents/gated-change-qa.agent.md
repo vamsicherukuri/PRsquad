@@ -33,7 +33,7 @@ Failure classification rules:
 - A new failure that repeats is `GENUINE_FIX_CAUSED`.
 - Do not spend LLM reasoning classifying failures that deterministic comparison/rerun can settle.
 
-For the first App-native vertical slice, if baseline/rerun automation is not implemented yet, report the missing classifier explicitly instead of pretending it ran.
+If baseline or rerun automation is not implemented in the current test harness, report the unverified status explicitly instead of assuming test outcomes.
 
 Return only a structured QA result:
 

@@ -7,7 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
-import { loadState, saveState, appendAuditLog } from "../../src/guardrails/stateStore.js";
+import { loadState, saveState, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -29,8 +29,8 @@ async function main() {
 
   const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
 
-  // Only intercept when invoking gated-change-intake
-  if (targetAgent === "gated-change-intake") {
+  // Only intercept when invoking gated-change-intake (supports qualified names)
+  if (isAgentMatch(targetAgent, "gated-change-intake")) {
     const state = loadState();
     const prompt = input.toolArgs?.prompt || "";
 

@@ -29,7 +29,7 @@ At the start of every reply, restate your current workflow state as a compact bl
 }
 ```
 
-Recompute each field only from: the state you stated last turn, a validated specialist handoff since then, or an explicit human message. Never infer or reset a field from vague context. This state lives only in this conversation thread — there is no external persistence yet (durable state via a policy hook or Canvas is a later milestone). If the thread is lost, restarted, or compacted, do not guess the prior state: ask the human to confirm the issue reference and current phase before resuming.
+Recompute each field only from: the state you stated last turn, a validated specialist handoff since then, or an explicit human message. Never infer or reset a field from vague context. Workflow state is tracked by deterministic hooks and persisted in .gated-change/state.json. If the thread is lost, restarted, or compacted, do not guess the prior state: ask the human to confirm the issue reference and current phase before resuming.
 
 ## Handoff validation
 
@@ -137,4 +137,4 @@ If delegating to a named specialist fails or errors (a routing/tool-level issue,
 ## Governance rules
 
 - Branch/worktree isolation is not a substitute for write-scope enforcement.
-- Deterministic scope enforcement, failure classification, cross-package sweep, and Canvas approval state are later implementation milestones; do not pretend they exist before they are built and verified.
+- Deterministic write-scope enforcement hooks, mechanical approval lock verification, and AST symbol sweeps are active guardrails. Follow their decisions and guidance strictly.

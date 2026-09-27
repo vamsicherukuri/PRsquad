@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { toPosixRelative } from "./stateStore.js";
 
 export interface ScopeCheckResult {
@@ -14,12 +15,59 @@ const SYSTEM_PROTECTED_PREFIXES = [
 ];
 
 /**
- * Validates whether a file write/edit is permitted within the approved scope.
+ * Gets the current active git branch name.
+ */
+export function getCurrentGitBranch(rootDir: string = process.cwd()): string {
+  try {
+    const stdout = execSync("git branch --show-current", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Guarantees that implementation never occurs directly on 'main' or 'master'.
+ * Automatically branches to 'fix/issue-<num>' if safe, or blocks with an actionable message.
+ */
+export function ensureIsolatedBranch(
+  issueNumber: number = 0,
+  rootDir: string = process.cwd()
+): { ok: boolean; branch: string; reason?: string } {
+  const current = getCurrentGitBranch(rootDir);
+  if (!current || (current !== "main" && current !== "master")) {
+    return { ok: true, branch: current };
+  }
+
+  const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
+  try {
+    execSync(`git checkout -b ${targetBranch}`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return { ok: true, branch: targetBranch };
+  } catch {
+    return {
+      ok: false,
+      branch: current,
+      reason: `BRANCH_POLICY_DENIAL: Modifications directly on protected branch '${current}' are forbidden. Automatic switch to '${targetBranch}' failed. Please switch to a dedicated fix branch before editing files.`,
+    };
+  }
+}
+
+/**
+ * Validates whether a file write/edit is permitted within the approved scope and isolated branch.
  */
 export function isEditAllowed(
   filePath: string,
   approvedScope: string | null,
-  rootDir: string = process.cwd()
+  rootDir: string = process.cwd(),
+  issueNumber: number = 0
 ): ScopeCheckResult {
   const normalized = toPosixRelative(filePath, rootDir);
 
@@ -43,13 +91,24 @@ export function isEditAllowed(
     };
   }
 
+  // 3. Branch isolation check: prevent modifying main/master directly
+  const branchCheck = ensureIsolatedBranch(issueNumber, rootDir);
+  if (!branchCheck.ok) {
+    return {
+      allowed: false,
+      reason: branchCheck.reason,
+      normalizedPath: normalized,
+    };
+  }
+
   const cleanScope = approvedScope
     .replace(/\\/g, "/")
     .replace(/^\/+/, "")
     .replace(/\/+$/, "");
 
-  // 3. Prefix containment
+  // 4. Prefix containment
   const isMatch =
+    cleanScope === "" ||
     normalized === cleanScope ||
     normalized.startsWith(cleanScope + "/");
 

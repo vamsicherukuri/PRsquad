@@ -35,7 +35,7 @@ Scope rules:
 - If a correct fix requires any out-of-scope file, STOP before modifying it.
 - Return a structured scope-amendment request with the file/path, why it is required, and the impact of not changing it.
 - Do not approve your own scope expansion.
-- The final implementation will also be protected by a deterministic write-policy hook; this prompt is complementary guidance, not the hard enforcement boundary.
+- The implementation is strictly protected by a deterministic write-policy hook and branch isolation guardrail; this prompt is complementary guidance, while the hook is the hard enforcement boundary.
 
 Test rules:
 - Developer writes both the fix and its regression tests.

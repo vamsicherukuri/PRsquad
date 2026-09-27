@@ -40,16 +40,14 @@ The first App-native vertical slice covers:
 
 Issue -> Intake -> Architect -> Scope Gate -> Developer -> QA -> Reviewer -> PR/CI -> Merge Gate.
 
-The Controller restates a compact `WorkflowState` block at the top of each reply, recomputed only from its last stated state, validated specialist handoffs, and explicit human messages — see the Controller's `## Workflow state` section for the exact fields. This state currently lives only in the conversation thread; it is not durable across a lost or restarted session.
+The Controller coordinates the pipeline while deterministic guardrails enforce safety boundaries:
+- Durable workflow state is maintained on disk (`.gated-change/state.json`) and synchronized across hook invocations.
+- Scope enforcement is guarded deterministically by pre-tool hooks (`hook-enforce-scope.ts`) and machine-readable locks (`.gated-change/approval.lock`).
+- Cross-package call/import impact is deterministically audited using the AST symbol sweep (`ast-symbol-sweep.ts`).
 
 The following are planned subsequent milestones and must not be represented as implemented until verified in the GitHub Copilot App:
 
-- durable workflow-state persistence (`WorkflowState` moved from conversation-only to a policy hook or Canvas-backed store, revisit after end-to-end testing of the current vertical slice),
-- deterministic write-scope enforcement hook,
-- machine-readable approval state,
-- Canvas control surface,
-- baseline/flaky/infra classifiers,
-- deterministic cross-package sweep,
+- Canvas control surface / interactive dashboard,
+- automated baseline/flaky failure classification test runner,
 - Release-helper and post-merge auto-revert flow,
-- token/cost instrumentation.
-- deterministic JSON Schema enforcement for specialist handoffs.
+- token/cost telemetry instrumentation.
