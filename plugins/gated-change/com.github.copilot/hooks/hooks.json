@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "tools": ["agent"],
+        "command": "npx tsx scripts/guardrails/hook-verify-gate.ts",
+        "timeoutSec": 5
+      },
+      {
+        "tools": ["agent"],
+        "command": "npx tsx scripts/guardrails/hook-intake-ingest.ts",
+        "timeoutSec": 5
+      },
+      {
+        "tools": ["edit"],
+        "command": "npx tsx scripts/guardrails/hook-enforce-scope.ts",
+        "timeoutSec": 5
+      },
+      {
+        "tools": ["bash"],
+        "command": "npx tsx scripts/guardrails/hook-sandbox-bash.ts",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
