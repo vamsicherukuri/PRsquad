@@ -34,11 +34,12 @@ async function main() {
     const state = loadState();
     const prompt = input.toolArgs?.prompt || "";
 
-    // Extract issue number from prompt or state
-    const issueMatch = prompt.match(/#?(\d+)/);
-    const issueNum = issueMatch ? parseInt(issueMatch[1], 10) : state.issue.number || 42;
-    const owner = state.issue.owner || "vamsicherukuri";
-    const repo = state.issue.repo || "gated-fix-pipeline";
+    // Extract issue number and owner/repo from prompt or state
+    const issueMatch = prompt.match(/(?:issue\s*#?|#)(\d+)/i) || prompt.match(/(\d+)/);
+    const issueNum = issueMatch ? parseInt(issueMatch[1], 10) : state.issue.number || 1;
+    const repoMatch = prompt.match(/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/);
+    const owner = repoMatch ? repoMatch[1].replace(/[.,!?;:]+$/, "") : (state.issue.owner || "vamsicherukuri");
+    const repo = repoMatch ? repoMatch[2].replace(/[.,!?;:]+$/, "") : (state.issue.repo || "gated-fix-pipeline");
 
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum);
