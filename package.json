@@ -12,6 +12,7 @@
     "sweep": "tsx scripts/guardrails/ast-symbol-sweep.ts",
     "test:guardrails": "tsx scripts/test-guardrails.ts",
     "test:e2e": "tsx scripts/test-e2e-simulation.ts",
+    "test:branch": "tsx scripts/test-branch-lifecycle-e2e.ts",
     "bundle:hooks": "esbuild scripts/guardrails/hook-verify-gate.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-verify-gate.mjs && esbuild scripts/guardrails/hook-intake-ingest.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-intake-ingest.mjs && esbuild scripts/guardrails/hook-enforce-scope.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-enforce-scope.mjs && esbuild scripts/guardrails/hook-sandbox-bash.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-sandbox-bash.mjs",
     "run:ready": "tsx src/orchestrator.ts examples/sample-issue-ready.json",
     "run:vague": "tsx src/orchestrator.ts examples/sample-issue-vague.json"
