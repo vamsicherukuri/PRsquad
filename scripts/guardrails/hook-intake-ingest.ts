@@ -82,6 +82,41 @@ async function main() {
 
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum);
+
+      // Deterministic lifecycle guardrail: strictly require OPEN
+      if (issueData.state && issueData.state !== "OPEN") {
+        state.issue = { owner, repo, number: issueData.number, title: issueData.title };
+        state.phase = "PAUSED";
+        saveState(state);
+
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "deterministic_closed_issue_block",
+          decision: "deny",
+          details: {
+            issueNumber: issueData.number,
+            title: issueData.title,
+            state: issueData.state,
+          },
+        });
+
+        const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
+        const output = {
+          decision: "deny",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason,
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason,
+          },
+        };
+        process.stdout.write(JSON.stringify(output) + "\n");
+        process.exit(0);
+      }
+
       const payload = formatIntakePayload(issueData, state.intakeRound);
 
       // Update state

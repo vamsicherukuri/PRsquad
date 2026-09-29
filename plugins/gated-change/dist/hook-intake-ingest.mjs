@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd()) {
   try {
-    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author`;
+    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
     const stdout = execSync(cmd, {
       cwd: rootDir,
       encoding: "utf-8",
@@ -29,7 +29,8 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
         author: c.author?.login ?? "unknown",
         body: c.body ?? "",
         createdAt: c.createdAt ?? ""
-      }))
+      })),
+      state: (parsed.state ?? "OPEN").toUpperCase()
     };
   } catch {
     const candidates = [
@@ -55,7 +56,8 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
                 author: c.author ?? "commenter",
                 body: c.body ?? (typeof c === "string" ? c : ""),
                 createdAt: (/* @__PURE__ */ new Date()).toISOString()
-              }))
+              })),
+              state: (parsed.state ?? "OPEN").toUpperCase()
             };
           }
         } catch {
@@ -80,7 +82,8 @@ function formatIntakePayload(issueData, round = 0) {
         body: issueData.body,
         author: issueData.author,
         labels: issueData.labels,
-        comments: issueData.comments
+        comments: issueData.comments,
+        state: issueData.state
       },
       instructions: "Evaluate this pre-fetched issue against the Definition of Ready (Reproduction/Expected vs Actual, Acceptance Criteria, Declared Scope). Output your structured triage verdict."
     },
@@ -229,6 +232,36 @@ async function main() {
     }
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum);
+      if (issueData.state && issueData.state !== "OPEN") {
+        state.issue = { owner, repo, number: issueData.number, title: issueData.title };
+        state.phase = "PAUSED";
+        saveState(state);
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "deterministic_closed_issue_block",
+          decision: "deny",
+          details: {
+            issueNumber: issueData.number,
+            title: issueData.title,
+            state: issueData.state
+          }
+        });
+        const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
+        const output2 = {
+          decision: "deny",
+          permissionDecision: "deny",
+          permissionDecisionReason: reason,
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason
+          }
+        };
+        process.stdout.write(JSON.stringify(output2) + "\n");
+        process.exit(0);
+      }
       const payload = formatIntakePayload(issueData, state.intakeRound);
       state.issue = { owner, repo, number: issueData.number, title: issueData.title };
       state.phase = "INTAKE";

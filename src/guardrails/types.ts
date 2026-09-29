@@ -83,4 +83,5 @@ export interface FetchedIssueData {
     body: string;
     createdAt: string;
   }>;
+  state: "OPEN" | "CLOSED" | string;
 }

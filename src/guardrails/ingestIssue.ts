@@ -15,7 +15,7 @@ export function fetchIssueDeterministic(
 ): FetchedIssueData {
   // 1. Try native GitHub CLI
   try {
-    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author`;
+    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
     const stdout = execSync(cmd, {
       cwd: rootDir,
       encoding: "utf-8",
@@ -37,6 +37,7 @@ export function fetchIssueDeterministic(
         body: c.body ?? "",
         createdAt: c.createdAt ?? "",
       })),
+      state: (parsed.state ?? "OPEN").toUpperCase(),
     };
   } catch {
     // 2. Fallback to local examples fixture if available
@@ -65,6 +66,7 @@ export function fetchIssueDeterministic(
                 body: c.body ?? (typeof c === "string" ? c : ""),
                 createdAt: new Date().toISOString(),
               })),
+              state: (parsed.state ?? "OPEN").toUpperCase(),
             };
           }
         } catch {
@@ -96,6 +98,7 @@ export function formatIntakePayload(issueData: FetchedIssueData, round: number =
         author: issueData.author,
         labels: issueData.labels,
         comments: issueData.comments,
+        state: issueData.state,
       },
       instructions:
         "Evaluate this pre-fetched issue against the Definition of Ready (Reproduction/Expected vs Actual, Acceptance Criteria, Declared Scope). Output your structured triage verdict.",

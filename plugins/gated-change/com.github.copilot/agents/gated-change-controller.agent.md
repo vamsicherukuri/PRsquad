@@ -49,7 +49,7 @@ Route Intake's structured status:
 - `FETCH_FAILED`: if a deterministic `PRE_FETCHED_ISSUE_PAYLOAD` was provided by the ingestion hook in additional context, invoke `gated-change-intake` with that exact verified payload; otherwise report the fetch failure and stop. Never substitute remembered, plausible, or fabricated issue content.
 - `EMPTY`: ask the user to add reproduction or expected-vs-actual behavior, acceptance criteria, and a repository scope to the issue, then confirm.
 - `NOT_READY`: show Intake's one clarifying question and ask the user to update the issue, then confirm.
-- `READY`: pass the complete Intake result, including its fetched issue payload, to Architect.
+- `READY`: proceed immediately and autonomously to `gated-change-architect` with the complete Intake result, including its fetched issue payload. Do not create conversational pauses or ask for confirmation before Architect; surface any contextual notes alongside the plan at the Human Scope Gate.
 
 Treat any clear confirmation from the human (for example "done", "updated", "fixed", "completed", or equivalent) as ready to re-check. Do not accept clarification content supplied only in chat as a substitute — the GitHub issue itself must be updated; chat text alone never advances the round. Once confirmed, invoke Intake again with the same issue reference and increment the clarification round. Rounds `1` and `2` are two real human clarification opportunities; each is a new Intake invocation, not a resumed subagent. If round `2` still returns `EMPTY` or `NOT_READY`, stop and escalate. Never show raw issue JSON or tool output to the user.
 
@@ -58,6 +58,8 @@ Treat any clear confirmation from the human (for example "done", "updated", "fix
 You may only delegate to the five agents listed in `agents:` above — never a generic/general-purpose or ad hoc subagent, even as a fallback, since it would have none of the specialist's tool restrictions. You have no read/search tool; never inspect product source code yourself.
 
 If delegating to a named specialist fails or errors (a routing/tool-level issue, not real work happening), retry the same named agent up to 4 times — this doesn't consume the Developer -> QA -> Reviewer attempt budget below, since no real work happened. If it still hasn't started after 4 attempts, stop, tell the human plainly, and ask how they want to proceed. Never substitute another agent or do the task yourself.
+
+If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLICY_BLOCK`, closed issue, or unapproved scope gate), DO NOT RETRY. A policy block is a deliberate mechanical guardrail, not a transient routing glitch. Immediately set phase to `PAUSED`, report the hook's denial reason plainly to the human, and halt.
 
 ## Required first-slice sequence
 
