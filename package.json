@@ -1,6 +1,6 @@
 {
   "name": "gated-fix-pipeline",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "GitHub Copilot App Enterprise Challenge submission - narrow slice: Issue -> Intake Triage -> Architect -> Scope gate",
   "type": "module",
@@ -12,6 +12,7 @@
     "sweep": "tsx scripts/guardrails/ast-symbol-sweep.ts",
     "test:guardrails": "tsx scripts/test-guardrails.ts",
     "test:e2e": "tsx scripts/test-e2e-simulation.ts",
+    "bundle:hooks": "esbuild scripts/guardrails/hook-verify-gate.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-verify-gate.mjs && esbuild scripts/guardrails/hook-intake-ingest.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-intake-ingest.mjs && esbuild scripts/guardrails/hook-enforce-scope.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-enforce-scope.mjs && esbuild scripts/guardrails/hook-sandbox-bash.ts --bundle --platform=node --format=esm --outfile=plugins/gated-change/dist/hook-sandbox-bash.mjs",
     "run:ready": "tsx src/orchestrator.ts examples/sample-issue-ready.json",
     "run:vague": "tsx src/orchestrator.ts examples/sample-issue-vague.json"
   },
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }

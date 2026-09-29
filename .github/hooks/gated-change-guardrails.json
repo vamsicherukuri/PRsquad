@@ -3,24 +3,24 @@
   "hooks": {
     "preToolUse": [
       {
-        "tools": ["agent"],
-        "command": "node --import tsx scripts/guardrails/hook-verify-gate.ts",
-        "timeoutSec": 5
+        "tools": ["agent", "task"],
+        "command": "node \"${PLUGIN_ROOT}/dist/hook-verify-gate.mjs\"",
+        "timeoutSec": 15
       },
       {
-        "tools": ["agent"],
-        "command": "node --import tsx scripts/guardrails/hook-intake-ingest.ts",
-        "timeoutSec": 5
+        "tools": ["agent", "task"],
+        "command": "node \"${PLUGIN_ROOT}/dist/hook-intake-ingest.mjs\"",
+        "timeoutSec": 15
       },
       {
-        "tools": ["edit"],
-        "command": "node --import tsx scripts/guardrails/hook-enforce-scope.ts",
-        "timeoutSec": 5
+        "tools": ["edit", "edit_file", "write_to_file", "create_file"],
+        "command": "node \"${PLUGIN_ROOT}/dist/hook-enforce-scope.mjs\"",
+        "timeoutSec": 15
       },
       {
-        "tools": ["bash"],
-        "command": "node --import tsx scripts/guardrails/hook-sandbox-bash.ts",
-        "timeoutSec": 5
+        "tools": ["bash", "execute", "terminal"],
+        "command": "node \"${PLUGIN_ROOT}/dist/hook-sandbox-bash.mjs\"",
+        "timeoutSec": 15
       }
     ]
   }
