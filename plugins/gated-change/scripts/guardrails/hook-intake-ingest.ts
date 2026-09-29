@@ -12,12 +12,10 @@ import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  if (!process.stdin.isTTY) {
-    try {
-      rawInput = readFileSync(0, "utf-8");
-    } catch {
-      // No stdin provided
-    }
+  try {
+    rawInput = readFileSync(0, "utf-8");
+  } catch {
+    // No stdin provided
   }
 
   let input: HookInput = {};
@@ -65,9 +63,8 @@ async function main() {
         },
       });
 
-      const output = {
+      const output: HookOutput = {
         decision: "allow",
-        permissionDecision: "allow",
         additionalContext: `PRE_FETCHED_ISSUE_PAYLOAD:\n${payload}`,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
@@ -82,11 +79,9 @@ async function main() {
         details: { error: err.message },
       });
 
-      const output = {
+      const output: HookOutput = {
         decision: "deny",
-        permissionDecision: "deny",
         reason: `FETCH_FAILED: Deterministic ingestion could not retrieve issue #${issueNum}: ${err.message}`,
-        permissionDecisionReason: `FETCH_FAILED: Deterministic ingestion could not retrieve issue #${issueNum}: ${err.message}`,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
@@ -94,11 +89,11 @@ async function main() {
   }
 
   // Pass through for other tools/agents
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 });

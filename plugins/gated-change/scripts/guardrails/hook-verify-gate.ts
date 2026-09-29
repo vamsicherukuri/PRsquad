@@ -10,12 +10,10 @@ import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  if (!process.stdin.isTTY) {
-    try {
-      rawInput = readFileSync(0, "utf-8");
-    } catch {
-      // No stdin
-    }
+  try {
+    rawInput = readFileSync(0, "utf-8");
+  } catch {
+    // No stdin
   }
 
   let input: HookInput = {};
@@ -107,9 +105,8 @@ async function main() {
       },
     });
 
-    const output = {
+    const output: HookOutput = {
       decision: "allow",
-      permissionDecision: "allow",
       additionalContext:
         `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
         `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
@@ -120,11 +117,11 @@ async function main() {
   }
 
   // Pass through for other agents
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 });

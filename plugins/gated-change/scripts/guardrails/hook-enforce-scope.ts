@@ -11,12 +11,10 @@ import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  if (!process.stdin.isTTY) {
-    try {
-      rawInput = readFileSync(0, "utf-8");
-    } catch {
-      // No stdin
-    }
+  try {
+    rawInput = readFileSync(0, "utf-8");
+  } catch {
+    // No stdin
   }
 
   let input: HookInput = {};
@@ -60,11 +58,9 @@ async function main() {
         },
       });
 
-      const output = {
+      const output: HookOutput = {
         decision: "deny",
-        permissionDecision: "deny",
         reason: nudge,
-        permissionDecisionReason: nudge,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
@@ -83,16 +79,16 @@ async function main() {
       },
     });
 
-    process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+    process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
     process.exit(0);
   }
 
   // Pass through for non-edit tools
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
   process.exit(0);
 });

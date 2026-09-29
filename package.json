@@ -1,6 +1,6 @@
 {
   "name": "gated-fix-pipeline",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "GitHub Copilot App Enterprise Challenge submission - narrow slice: Issue -> Intake Triage -> Architect -> Scope gate",
   "type": "module",
