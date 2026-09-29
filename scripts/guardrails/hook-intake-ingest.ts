@@ -55,11 +55,14 @@ async function main() {
     // Extract issue number accurately
     let issueNum = 1;
     const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
-    const textNum = prompt.match(/\b(?:issue(?:\s*number)?\s*[:#]?\s*|#)(\d+)\b/i);
+    const textNum = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
+    const nameNum = String(toolArgs.name || "").match(/(?:issue-?|#)(\d+)/i);
     if (jsonNum) {
       issueNum = parseInt(jsonNum[1], 10);
     } else if (textNum) {
       issueNum = parseInt(textNum[1], 10);
+    } else if (nameNum) {
+      issueNum = parseInt(nameNum[1], 10);
     } else if (state.issue?.number && state.issue.number > 0) {
       issueNum = state.issue.number;
     }
