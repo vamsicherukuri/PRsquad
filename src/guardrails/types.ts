@@ -32,6 +32,7 @@ export interface WorkflowState {
   approvedScope: string | null;
   humanApproval: boolean;
   baseRef: string | null;
+  activeBranch?: string;
   updatedAt: string;
 }
 

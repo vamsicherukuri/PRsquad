@@ -92,7 +92,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.
     - Route Developer status:
-       - `IMPLEMENTED`: require `scopeAmendmentRequest: null`, a captured `baseRef`, `headRef: "WORKTREE"`, and complete changed/untracked file lists; then invoke QA.
+       - `IMPLEMENTED`: require `scopeAmendmentRequest: null`, a captured `baseRef`, `headRef` (commit SHA, branch, or `"WORKTREE"`), and complete changed/untracked file lists; then invoke QA.
        - `BLOCKED`: pause and report `blocker`. Do not invoke QA. Consume an implementation attempt only when `blocker.partialWorkExists` is true.
        - `SCOPE_AMENDMENT_REQUIRED`: do not invoke QA. Pass the request and approved plan to Architect for a scope-amendment decision.
     - For `SCOPE_AMENDMENT_REQUIRED`, route Architect response:

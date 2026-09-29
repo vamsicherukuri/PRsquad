@@ -9,9 +9,13 @@ export interface BashValidationResult {
 const REVIEWER_ALLOWLIST_REGEX =
   /^\s*git\s+(diff|status|show|log|ls-files|rev-parse)(\s+.*)?$/i;
 
-// Mutating git operations that QA and Developer must never run
-const MUTATING_GIT_REGEX =
-  /\bgit\s+(push|commit|checkout\s+(main|master)|reset\s+--hard|clean\s+-fdx)\b/i;
+// Mutating git operations that QA must never run
+const QA_MUTATING_GIT_REGEX =
+  /\bgit\s+(push|commit|checkout|switch|merge|rebase|reset|clean)\b/i;
+
+// Base branch protection: NO agent may checkout, switch to, commit to, merge, or push main/master
+const PROTECTED_BASE_BRANCH_REGEX =
+  /\bgit\s+(checkout|switch|commit|push|merge|rebase|reset|branch\s+-(?:d|D))\b.*?\b(?:origin\/)?(main|master)\b/i;
 
 // Dangerous destructive or exfiltration commands
 const DANGEROUS_SYSTEM_REGEX =
@@ -46,7 +50,15 @@ export function validateCommandForAgent(
     return { allowed: true };
   }
 
-  // 2. Global Safety: Block destructive remote push or publishing
+  // 2. Base Branch Protection: Never allow mutating or switching to main/master
+  if (PROTECTED_BASE_BRANCH_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL: Direct mutation, checkout, or manipulation of base branch ('main'/'master') is strictly prohibited. All work must remain on designated feature branches.`,
+    };
+  }
+
+  // 3. Global Safety: Block destructive remote push or publishing
   if (DANGEROUS_SYSTEM_REGEX.test(trimmed)) {
     return {
       allowed: false,
@@ -54,9 +66,9 @@ export function validateCommandForAgent(
     };
   }
 
-  // 3. QA Agent: Prevent mutating git repository state (supports qualified names)
+  // 4. QA Agent: Prevent mutating git repository state (supports qualified names)
   if (isAgentMatch(agent, "gated-change-qa")) {
-    if (MUTATING_GIT_REGEX.test(trimmed)) {
+    if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
         reason: `POLICY_DENIAL: QA agent cannot execute mutating git commands ('${trimmed}'). QA executes tests for validation only.`,
@@ -65,7 +77,7 @@ export function validateCommandForAgent(
     return { allowed: true };
   }
 
-  // 4. Developer Agent: Block git push to remotes (supports qualified names)
+  // 5. Developer Agent: Block git push to remotes (supports qualified names)
   if (isAgentMatch(agent, "gated-change-developer")) {
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {

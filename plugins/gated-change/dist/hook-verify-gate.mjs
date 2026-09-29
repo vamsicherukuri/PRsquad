@@ -2,6 +2,7 @@
 
 // scripts/guardrails/hook-verify-gate.ts
 import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
+import { execSync as execSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
@@ -210,10 +211,37 @@ async function main() {
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);
     }
+    const issueNum = lock.issueNumber || state.issue?.number || "patch";
+    const branchName = `fix/issue-${issueNum}`;
+    const repoRoot = getRepoRoot();
+    let branchStatus = "unknown";
+    try {
+      const currentBranch = execSync2("git rev-parse --abbrev-ref HEAD", {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      const isBaseBranch = currentBranch === "main" || currentBranch === "master" || currentBranch === "HEAD" || currentBranch.startsWith("origin/") || process.env.FORCE_BRANCH_SWITCH === "true";
+      if (isBaseBranch && currentBranch !== branchName) {
+        execSync2(`git checkout -B ${branchName}`, {
+          cwd: repoRoot,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        });
+        branchStatus = `switched_to_${branchName}`;
+      } else if (currentBranch === branchName) {
+        branchStatus = `already_on_${branchName}`;
+      } else {
+        branchStatus = `retained_${currentBranch}`;
+      }
+    } catch {
+      branchStatus = `virtual_${branchName}`;
+    }
     state.phase = "DEVELOPING";
     state.humanApproval = true;
     state.approvedScope = lock.approvedScope;
     state.implementationAttempt = lock.currentAttempt;
+    state.activeBranch = branchName;
     saveState(state);
     appendAuditLog({
       sessionId: state.sessionId,
@@ -224,15 +252,41 @@ async function main() {
       details: {
         attempt: lock.currentAttempt,
         approvedScope: lock.approvedScope,
-        approvedBy: lock.approvedBy
+        approvedBy: lock.approvedBy,
+        activeBranch: branchName,
+        branchStatus
       }
     });
+    const branchInstructions = `[BRANCH ISOLATION GUARDRAIL]
+Active Feature Branch: '${branchName}' (automatically created/checked out by Scope Gate hook).
+All edits and commits MUST remain on '${branchName}'.
+Direct checkout or commits to 'main'/'master' and remote 'git push' are strictly blocked by security hooks.
+Before reporting IMPLEMENTED, stage and commit your changes: git commit -m "fix: <summary> (fixes #${issueNum})".
+Report headRef as your commit SHA or '${branchName}'.`;
+    const prompt = toolArgs.prompt || toolArgs.content || "";
+    const enrichedPrompt = prompt.includes("[BRANCH ISOLATION GUARDRAIL]") ? prompt : `${branchInstructions}
+
+${prompt}`;
+    const modifiedArgs = {
+      ...toolArgs,
+      prompt: enrichedPrompt,
+      activeBranch: branchName
+    };
     const output = {
       decision: "allow",
       permissionDecision: "allow",
+      modifiedArgs,
+      updatedInput: modifiedArgs,
       additionalContext: `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.
 APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"
-Developer write actions are strictly bounded to this prefix.`
+ACTIVE_FEATURE_BRANCH: "${branchName}"
+Developer write actions are strictly bounded to this prefix and branch.`,
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        modifiedArgs,
+        updatedInput: modifiedArgs
+      }
     };
     process.stdout.write(JSON.stringify(output) + "\n");
     process.exit(0);

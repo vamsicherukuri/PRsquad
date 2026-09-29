@@ -127,6 +127,9 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
     });
     const parsed = JSON.parse(stdout);
     assert(parsed.decision === "allow", "Hook permits developer invocation when active lock is present");
+    assert(parsed.modifiedArgs?.activeBranch === "fix/issue-999", "Hook passes activeBranch in modifiedArgs to Developer");
+    const stateAfterHook = loadState();
+    assert(stateAfterHook.activeBranch === "fix/issue-999", "Hook records activeBranch fix/issue-999 in state");
   } catch (err: any) {
     assert(false, `Hook failed on valid lock: ${err.message}`);
   }
@@ -193,8 +196,23 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
   assert(!qaCommit.allowed, "QA strictly blocked from git commit");
 
   // Developer agent tests
+  const devCommit = validateCommandForAgent("git commit -m 'fix: scoped read tool'", "gated-change-developer");
+  assert(devCommit.allowed, "Developer allowed to commit on feature branch");
+
   const devPush = validateCommandForAgent("git push origin branch", "gated-change-developer");
   assert(!devPush.allowed, "Developer blocked from remote git push");
+
+  const devCheckoutMain = validateCommandForAgent("git checkout main", "gated-change-developer");
+  assert(!devCheckoutMain.allowed, "Developer strictly blocked from checking out main");
+
+  const devSwitchMaster = validateCommandForAgent("git switch master", "gated-change-developer");
+  assert(!devSwitchMaster.allowed, "Developer strictly blocked from switching to master");
+
+  const qaCheckoutMain = validateCommandForAgent("git checkout main", "gated-change-qa");
+  assert(!qaCheckoutMain.allowed, "QA strictly blocked from checking out main");
+
+  const revCheckoutMain = validateCommandForAgent("git checkout main", "gated-change-reviewer");
+  assert(!revCheckoutMain.allowed, "Reviewer strictly blocked from checking out main");
 }
 
 // ---------------------------------------------------------------------------
