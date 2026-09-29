@@ -89,6 +89,7 @@ function isAgentMatch(targetAgent, expectedName) {
 var REVIEWER_ALLOWLIST_REGEX = /^\s*git\s+(diff|status|show|log|ls-files|rev-parse)(\s+.*)?$/i;
 var QA_MUTATING_GIT_REGEX = /\bgit\s+(push|commit|checkout|switch|merge|rebase|reset|clean)\b/i;
 var PROTECTED_BASE_BRANCH_REGEX = /\bgit\s+(checkout|switch|commit|push|merge|rebase|reset|branch\s+-(?:d|D))\b.*?\b(?:origin\/)?(main|master)\b/i;
+var BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
 function validateCommandForAgent(command, agent = "unknown") {
   const trimmed = command.trim();
@@ -111,6 +112,12 @@ function validateCommandForAgent(command, agent = "unknown") {
     return {
       allowed: false,
       reason: `POLICY_DENIAL: Direct mutation, checkout, or manipulation of base branch ('main'/'master') is strictly prohibited. All work must remain on designated feature branches.`
+    };
+  }
+  if (BRANCH_DELETION_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL: Autonomous branch deletion is strictly forbidden. Branch deletion and rollback are exclusively reserved for human maintainers."
     };
   }
   if (DANGEROUS_SYSTEM_REGEX.test(trimmed)) {

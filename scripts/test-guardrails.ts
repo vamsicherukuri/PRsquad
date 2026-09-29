@@ -213,6 +213,15 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
 
   const revCheckoutMain = validateCommandForAgent("git checkout main", "gated-change-reviewer");
   assert(!revCheckoutMain.allowed, "Reviewer strictly blocked from checking out main");
+
+  const devDeleteBranch = validateCommandForAgent("git branch -D fix/issue-4", "gated-change-developer");
+  assert(!devDeleteBranch.allowed, "Developer strictly blocked from deleting branches (human-only)");
+
+  const qaDeleteBranch = validateCommandForAgent("git branch -d feature", "gated-change-qa");
+  assert(!qaDeleteBranch.allowed, "QA strictly blocked from deleting branches (human-only)");
+
+  const revDeleteBranch = validateCommandForAgent("git branch -D feature", "gated-change-reviewer");
+  assert(!revDeleteBranch.allowed, "Reviewer strictly blocked from deleting branches (human-only)");
 }
 
 // ---------------------------------------------------------------------------

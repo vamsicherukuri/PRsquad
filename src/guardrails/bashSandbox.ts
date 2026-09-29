@@ -17,6 +17,9 @@ const QA_MUTATING_GIT_REGEX =
 const PROTECTED_BASE_BRANCH_REGEX =
   /\bgit\s+(checkout|switch|commit|push|merge|rebase|reset|branch\s+-(?:d|D))\b.*?\b(?:origin\/)?(main|master)\b/i;
 
+// Branch deletion is strictly reserved for human maintainers. NO agent may delete branches.
+const BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
+
 // Dangerous destructive or exfiltration commands
 const DANGEROUS_SYSTEM_REGEX =
   /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
@@ -58,7 +61,15 @@ export function validateCommandForAgent(
     };
   }
 
-  // 3. Global Safety: Block destructive remote push or publishing
+  // 3. Branch Deletion Guardrail: No agent may delete branches (human-only privilege)
+  if (BRANCH_DELETION_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL: Autonomous branch deletion is strictly forbidden. Branch deletion and rollback are exclusively reserved for human maintainers.",
+    };
+  }
+
+  // 4. Global Safety: Block destructive remote push or publishing
   if (DANGEROUS_SYSTEM_REGEX.test(trimmed)) {
     return {
       allowed: false,
