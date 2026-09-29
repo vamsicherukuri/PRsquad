@@ -4,17 +4,29 @@
  * Intercepts delegation to 'gated-change-developer' and enforces physical lock check.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { loadState, saveState, loadApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  try {
-    rawInput = readFileSync(0, "utf-8");
-  } catch {
-    // No stdin
+  if (!process.stdin.isTTY) {
+    try {
+      rawInput = readFileSync(0, "utf-8");
+    } catch {
+      // No stdin
+    }
   }
+
+  try {
+    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-verify-gate",
+      time: new Date().toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {
@@ -25,7 +37,13 @@ async function main() {
     }
   }
 
-  const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
+  const firstTool = input.toolCalls?.[0];
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const targetAgent =
+    toolArgs.agent_type ||
+    toolArgs.name ||
+    toolArgs.agent ||
+    input.agent;
 
   // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
   if (isAgentMatch(targetAgent, "gated-change-developer")) {
@@ -105,8 +123,9 @@ async function main() {
       },
     });
 
-    const output: HookOutput = {
+    const output = {
       decision: "allow",
+      permissionDecision: "allow",
       additionalContext:
         `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
         `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
@@ -117,11 +136,11 @@ async function main() {
   }
 
   // Pass through for other agents
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 });

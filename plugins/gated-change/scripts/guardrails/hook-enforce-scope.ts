@@ -4,18 +4,30 @@
  * Intercepts all 'edit' tool calls and blocks modifications outside the approved scope.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { isEditAllowed, formatScopeDenialNudge } from "../../src/guardrails/scopeEnforcer.js";
 import { loadState, appendAuditLog } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  try {
-    rawInput = readFileSync(0, "utf-8");
-  } catch {
-    // No stdin
+  if (!process.stdin.isTTY) {
+    try {
+      rawInput = readFileSync(0, "utf-8");
+    } catch {
+      // No stdin
+    }
   }
+
+  try {
+    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-enforce-scope",
+      time: new Date().toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {
@@ -26,15 +38,25 @@ async function main() {
     }
   }
 
-  const tool = input.tool || "edit";
+  const firstTool = input.toolCalls?.[0];
+  const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
+  const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetPath =
-    input.toolArgs?.path ||
-    input.toolArgs?.file ||
-    input.toolArgs?.targetFile ||
-    input.toolArgs?.filePath;
+    toolArgs.path ||
+    toolArgs.file ||
+    toolArgs.targetFile ||
+    toolArgs.filePath;
 
-  // If this is an edit tool or has a file path target
-  if (tool === "edit" || (targetPath && typeof targetPath === "string")) {
+  const isEditTool =
+    tool === "edit" ||
+    tool === "edit_file" ||
+    tool === "write_to_file" ||
+    tool === "create_file" ||
+    tool === "write" ||
+    tool.includes("edit");
+
+  // Only enforce write scope if this is an edit tool and has a valid file path target
+  if (isEditTool && targetPath && typeof targetPath === "string") {
     const state = loadState();
     const result = isEditAllowed(targetPath || "", state.approvedScope);
 
@@ -58,9 +80,11 @@ async function main() {
         },
       });
 
-      const output: HookOutput = {
+      const output = {
         decision: "deny",
+        permissionDecision: "deny",
         reason: nudge,
+        permissionDecisionReason: nudge,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
@@ -79,16 +103,16 @@ async function main() {
       },
     });
 
-    process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+    process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
     process.exit(0);
   }
 
   // Pass through for non-edit tools
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 });

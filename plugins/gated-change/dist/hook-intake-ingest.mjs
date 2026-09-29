@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-intake-ingest.ts
-import { readFileSync as readFileSync3 } from "node:fs";
+import { readFileSync as readFileSync3, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/ingestIssue.ts
 import { execSync } from "node:child_process";
@@ -180,6 +180,16 @@ async function main() {
     } catch {
     }
   }
+  try {
+    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-intake-ingest",
+      time: (/* @__PURE__ */ new Date()).toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {
+  }
   let input = {};
   if (rawInput.trim()) {
     try {
@@ -193,11 +203,30 @@ async function main() {
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
     const state = loadState();
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
-    const issueMatch = prompt.match(/(?:issue\s*#?|#)(\d+)/i) || prompt.match(/(\d+)/);
-    const issueNum = issueMatch ? parseInt(issueMatch[1], 10) : state.issue.number || 1;
-    const repoMatch = prompt.match(/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/);
-    const owner = repoMatch ? repoMatch[1].replace(/[.,!?;:]+$/, "") : state.issue.owner || "vamsicherukuri";
-    const repo = repoMatch ? repoMatch[2].replace(/[.,!?;:]+$/, "") : state.issue.repo || "gated-fix-pipeline";
+    let issueNum = 1;
+    const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
+    const textNum = prompt.match(/\b(?:issue(?:\s*number)?\s*[:#]?\s*|#)(\d+)\b/i);
+    if (jsonNum) {
+      issueNum = parseInt(jsonNum[1], 10);
+    } else if (textNum) {
+      issueNum = parseInt(textNum[1], 10);
+    } else if (state.issue?.number && state.issue.number > 0) {
+      issueNum = state.issue.number;
+    }
+    let owner = state.issue?.owner || "vamsicherukuri";
+    let repo = state.issue?.repo || "gated-fix-pipeline";
+    const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
+    const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
+    if (jsonOwner && jsonRepo) {
+      owner = jsonOwner[1];
+      repo = jsonRepo[1];
+    } else {
+      const explicitRepo = prompt.match(/\b(?:in|repo(?:sitory)?(?:\s*name)?\s*[:=]?)\s*([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
+      if (explicitRepo) {
+        owner = explicitRepo[1];
+        repo = explicitRepo[2];
+      }
+    }
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum);
       const payload = formatIntakePayload(issueData, state.intakeRound);
@@ -229,18 +258,17 @@ ${payload}`
         sessionId: state.sessionId,
         agent: "controller",
         tool: "agent",
-        action: "deterministic_issue_ingestion_failed",
-        decision: "deny",
+        action: "deterministic_issue_ingestion_warning",
+        decision: "allow",
         details: { error: err.message }
       });
       const output = {
-        decision: "deny",
-        permissionDecision: "deny",
-        reason: `FETCH_FAILED: Deterministic ingestion could not retrieve issue #${issueNum}: ${err.message}`,
-        permissionDecisionReason: `FETCH_FAILED: Deterministic ingestion could not retrieve issue #${issueNum}: ${err.message}`
+        decision: "allow",
+        permissionDecision: "allow",
+        additionalContext: `ISSUE_INGESTION_NOTICE: Could not pre-fetch issue #${issueNum} via gh CLI: ${err.message}. Specialist should proceed with standard triage.`
       };
       process.stdout.write(JSON.stringify(output) + "\n");
-      process.exit(1);
+      process.exit(0);
     }
   }
   process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");

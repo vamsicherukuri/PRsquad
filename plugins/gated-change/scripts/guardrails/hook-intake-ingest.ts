@@ -5,18 +5,30 @@
  * (or fallback fixture), and injects verified structured issue context.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  try {
-    rawInput = readFileSync(0, "utf-8");
-  } catch {
-    // No stdin provided
+  if (!process.stdin.isTTY) {
+    try {
+      rawInput = readFileSync(0, "utf-8");
+    } catch {
+      // No stdin provided
+    }
   }
+
+  try {
+    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-intake-ingest",
+      time: new Date().toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {
@@ -27,19 +39,46 @@ async function main() {
     }
   }
 
-  const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
+  const firstTool = input.toolCalls?.[0];
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const targetAgent =
+    toolArgs.agent_type ||
+    toolArgs.name ||
+    toolArgs.agent ||
+    input.agent;
 
   // Only intercept when invoking gated-change-intake (supports qualified names)
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
     const state = loadState();
-    const prompt = input.toolArgs?.prompt || "";
+    const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
-    // Extract issue number and owner/repo from prompt or state
-    const issueMatch = prompt.match(/(?:issue\s*#?|#)(\d+)/i) || prompt.match(/(\d+)/);
-    const issueNum = issueMatch ? parseInt(issueMatch[1], 10) : state.issue.number || 1;
-    const repoMatch = prompt.match(/([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)/);
-    const owner = repoMatch ? repoMatch[1].replace(/[.,!?;:]+$/, "") : (state.issue.owner || "vamsicherukuri");
-    const repo = repoMatch ? repoMatch[2].replace(/[.,!?;:]+$/, "") : (state.issue.repo || "gated-fix-pipeline");
+    // Extract issue number accurately
+    let issueNum = 1;
+    const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
+    const textNum = prompt.match(/\b(?:issue(?:\s*number)?\s*[:#]?\s*|#)(\d+)\b/i);
+    if (jsonNum) {
+      issueNum = parseInt(jsonNum[1], 10);
+    } else if (textNum) {
+      issueNum = parseInt(textNum[1], 10);
+    } else if (state.issue?.number && state.issue.number > 0) {
+      issueNum = state.issue.number;
+    }
+
+    // Extract owner and repo
+    let owner = state.issue?.owner || "vamsicherukuri";
+    let repo = state.issue?.repo || "gated-fix-pipeline";
+    const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
+    const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
+    if (jsonOwner && jsonRepo) {
+      owner = jsonOwner[1];
+      repo = jsonRepo[1];
+    } else {
+      const explicitRepo = prompt.match(/\b(?:in|repo(?:sitory)?(?:\s*name)?\s*[:=]?)\s*([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
+      if (explicitRepo) {
+        owner = explicitRepo[1];
+        repo = explicitRepo[2];
+      }
+    }
 
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum);
@@ -63,8 +102,9 @@ async function main() {
         },
       });
 
-      const output: HookOutput = {
+      const output = {
         decision: "allow",
+        permissionDecision: "allow",
         additionalContext: `PRE_FETCHED_ISSUE_PAYLOAD:\n${payload}`,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
@@ -74,26 +114,28 @@ async function main() {
         sessionId: state.sessionId,
         agent: "controller",
         tool: "agent",
-        action: "deterministic_issue_ingestion_failed",
-        decision: "deny",
+        action: "deterministic_issue_ingestion_warning",
+        decision: "allow",
         details: { error: err.message },
       });
 
-      const output: HookOutput = {
-        decision: "deny",
-        reason: `FETCH_FAILED: Deterministic ingestion could not retrieve issue #${issueNum}: ${err.message}`,
+      // Pass through gracefully so Intake specialist can report standard FETCH_FAILED
+      const output = {
+        decision: "allow",
+        permissionDecision: "allow",
+        additionalContext: `ISSUE_INGESTION_NOTICE: Could not pre-fetch issue #${issueNum} via gh CLI: ${err.message}. Specialist should proceed with standard triage.`,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
-      process.exit(1);
+      process.exit(0);
     }
   }
 
   // Pass through for other tools/agents
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 });

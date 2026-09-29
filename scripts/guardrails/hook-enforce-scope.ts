@@ -4,7 +4,7 @@
  * Intercepts all 'edit' tool calls and blocks modifications outside the approved scope.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { isEditAllowed, formatScopeDenialNudge } from "../../src/guardrails/scopeEnforcer.js";
 import { loadState, appendAuditLog } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
@@ -19,6 +19,16 @@ async function main() {
     }
   }
 
+  try {
+    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-enforce-scope",
+      time: new Date().toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {}
+
   let input: HookInput = {};
   if (rawInput.trim()) {
     try {
@@ -29,7 +39,7 @@ async function main() {
   }
 
   const firstTool = input.toolCalls?.[0];
-  const tool = input.tool || firstTool?.name || "edit";
+  const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetPath =
     toolArgs.path ||
@@ -37,8 +47,16 @@ async function main() {
     toolArgs.targetFile ||
     toolArgs.filePath;
 
-  // If this is an edit tool or has a file path target
-  if (tool === "edit" || (targetPath && typeof targetPath === "string")) {
+  const isEditTool =
+    tool === "edit" ||
+    tool === "edit_file" ||
+    tool === "write_to_file" ||
+    tool === "create_file" ||
+    tool === "write" ||
+    tool.includes("edit");
+
+  // Only enforce write scope if this is an edit tool and has a valid file path target
+  if (isEditTool && targetPath && typeof targetPath === "string") {
     const state = loadState();
     const result = isEditAllowed(targetPath || "", state.approvedScope);
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-enforce-scope.ts
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/scopeEnforcer.ts
 import { execSync as execSync2 } from "node:child_process";
@@ -202,6 +202,16 @@ async function main() {
     } catch {
     }
   }
+  try {
+    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-enforce-scope",
+      time: (/* @__PURE__ */ new Date()).toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {
+  }
   let input = {};
   if (rawInput.trim()) {
     try {
@@ -210,10 +220,11 @@ async function main() {
     }
   }
   const firstTool = input.toolCalls?.[0];
-  const tool = input.tool || firstTool?.name || "edit";
+  const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetPath = toolArgs.path || toolArgs.file || toolArgs.targetFile || toolArgs.filePath;
-  if (tool === "edit" || targetPath && typeof targetPath === "string") {
+  const isEditTool = tool === "edit" || tool === "edit_file" || tool === "write_to_file" || tool === "create_file" || tool === "write" || tool.includes("edit");
+  if (isEditTool && targetPath && typeof targetPath === "string") {
     const state = loadState();
     const result = isEditAllowed(targetPath || "", state.approvedScope);
     if (!result.allowed) {

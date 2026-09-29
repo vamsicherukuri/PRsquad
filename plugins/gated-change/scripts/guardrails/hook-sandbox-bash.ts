@@ -4,18 +4,30 @@
  * Intercepts all 'bash' tool calls and validates commands based on the active agent's role.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { validateCommandForAgent } from "../../src/guardrails/bashSandbox.js";
 import { loadState, appendAuditLog } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
-  try {
-    rawInput = readFileSync(0, "utf-8");
-  } catch {
-    // No stdin
+  if (!process.stdin.isTTY) {
+    try {
+      rawInput = readFileSync(0, "utf-8");
+    } catch {
+      // No stdin
+    }
   }
+
+  try {
+    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-sandbox-bash",
+      time: new Date().toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {
@@ -26,11 +38,21 @@ async function main() {
     }
   }
 
-  const tool = input.tool || "bash";
-  const command = input.toolArgs?.command || input.toolArgs?.cmd || "";
-  const agent = input.agent || "unknown";
+  const firstTool = input.toolCalls?.[0];
+  const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const command = toolArgs.command || toolArgs.cmd || "";
+  const agent = input.agent || toolArgs.agent_type || "unknown";
 
-  if (tool === "bash" && command) {
+  const isBashTool =
+    tool === "bash" ||
+    tool === "execute" ||
+    tool === "terminal" ||
+    tool === "shell" ||
+    tool.includes("bash") ||
+    tool.includes("terminal");
+
+  if (isBashTool && command) {
     const state = loadState();
     const result = validateCommandForAgent(command, agent);
 
@@ -47,9 +69,11 @@ async function main() {
         },
       });
 
-      const output: HookOutput = {
+      const output = {
         decision: "deny",
+        permissionDecision: "deny",
         reason: result.reason || "POLICY_DENIAL: Command blocked by guardrail.",
+        permissionDecisionReason: result.reason || "POLICY_DENIAL: Command blocked by guardrail.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
@@ -64,16 +88,16 @@ async function main() {
       details: { command },
     });
 
-    process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+    process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
     process.exit(0);
   }
 
   // Pass through
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
 
 main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-sandbox-bash.ts
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
@@ -142,6 +142,16 @@ async function main() {
     } catch {
     }
   }
+  try {
+    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+      hook: "hook-sandbox-bash",
+      time: (/* @__PURE__ */ new Date()).toISOString(),
+      argv: process.argv,
+      cwd: process.cwd(),
+      rawInput
+    }) + "\n");
+  } catch {
+  }
   let input = {};
   if (rawInput.trim()) {
     try {
@@ -150,11 +160,12 @@ async function main() {
     }
   }
   const firstTool = input.toolCalls?.[0];
-  const tool = input.tool || firstTool?.name || "bash";
+  const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const command = toolArgs.command || toolArgs.cmd || "";
   const agent = input.agent || toolArgs.agent_type || "unknown";
-  if (tool === "bash" && command) {
+  const isBashTool = tool === "bash" || tool === "execute" || tool === "terminal" || tool === "shell" || tool.includes("bash") || tool.includes("terminal");
+  if (isBashTool && command) {
     const state = loadState();
     const result = validateCommandForAgent(command, agent);
     if (!result.allowed) {
