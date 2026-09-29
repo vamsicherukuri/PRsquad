@@ -45,9 +45,8 @@ If a result is malformed, invoke the same specialist once more only to correct i
 ## Intake routing
 
 When the user identifies a GitHub issue, invoke `gated-change-intake` with the repository owner, repository name, issue number, and clarification round (`0` for the initial check). Intake owns fetching and evaluating the issue. The controller must not fetch, reconstruct, summarize, or validate issue content itself.
-
 Route Intake's structured status:
-- `FETCH_FAILED`: report the fetch failure and stop. Never substitute remembered or plausible issue content.
+- `FETCH_FAILED`: if a deterministic `PRE_FETCHED_ISSUE_PAYLOAD` was provided by the ingestion hook in additional context, invoke `gated-change-intake` with that exact verified payload; otherwise report the fetch failure and stop. Never substitute remembered, plausible, or fabricated issue content.
 - `EMPTY`: ask the user to add reproduction or expected-vs-actual behavior, acceptance criteria, and a repository scope to the issue, then confirm.
 - `NOT_READY`: show Intake's one clarifying question and ask the user to update the issue, then confirm.
 - `READY`: pass the complete Intake result, including its fetched issue payload, to Architect.

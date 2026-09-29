@@ -245,11 +245,29 @@ async function main() {
           round: state.intakeRound
         }
       });
+      const enrichedPrompt = prompt.includes("PRE_FETCHED_ISSUE_PAYLOAD") ? prompt : `${prompt}
+
+PRE_FETCHED_ISSUE_PAYLOAD:
+${payload}`;
+      const modifiedArgs = {
+        ...toolArgs,
+        prompt: enrichedPrompt
+      };
       const output = {
         decision: "allow",
         permissionDecision: "allow",
+        modifiedArgs,
+        updatedInput: modifiedArgs,
         additionalContext: `PRE_FETCHED_ISSUE_PAYLOAD:
+${payload}`,
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          modifiedArgs,
+          updatedInput: modifiedArgs,
+          additionalContext: `PRE_FETCHED_ISSUE_PAYLOAD:
 ${payload}`
+        }
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(0);
