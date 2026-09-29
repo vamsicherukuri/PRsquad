@@ -192,16 +192,20 @@ async function runLiveBranchTest() {
       console.error(`  Warning restoring branch: ${e.message}`);
     }
 
-    // Delete test branch
-    try {
-      execSync(`git branch -D ${EXPECTED_BRANCH}`, {
-        cwd: REPO_ROOT,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      console.log(`  Deleted test branch '${EXPECTED_BRANCH}'`);
-    } catch {
-      // Branch might not have been created
+    // Delete test branch unless --keep is passed
+    if (process.argv.includes("--keep")) {
+      console.log(`  [--keep specified]: Retaining test branch '${EXPECTED_BRANCH}' for manual inspection.`);
+    } else {
+      try {
+        execSync(`git branch -D ${EXPECTED_BRANCH}`, {
+          cwd: REPO_ROOT,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        console.log(`  Deleted test branch '${EXPECTED_BRANCH}'`);
+      } catch {
+        // Branch might not have been created
+      }
     }
 
     // Revoke test lock
