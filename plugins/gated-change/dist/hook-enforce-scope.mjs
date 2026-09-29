@@ -1,0 +1,266 @@
+#!/usr/bin/env node
+
+// scripts/guardrails/hook-enforce-scope.ts
+import { readFileSync as readFileSync2 } from "node:fs";
+
+// src/guardrails/scopeEnforcer.ts
+import { execSync as execSync2 } from "node:child_process";
+
+// src/guardrails/stateStore.ts
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { resolve, relative, join } from "node:path";
+import { execSync } from "node:child_process";
+var GATED_CHANGE_DIR = ".gated-change";
+var STATE_FILE = "state.json";
+var AUDIT_FILE = "audit.jsonl";
+var cachedRepoRoot = null;
+function getRepoRoot() {
+  if (cachedRepoRoot) return cachedRepoRoot;
+  try {
+    const stdout = execSync("git rev-parse --show-toplevel", {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    cachedRepoRoot = stdout.trim().replace(/\\/g, "/");
+    return cachedRepoRoot;
+  } catch {
+    cachedRepoRoot = process.cwd().replace(/\\/g, "/");
+    return cachedRepoRoot;
+  }
+}
+function toPosixRelative(filePath, rootDir = getRepoRoot()) {
+  const full = resolve(rootDir, filePath);
+  const rel = relative(rootDir, full);
+  return rel.split("\\").join("/").replace(/^\.\//, "");
+}
+function ensureGatedChangeDir(rootDir = getRepoRoot()) {
+  const dir = join(rootDir, GATED_CHANGE_DIR);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+function loadState(rootDir = getRepoRoot()) {
+  ensureGatedChangeDir(rootDir);
+  const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  if (existsSync(filePath)) {
+    try {
+      const raw = readFileSync(filePath, "utf-8");
+      return JSON.parse(raw);
+    } catch {
+    }
+  }
+  const defaultState = {
+    version: "1.0",
+    sessionId: `gcc-${Date.now()}`,
+    issue: {
+      owner: "",
+      repo: "",
+      number: 0
+    },
+    phase: "INTAKE",
+    intakeRound: 0,
+    maxIntakeRounds: 2,
+    scopeRevisionCount: 0,
+    maxScopeRevisions: 2,
+    implementationAttempt: 1,
+    maxImplementationAttempts: 3,
+    approvedScope: null,
+    humanApproval: false,
+    baseRef: null,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  saveState(defaultState, rootDir);
+  return defaultState;
+}
+function saveState(state, rootDir = getRepoRoot()) {
+  ensureGatedChangeDir(rootDir);
+  state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  writeFileSync(filePath, JSON.stringify(state, null, 2), "utf-8");
+}
+function appendAuditLog(entry, rootDir = getRepoRoot()) {
+  ensureGatedChangeDir(rootDir);
+  const fullEntry = {
+    ...entry,
+    timestamp: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  const filePath = join(rootDir, GATED_CHANGE_DIR, AUDIT_FILE);
+  appendFileSync(filePath, JSON.stringify(fullEntry) + "\n", "utf-8");
+}
+
+// src/guardrails/scopeEnforcer.ts
+var SYSTEM_PROTECTED_PREFIXES = [
+  ".git/",
+  ".github/",
+  ".gated-change/",
+  "plugins/"
+];
+function getCurrentGitBranch(rootDir = process.cwd()) {
+  try {
+    const stdout = execSync2("git branch --show-current", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    return stdout.trim();
+  } catch {
+    return "";
+  }
+}
+function ensureIsolatedBranch(issueNumber = 0, rootDir = process.cwd()) {
+  const current = getCurrentGitBranch(rootDir);
+  if (!current || current !== "main" && current !== "master") {
+    return { ok: true, branch: current };
+  }
+  const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
+  try {
+    execSync2(`git checkout -b ${targetBranch}`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    return { ok: true, branch: targetBranch };
+  } catch {
+    return {
+      ok: false,
+      branch: current,
+      reason: `BRANCH_POLICY_DENIAL: Modifications directly on protected branch '${current}' are forbidden. Automatic switch to '${targetBranch}' failed. Please switch to a dedicated fix branch before editing files.`
+    };
+  }
+}
+function isEditAllowed(filePath, approvedScope, rootDir = process.cwd(), issueNumber = 0) {
+  const normalized = toPosixRelative(filePath, rootDir);
+  for (const prefix of SYSTEM_PROTECTED_PREFIXES) {
+    if (normalized === prefix.slice(0, -1) || normalized.startsWith(prefix)) {
+      return {
+        allowed: false,
+        reason: `SYSTEM_POLICY_DENIAL: Path '${normalized}' is a protected system directory and cannot be modified by agents.`,
+        normalizedPath: normalized
+      };
+    }
+  }
+  if (!approvedScope) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL: No approved scope found. Code edits are blocked until the Human Scope Gate approves the plan.",
+      normalizedPath: normalized
+    };
+  }
+  const branchCheck = ensureIsolatedBranch(issueNumber, rootDir);
+  if (!branchCheck.ok) {
+    return {
+      allowed: false,
+      reason: branchCheck.reason,
+      normalizedPath: normalized
+    };
+  }
+  const cleanScope = approvedScope.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+  const isMatch = cleanScope === "" || normalized === cleanScope || normalized.startsWith(cleanScope + "/");
+  if (!isMatch) {
+    return {
+      allowed: false,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${cleanScope}/'.`,
+      normalizedPath: normalized
+    };
+  }
+  return {
+    allowed: true,
+    normalizedPath: normalized
+  };
+}
+function formatScopeDenialNudge(blockedPath, approvedScope) {
+  return [
+    `POLICY_DENIAL: Write to '${blockedPath}' was BLOCKED by the deterministic write barrier.`,
+    `The human-approved scope boundary is: '${approvedScope}'.`,
+    "",
+    "INSTRUCTIONS FOR DEVELOPER AGENT:",
+    `1. Do NOT attempt to edit '${blockedPath}' again.`,
+    `2. If your fix can be completed within '${approvedScope}', adapt your implementation to stay strictly inside that boundary.`,
+    `3. If '${blockedPath}' is strictly necessary to solve the issue, halt further code edits immediately and return your final handoff with:`,
+    JSON.stringify(
+      {
+        status: "SCOPE_AMENDMENT_REQUIRED",
+        scopeAmendmentRequest: {
+          requestedPaths: [blockedPath],
+          reason: `<Explain why '${blockedPath}' is required and why Architect's plan missed it>`,
+          impactIfRejected: "<Explain the impact on functionality if this scope expansion is denied>"
+        }
+      },
+      null,
+      2
+    )
+  ].join("\n");
+}
+
+// scripts/guardrails/hook-enforce-scope.ts
+async function main() {
+  let rawInput = "";
+  if (!process.stdin.isTTY) {
+    try {
+      rawInput = readFileSync2(0, "utf-8");
+    } catch {
+    }
+  }
+  let input = {};
+  if (rawInput.trim()) {
+    try {
+      input = JSON.parse(rawInput);
+    } catch {
+    }
+  }
+  const firstTool = input.toolCalls?.[0];
+  const tool = input.tool || firstTool?.name || "edit";
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const targetPath = toolArgs.path || toolArgs.file || toolArgs.targetFile || toolArgs.filePath;
+  if (tool === "edit" || targetPath && typeof targetPath === "string") {
+    const state = loadState();
+    const result = isEditAllowed(targetPath || "", state.approvedScope);
+    if (!result.allowed) {
+      const nudge = formatScopeDenialNudge(
+        result.normalizedPath,
+        state.approvedScope || "NONE"
+      );
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: input.agent || "gated-change-developer",
+        tool: "edit",
+        action: "write_blocked_out_of_scope",
+        decision: "deny",
+        details: {
+          attemptedPath: targetPath,
+          normalizedPath: result.normalizedPath,
+          approvedScope: state.approvedScope,
+          reason: result.reason
+        }
+      });
+      const output = {
+        decision: "deny",
+        permissionDecision: "deny",
+        reason: nudge,
+        permissionDecisionReason: nudge
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
+    }
+    appendAuditLog({
+      sessionId: state.sessionId,
+      agent: input.agent || "gated-change-developer",
+      tool: "edit",
+      action: "write_allowed_in_scope",
+      decision: "allow",
+      details: {
+        path: result.normalizedPath,
+        approvedScope: state.approvedScope
+      }
+    });
+    process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+    process.exit(0);
+  }
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.exit(0);
+}
+main().catch(() => {
+  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+  process.exit(0);
+});

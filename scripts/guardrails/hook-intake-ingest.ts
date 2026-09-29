@@ -29,12 +29,18 @@ async function main() {
     }
   }
 
-  const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
+  const firstTool = input.toolCalls?.[0];
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const targetAgent =
+    toolArgs.agent_type ||
+    toolArgs.name ||
+    toolArgs.agent ||
+    input.agent;
 
   // Only intercept when invoking gated-change-intake (supports qualified names)
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
     const state = loadState();
-    const prompt = input.toolArgs?.prompt || "";
+    const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
     // Extract issue number and owner/repo from prompt or state
     const issueMatch = prompt.match(/(?:issue\s*#?|#)(\d+)/i) || prompt.match(/(\d+)/);

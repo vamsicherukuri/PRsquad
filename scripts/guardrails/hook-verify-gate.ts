@@ -27,7 +27,13 @@ async function main() {
     }
   }
 
-  const targetAgent = input.toolArgs?.name || input.toolArgs?.agent || input.agent;
+  const firstTool = input.toolCalls?.[0];
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const targetAgent =
+    toolArgs.agent_type ||
+    toolArgs.name ||
+    toolArgs.agent ||
+    input.agent;
 
   // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
   if (isAgentMatch(targetAgent, "gated-change-developer")) {

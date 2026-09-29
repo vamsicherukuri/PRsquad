@@ -28,12 +28,14 @@ async function main() {
     }
   }
 
-  const tool = input.tool || "edit";
+  const firstTool = input.toolCalls?.[0];
+  const tool = input.tool || firstTool?.name || "edit";
+  const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetPath =
-    input.toolArgs?.path ||
-    input.toolArgs?.file ||
-    input.toolArgs?.targetFile ||
-    input.toolArgs?.filePath;
+    toolArgs.path ||
+    toolArgs.file ||
+    toolArgs.targetFile ||
+    toolArgs.filePath;
 
   // If this is an edit tool or has a file path target
   if (tool === "edit" || (targetPath && typeof targetPath === "string")) {

@@ -28,9 +28,11 @@ async function main() {
     }
   }
 
-  const tool = input.tool || "bash";
-  const command = input.toolArgs?.command || input.toolArgs?.cmd || "";
-  const agent = input.agent || "unknown";
+  const firstTool = input.toolCalls?.[0];
+  const tool = input.tool || firstTool?.name || "bash";
+  const toolArgs = input.toolArgs || firstTool?.args || {};
+  const command = toolArgs.command || toolArgs.cmd || "";
+  const agent = input.agent || toolArgs.agent_type || "unknown";
 
   if (tool === "bash" && command) {
     const state = loadState();
