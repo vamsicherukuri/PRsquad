@@ -8,8 +8,9 @@
  *   5. Tier 1 AST Symbol Sweep across package boundaries
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
@@ -25,10 +26,10 @@ import {
 } from "../src/guardrails/stateStore.js";
 
 const REPO_ROOT = getRepoRoot();
-const gatedDir = join(REPO_ROOT, ".gated-change");
-const stateBackup = existsSync(join(gatedDir, "state.json")) ? readFileSync(join(gatedDir, "state.json"), "utf-8") : null;
-const lockBackup = existsSync(join(gatedDir, "approval.lock")) ? readFileSync(join(gatedDir, "approval.lock"), "utf-8") : null;
-
+const TEST_ISOLATED_DIR = mkdtempSync(join(tmpdir(), "gated-guardrails-test-"));
+try {
+  execSync("git init", { cwd: TEST_ISOLATED_DIR, stdio: "ignore" });
+} catch {}
 
 let passedCount = 0;
 let totalCount = 0;
@@ -45,7 +46,7 @@ function assert(condition: boolean, testName: string, failureDetail?: string): v
 }
 
 console.log("\n=======================================================");
-console.log("  GATED CHANGE — GUARDRAILS AUTOMATED VERIFICATION");
+  console.log("  GATED CHANGE — GUARDRAILS AUTOMATED VERIFICATION");
 console.log("=======================================================\n");
 
 // ---------------------------------------------------------------------------
@@ -53,14 +54,14 @@ console.log("=======================================================\n");
 // ---------------------------------------------------------------------------
 console.log("Suite 1: State Store & Lock Lifecycle");
 {
-  const state = loadState();
+  const state = loadState(TEST_ISOLATED_DIR);
   state.issue = {
     number: 999,
     title: "Test Billing Issue",
     declaredScope: "src/services/billing/",
     fetchedAt: new Date().toISOString(),
   };
-  saveState(state);
+  saveState(state, TEST_ISOLATED_DIR);
   assert(typeof state.sessionId === "string" && state.sessionId.length > 0, "State initializes with valid sessionId");
   assert(state.implementationAttempt >= 1, "Implementation attempt counter initialized");
 
@@ -73,15 +74,15 @@ console.log("Suite 1: State Store & Lock Lifecycle");
     approvedAt: new Date().toISOString(),
     approvedBy: "test-approver",
     status: "ACTIVE",
-  });
+  }, TEST_ISOLATED_DIR);
 
-  const activeLock = loadApprovalLock();
+  const activeLock = loadApprovalLock(TEST_ISOLATED_DIR);
   assert(activeLock !== null && activeLock.status === "ACTIVE", "Active lock successfully written and read");
   assert(activeLock?.approvedScope === "src/services/billing/", "Lock preserves approvedScope");
 
   // Revoke lock
-  revokeApprovalLock("REVOKED");
-  const revokedLock = loadApprovalLock();
+  revokeApprovalLock("REVOKED", TEST_ISOLATED_DIR);
+  const revokedLock = loadApprovalLock(TEST_ISOLATED_DIR);
   assert(revokedLock === null, "Revoked lock is not returned as active");
 }
 
@@ -90,13 +91,14 @@ console.log("Suite 1: State Store & Lock Lifecycle");
 // ---------------------------------------------------------------------------
 console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
 {
-  // Revoke any active lock
-  revokeApprovalLock("REVOKED");
+  // Revoke any active lock in test directory
+  revokeApprovalLock("REVOKED", TEST_ISOLATED_DIR);
 
   // Attempt to invoke developer without lock -> Must fail
   try {
-    const input = JSON.stringify({ tool: "agent", toolArgs: { name: "gated-change-developer" } });
-    execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
+    const input = JSON.stringify({ cwd: TEST_ISOLATED_DIR, tool: "agent", toolArgs: { name: "gated-change-developer" } });
+    execSync(`node --import tsx "${join(REPO_ROOT, "scripts/guardrails/hook-verify-gate.ts")}"`, {
+      cwd: REPO_ROOT,
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
@@ -107,14 +109,14 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
   }
 
   // Ensure state issue matches
-  const state = loadState();
+  const state = loadState(TEST_ISOLATED_DIR);
   state.issue = {
     number: 999,
     title: "Test Billing Issue",
     declaredScope: "src/services/billing/",
     fetchedAt: new Date().toISOString(),
   };
-  saveState(state);
+  saveState(state, TEST_ISOLATED_DIR);
 
   // Create active lock
   saveApprovalLock({
@@ -125,12 +127,13 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
     approvedAt: new Date().toISOString(),
     approvedBy: "test-approver",
     status: "ACTIVE",
-  });
+  }, TEST_ISOLATED_DIR);
 
   // Attempt to invoke developer with active lock -> Must succeed
   try {
-    const input = JSON.stringify({ tool: "agent", toolArgs: { name: "gated-change-developer" } });
-    const stdout = execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
+    const input = JSON.stringify({ cwd: TEST_ISOLATED_DIR, tool: "agent", toolArgs: { name: "gated-change-developer" } });
+    const stdout = execSync(`node --import tsx "${join(REPO_ROOT, "scripts/guardrails/hook-verify-gate.ts")}"`, {
+      cwd: REPO_ROOT,
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
@@ -138,16 +141,17 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
     const parsed = JSON.parse(stdout);
     assert(parsed.decision === "allow", "Hook permits developer invocation when active lock is present");
     assert(parsed.modifiedArgs?.activeBranch === "fix/issue-999", "Hook passes activeBranch in modifiedArgs to Developer");
-    const stateAfterHook = loadState();
+    const stateAfterHook = loadState(TEST_ISOLATED_DIR);
     assert(stateAfterHook.activeBranch === "fix/issue-999", "Hook records activeBranch fix/issue-999 in state");
   } catch (err: any) {
     assert(false, `Hook failed on valid lock: ${err.message}`);
   }
 
   // Verify in-chat human approval auto-signs mechanical lock when physical lock is absent
-  revokeApprovalLock("REVOKED");
+  revokeApprovalLock("REVOKED", TEST_ISOLATED_DIR);
   try {
     const input = JSON.stringify({
+      cwd: TEST_ISOLATED_DIR,
       tool: "agent",
       toolArgs: {
         name: "gated-change-developer",
@@ -156,14 +160,15 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
         prompt: "[HUMAN_SCOPE_GATE_APPROVED: src/services/billing/] Implement fix",
       },
     });
-    const stdout = execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
+    const stdout = execSync(`node --import tsx "${join(REPO_ROOT, "scripts/guardrails/hook-verify-gate.ts")}"`, {
+      cwd: REPO_ROOT,
       input,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
     });
     const parsed = JSON.parse(stdout);
     assert(parsed.decision === "allow", "Hook auto-signs lock and allows developer on confirmed in-chat approval");
-    const autoSignedLock = loadApprovalLock();
+    const autoSignedLock = loadApprovalLock(TEST_ISOLATED_DIR);
     assert(autoSignedLock?.status === "ACTIVE", "Auto-signed lock is active on disk");
     assert(autoSignedLock?.approvedBy === "human-in-chat", "Auto-signed lock records human-in-chat approver");
   } catch (err: any) {
@@ -356,15 +361,9 @@ console.log("\n=======================================================");
 console.log(`  VERIFICATION COMPLETE: ${passedCount}/${totalCount} checks passed.`);
 console.log("=======================================================\n");
 
-function restoreBackups() {
-  if (stateBackup !== null) {
-    writeFileSync(join(gatedDir, "state.json"), stateBackup, "utf-8");
-  }
-  if (lockBackup !== null) {
-    writeFileSync(join(gatedDir, "approval.lock"), lockBackup, "utf-8");
-  }
-}
-restoreBackups();
+try {
+  rmSync(TEST_ISOLATED_DIR, { recursive: true, force: true });
+} catch {}
 
 if (passedCount < totalCount) {
   process.exit(1);

@@ -22,6 +22,11 @@ Bound analysis to:
 
 Do not recursively crawl the monorepo.
 
+Symbol Grounding & Verification:
+- Always use `search` to locate the exact functions, classes, or symbols explicitly mentioned in the issue title, problem description, or acceptance criteria (e.g. `isWithinScope`).
+- Do not infer file paths solely from similar-sounding names. Verify that the target symbols to be modified actually reside in the files listed in `changes` and `proposedScope`.
+- If an issue involves multiple related tools (such as read tools vs write barriers), verify all relevant symbol locations before finalizing the plan so no required file is omitted from `proposedScope`.
+
 Return only a structured plan:
 
 ```json
