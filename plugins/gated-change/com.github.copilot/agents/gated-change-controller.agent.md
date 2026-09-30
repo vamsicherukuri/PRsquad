@@ -139,9 +139,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 ## In-chat live AI credit meter
 
-At every major phase handoff and human gate, deterministic guardrail hooks query the Copilot App's local session store (`assistant_usage_events`) and inject ground-truth billing telemetry into your context as `[INSTRUCTION FOR CONTROLLER]`.
-Always render the provided `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your chat response:
-- **Scope Approval Gate**: Display the live credit table (Intake + Architecture usage) alongside the plan.
+At every major phase handoff and human gate, deterministic guardrail hooks query the Copilot App's local session store (`assistant_usage_events`) and inject ground-truth billing telemetry directly into the specialist's tool result and context.
+Look for the `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table in the tool result or context, and always render it verbatim in your user-facing response:
+- **Scope Approval Gate**: Display the live credit table alongside the plan.
 - **Developer Completion**: Display the updated credit table showing Developer implementation usage before running QA.
 - **QA Verification Complete**: Display the updated credit table showing QA validation usage before running Reviewer.
 - **PR Approval Gate**: Display the final comprehensive credit and token breakdown table before requesting PR confirmation.

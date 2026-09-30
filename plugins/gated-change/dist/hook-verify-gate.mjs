@@ -1385,6 +1385,32 @@ ${chatMeter}
     process.stdout.write(JSON.stringify(output) + "\n");
     process.exit(0);
   }
+  function buildEnrichedPostToolOutput(hookInput, meter, instructionText) {
+    const raw = typeof hookInput.toolResult === "string" ? hookInput.toolResult : hookInput.toolResult?.textResultForLlm || hookInput.toolResult?.content || (hookInput.toolResult ? JSON.stringify(hookInput.toolResult) : "");
+    const enrichedText = `${raw}
+
+${meter}
+
+${instructionText}`;
+    const modified = {
+      resultType: hookInput.toolResult?.resultType || "success",
+      textResultForLlm: enrichedText
+    };
+    const addCtx = `${meter}
+
+${instructionText}`;
+    return {
+      decision: "allow",
+      modifiedResult: modified,
+      additionalContext: addCtx,
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        permissionDecision: "allow",
+        modifiedResult: modified,
+        additionalContext: addCtx
+      }
+    };
+  }
   if (input.toolResult) {
     const effectiveCwd2 = input.cwd || process.cwd();
     const repoRoot2 = getRepoRoot(effectiveCwd2);
@@ -1414,17 +1440,7 @@ ${chatMeter}
         }
       });
       const chatMeter = formatChatCreditMeter(dashArch);
-      const out = { decision: "allow" };
-      if (chatMeter) {
-        out.additionalContext = `${chatMeter}
-
-[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.`;
-        out.hookSpecificOutput = {
-          hookEventName: "PostToolUse",
-          permissionDecision: "allow",
-          additionalContext: out.additionalContext
-        };
-      }
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.") : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
@@ -1441,17 +1457,7 @@ ${chatMeter}
         details: devDetails
       });
       const chatMeter = formatChatCreditMeter(dashDev);
-      const out = { decision: "allow" };
-      if (chatMeter) {
-        out.additionalContext = `${chatMeter}
-
-[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running QA.`;
-        out.hookSpecificOutput = {
-          hookEventName: "PostToolUse",
-          permissionDecision: "allow",
-          additionalContext: out.additionalContext
-        };
-      }
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running QA.") : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
@@ -1468,17 +1474,7 @@ ${chatMeter}
         details: qaDetails
       });
       const chatMeter = formatChatCreditMeter(dashQA);
-      const out = { decision: "allow" };
-      if (chatMeter) {
-        out.additionalContext = `${chatMeter}
-
-[INSTRUCTION FOR CONTROLLER]: QA verification complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running Reviewer.`;
-        out.hookSpecificOutput = {
-          hookEventName: "PostToolUse",
-          permissionDecision: "allow",
-          additionalContext: out.additionalContext
-        };
-      }
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: QA verification complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running Reviewer.") : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
@@ -1518,17 +1514,7 @@ ${chatMeter}
         }
       });
       const chatMeter = formatChatCreditMeter(dashMerge);
-      const out = { decision: "allow" };
-      if (chatMeter) {
-        out.additionalContext = `${chatMeter}
-
-[INSTRUCTION FOR CONTROLLER]: Include this final \u26A1 AI Credit Meter table at the PR Approval Gate.`;
-        out.hookSpecificOutput = {
-          hookEventName: "PostToolUse",
-          permissionDecision: "allow",
-          additionalContext: out.additionalContext
-        };
-      }
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this final \u26A1 AI Credit Meter table at the PR Approval Gate.") : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     }
