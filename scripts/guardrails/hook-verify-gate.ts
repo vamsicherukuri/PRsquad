@@ -7,7 +7,7 @@
 import { readFileSync, appendFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { loadState, saveState, loadApprovalLock, saveApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot } from "../../src/guardrails/stateStore.js";
-import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
+import { syncWorkflowDashboard, extractPlanMarkdown, extractTextFromToolResult } from "../../src/guardrails/issueDashboard.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -205,6 +205,9 @@ async function main() {
     state.activeBranch = branchName;
     saveState(state, repoRoot);
 
+    const prompt = toolArgs.prompt || toolArgs.content || "";
+    const extractedPlan = extractPlanMarkdown(prompt);
+
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner,
       repo: state.issue?.repo,
@@ -219,6 +222,7 @@ async function main() {
         approvedBy: lock.approvedBy,
         approvedAt: lock.approvedAt,
         activeBranch: branchName,
+        plan: extractedPlan || undefined,
       },
     });
 
@@ -251,7 +255,6 @@ async function main() {
       `Before reporting IMPLEMENTED, stage and commit your changes: git commit -m "fix: <summary> (fixes #${issueNum})".\n` +
       `Report headRef as your commit SHA or '${branchName}'.`;
 
-    const prompt = toolArgs.prompt || toolArgs.content || "";
     const enrichedPrompt = prompt.includes("[BRANCH ISOLATION GUARDRAIL]")
       ? prompt
       : `${branchInstructions}\n\n${prompt}`;
@@ -289,7 +292,22 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
 
-    if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
+    if (isAgentMatch(targetAgent, "gated-change-architect")) {
+      const rawPlan = extractTextFromToolResult(input.toolResult);
+      const planMarkdown = extractPlanMarkdown(rawPlan);
+      syncWorkflowDashboard(repoRoot, {
+        owner: state.issue?.owner,
+        repo: state.issue?.repo,
+        issueNumber: state.issue?.number,
+        issueTitle: state.issue?.title,
+        phase: "architect",
+        status: "PLAN_READY",
+        summary: "Technical architecture & blast radius specification generated",
+        details: {
+          plan: planMarkdown || rawPlan,
+        },
+      });
+    } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const resStr = typeof input.toolResult === "string" ? input.toolResult : JSON.stringify(input.toolResult);
       const isConcerns = resStr.includes("CONCERNS");
       const verdict = isConcerns ? "CONCERNS" : "APPROVED";

@@ -256,7 +256,7 @@ function renderDashboardMarkdown(data) {
     const risk = p.architect?.details?.riskTier || "Tier 1";
     md += `
 <details open>
-<summary><b>\u{1F4D0} Architecture Plan & Scope Specification</b></summary>
+<summary><b>\u{1F4D0} Architecture Plan & Human Scope Gate Specification</b></summary>
 
 `;
     md += `- **Approved Scope**: \`${scope}\`
@@ -267,15 +267,16 @@ function renderDashboardMarkdown(data) {
       md += `- **Human Approval**: Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`
 `;
     }
+    md += `
+---
+
+`;
     if (p.architect?.details?.plan) {
-      md += `
-\`\`\`markdown
-${p.architect.details.plan}
-\`\`\`
+      md += `${p.architect.details.plan.trim()}
+
 `;
     }
-    md += `
-</details>
+    md += `</details>
 `;
   }
   if (p.developer?.details?.commitSha || p.developer?.details?.changedFiles) {
@@ -388,6 +389,18 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
           ...update.details || {}
         }
       };
+      if (update.phase === "scopeGate" && update.details?.plan) {
+        const existingArch = current.phases.architect || { status: "PLAN_READY" };
+        current.phases.architect = {
+          ...existingArch,
+          status: "PLAN_READY",
+          summary: existingArch.summary || "Technical plan approved at Human Scope Gate",
+          details: {
+            ...existingArch.details || {},
+            plan: update.details.plan
+          }
+        };
+      }
     }
     writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
@@ -490,6 +503,40 @@ function postOrPatchGitHubComment(state) {
     } catch {
     }
   }
+}
+function extractPlanMarkdown(text) {
+  if (!text) return "";
+  const scopeGateIdx = text.indexOf("## Human Scope Gate");
+  if (scopeGateIdx !== -1) {
+    return text.slice(scopeGateIdx).trim();
+  }
+  const rootCauseIdx = text.search(/\*\*Root cause:?\*\*/i);
+  if (rootCauseIdx !== -1) {
+    return text.slice(rootCauseIdx).trim();
+  }
+  const altRootIdx = text.search(/Root cause:/i);
+  if (altRootIdx !== -1) {
+    return text.slice(altRootIdx).trim();
+  }
+  return text.trim();
+}
+function extractTextFromToolResult(res) {
+  if (!res) return "";
+  if (typeof res === "string") return res;
+  if (typeof res.content === "string") return res.content;
+  if (typeof res.text === "string") return res.text;
+  if (typeof res.output === "string") return res.output;
+  if (typeof res.result === "string") return res.result;
+  if (res.plan && typeof res.plan === "string") return res.plan;
+  if (Array.isArray(res)) {
+    return res.map(extractTextFromToolResult).join("\n");
+  }
+  if (typeof res === "object") {
+    for (const key of ["content", "text", "output", "result", "plan", "message", "response"]) {
+      if (res[key] && typeof res[key] === "string") return res[key];
+    }
+  }
+  return String(res);
 }
 
 // scripts/guardrails/hook-verify-gate.ts
@@ -641,6 +688,8 @@ async function main() {
     state2.implementationAttempt = lock.currentAttempt;
     state2.activeBranch = branchName;
     saveState(state2, repoRoot2);
+    const prompt2 = toolArgs.prompt || toolArgs.content || "";
+    const extractedPlan = extractPlanMarkdown(prompt2);
     syncWorkflowDashboard(repoRoot2, {
       owner: state2.issue?.owner,
       repo: state2.issue?.repo,
@@ -654,7 +703,8 @@ async function main() {
         approvedScope: lock.approvedScope,
         approvedBy: lock.approvedBy,
         approvedAt: lock.approvedAt,
-        activeBranch: branchName
+        activeBranch: branchName,
+        plan: extractedPlan || void 0
       }
     });
     syncWorkflowDashboard(repoRoot2, {
@@ -682,7 +732,6 @@ All edits and commits MUST remain on '${branchName}'.
 Direct checkout or commits to 'main'/'master' and remote 'git push' are strictly blocked by security hooks.
 Before reporting IMPLEMENTED, stage and commit your changes: git commit -m "fix: <summary> (fixes #${issueNum})".
 Report headRef as your commit SHA or '${branchName}'.`;
-    const prompt2 = toolArgs.prompt || toolArgs.content || "";
     const enrichedPrompt = prompt2.includes("[BRANCH ISOLATION GUARDRAIL]") ? prompt2 : `${branchInstructions}
 
 ${prompt2}`;
@@ -714,7 +763,22 @@ Developer write actions are strictly bounded to this prefix and branch.`,
     const effectiveCwd2 = input.cwd || process.cwd();
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     const state2 = loadState(repoRoot2);
-    if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
+    if (isAgentMatch(targetAgent, "gated-change-architect")) {
+      const rawPlan = extractTextFromToolResult(input.toolResult);
+      const planMarkdown = extractPlanMarkdown(rawPlan);
+      syncWorkflowDashboard(repoRoot2, {
+        owner: state2.issue?.owner,
+        repo: state2.issue?.repo,
+        issueNumber: state2.issue?.number,
+        issueTitle: state2.issue?.title,
+        phase: "architect",
+        status: "PLAN_READY",
+        summary: "Technical architecture & blast radius specification generated",
+        details: {
+          plan: planMarkdown || rawPlan
+        }
+      });
+    } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const resStr = typeof input.toolResult === "string" ? input.toolResult : JSON.stringify(input.toolResult);
       const isConcerns = resStr.includes("CONCERNS");
       const verdict = isConcerns ? "CONCERNS" : "APPROVED";

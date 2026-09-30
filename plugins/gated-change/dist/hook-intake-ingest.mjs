@@ -278,7 +278,7 @@ function renderDashboardMarkdown(data) {
     const risk = p.architect?.details?.riskTier || "Tier 1";
     md += `
 <details open>
-<summary><b>\u{1F4D0} Architecture Plan & Scope Specification</b></summary>
+<summary><b>\u{1F4D0} Architecture Plan & Human Scope Gate Specification</b></summary>
 
 `;
     md += `- **Approved Scope**: \`${scope}\`
@@ -289,15 +289,16 @@ function renderDashboardMarkdown(data) {
       md += `- **Human Approval**: Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`
 `;
     }
+    md += `
+---
+
+`;
     if (p.architect?.details?.plan) {
-      md += `
-\`\`\`markdown
-${p.architect.details.plan}
-\`\`\`
+      md += `${p.architect.details.plan.trim()}
+
 `;
     }
-    md += `
-</details>
+    md += `</details>
 `;
   }
   if (p.developer?.details?.commitSha || p.developer?.details?.changedFiles) {
@@ -410,6 +411,18 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
           ...update.details || {}
         }
       };
+      if (update.phase === "scopeGate" && update.details?.plan) {
+        const existingArch = current.phases.architect || { status: "PLAN_READY" };
+        current.phases.architect = {
+          ...existingArch,
+          status: "PLAN_READY",
+          summary: existingArch.summary || "Technical plan approved at Human Scope Gate",
+          details: {
+            ...existingArch.details || {},
+            plan: update.details.plan
+          }
+        };
+      }
     }
     writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");

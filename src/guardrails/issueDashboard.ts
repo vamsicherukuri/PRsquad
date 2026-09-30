@@ -76,20 +76,21 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 ---
 `;
 
-  // Section 1: Architect Plan & Proposed Scope
+  // Section 1: Architect Plan & Proposed Scope (Human Scope Gate Presentation)
   if (p.architect?.details?.plan || p.scopeGate?.details?.approvedScope) {
     const scope = p.scopeGate?.details?.approvedScope || p.architect?.details?.proposedScope || "Pending";
     const risk = p.architect?.details?.riskTier || "Tier 1";
-    md += `\n<details open>\n<summary><b>📐 Architecture Plan & Scope Specification</b></summary>\n\n`;
+    md += `\n<details open>\n<summary><b>📐 Architecture Plan & Human Scope Gate Specification</b></summary>\n\n`;
     md += `- **Approved Scope**: \`${scope}\`\n`;
     md += `- **Risk Assessment**: \`${risk}\`\n`;
     if (p.scopeGate?.details?.approvedBy) {
       md += `- **Human Approval**: Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`\n`;
     }
+    md += `\n---\n\n`;
     if (p.architect?.details?.plan) {
-      md += `\n\`\`\`markdown\n${p.architect.details.plan}\n\`\`\`\n`;
+      md += `${p.architect.details.plan.trim()}\n\n`;
     }
-    md += `\n</details>\n`;
+    md += `</details>\n`;
   }
 
   // Section 2: Developer Implementation
@@ -194,6 +195,20 @@ export function syncWorkflowDashboard(
           ...(update.details || {}),
         },
       };
+
+      // If scopeGate carries the architect plan, mirror it into the architect phase
+      if (update.phase === "scopeGate" && update.details?.plan) {
+        const existingArch = current.phases.architect || { status: "PLAN_READY" };
+        current.phases.architect = {
+          ...existingArch,
+          status: "PLAN_READY",
+          summary: existingArch.summary || "Technical plan approved at Human Scope Gate",
+          details: {
+            ...(existingArch.details || {}),
+            plan: update.details.plan,
+          },
+        };
+      }
     }
 
     // Save dashboard state to disk locally
@@ -312,4 +327,40 @@ function postOrPatchGitHubComment(state: DashboardState): void {
       }
     } catch {}
   }
+}
+
+export function extractPlanMarkdown(text: string): string {
+  if (!text) return "";
+  const scopeGateIdx = text.indexOf("## Human Scope Gate");
+  if (scopeGateIdx !== -1) {
+    return text.slice(scopeGateIdx).trim();
+  }
+  const rootCauseIdx = text.search(/\*\*Root cause:?\*\*/i);
+  if (rootCauseIdx !== -1) {
+    return text.slice(rootCauseIdx).trim();
+  }
+  const altRootIdx = text.search(/Root cause:/i);
+  if (altRootIdx !== -1) {
+    return text.slice(altRootIdx).trim();
+  }
+  return text.trim();
+}
+
+export function extractTextFromToolResult(res: any): string {
+  if (!res) return "";
+  if (typeof res === "string") return res;
+  if (typeof res.content === "string") return res.content;
+  if (typeof res.text === "string") return res.text;
+  if (typeof res.output === "string") return res.output;
+  if (typeof res.result === "string") return res.result;
+  if (res.plan && typeof res.plan === "string") return res.plan;
+  if (Array.isArray(res)) {
+    return res.map(extractTextFromToolResult).join("\n");
+  }
+  if (typeof res === "object") {
+    for (const key of ["content", "text", "output", "result", "plan", "message", "response"]) {
+      if (res[key] && typeof res[key] === "string") return res[key];
+    }
+  }
+  return String(res);
 }
