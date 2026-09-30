@@ -72,6 +72,27 @@ function renderCredits(credits?: number): string {
   return `**${credits.toFixed(2)} AIU**`;
 }
 
+export function formatChatCreditMeter(data?: DashboardState | null): string {
+  if (!data) return "";
+  const t = data.telemetry;
+  if (!t || t.turns === 0) return "";
+  const p = data.phases || {};
+  let out = `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)\n\n`;
+  out += `> **Model:** \`${t.model}\` | **Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} input tokens)*  \n`;
+  out += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** across ${t.turns} interaction turns  \n`;
+  out += `> **Mechanical Guardrails:** **0.00 AIU / 0 Tokens** *(Deterministic)*  \n\n`;
+  out += `| Phase | Specialist / Actor | Status | Actual AI Credits |\n`;
+  out += `|:---|:---|:---:|:---:|\n`;
+  out += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} |\n`;
+  out += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${renderCredits(p.architect?.credits)} |\n`;
+  out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | **0.00 AIU** *(Deterministic)* |\n`;
+  out += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${renderCredits(p.developer?.credits)} |\n`;
+  out += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${renderCredits(p.qa?.credits)} |\n`;
+  out += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${renderCredits(p.reviewer?.credits)} |\n`;
+  out += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | **0.00 AIU** *(Deterministic)* |\n`;
+  return out;
+}
+
 export function getGroundTruthTelemetry(sessionId?: string, startEventId: number = 0): SessionTelemetry | null {
   if (!sessionId) return null;
   const dbPath = join(homedir(), ".copilot", "session-store.db");

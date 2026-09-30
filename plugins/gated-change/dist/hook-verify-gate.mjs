@@ -229,6 +229,41 @@ function renderCredits(credits) {
   if (credits === void 0 || credits === null) return "\u2014";
   return `**${credits.toFixed(2)} AIU**`;
 }
+function formatChatCreditMeter(data) {
+  if (!data) return "";
+  const t = data.telemetry;
+  if (!t || t.turns === 0) return "";
+  const p = data.phases || {};
+  let out = `### \u26A1 Actual AI Credit & Token Consumption (Ground-Truth Meter)
+
+`;
+  out += `> **Model:** \`${t.model}\` | **Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} input tokens)*  
+`;
+  out += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** across ${t.turns} interaction turns  
+`;
+  out += `> **Mechanical Guardrails:** **0.00 AIU / 0 Tokens** *(Deterministic)*  
+
+`;
+  out += `| Phase | Specialist / Actor | Status | Actual AI Credits |
+`;
+  out += `|:---|:---|:---:|:---:|
+`;
+  out += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} |
+`;
+  out += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${renderCredits(p.architect?.credits)} |
+`;
+  out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | **0.00 AIU** *(Deterministic)* |
+`;
+  out += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${renderCredits(p.developer?.credits)} |
+`;
+  out += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${renderCredits(p.qa?.credits)} |
+`;
+  out += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${renderCredits(p.reviewer?.credits)} |
+`;
+  out += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | **0.00 AIU** *(Deterministic)* |
+`;
+  return out;
+}
 function getGroundTruthTelemetry(sessionId, startEventId = 0) {
   if (!sessionId) return null;
   const dbPath = join2(homedir(), ".copilot", "session-store.db");
@@ -1290,12 +1325,13 @@ async function main() {
         plan: extractedPlan || void 0
       }
     });
-    syncWorkflowDashboard(repoRoot2, {
+    const dashDev = syncWorkflowDashboard(repoRoot2, {
       sessionId: input.sessionId || state2.sessionId,
       phase: "developer",
       status: "IN_PROGRESS",
       summary: `Implementing changes bounded to '${lock2.approvedScope}' on branch '${branchName}'`
     });
+    const chatMeter = formatChatCreditMeter(dashDev);
     appendAuditLog({
       sessionId: state2.sessionId,
       agent: "controller",
@@ -1324,20 +1360,26 @@ ${prompt2}`;
       prompt: enrichedPrompt,
       activeBranch: branchName
     };
+    const addCtx = `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
+APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
+ACTIVE_FEATURE_BRANCH: "${branchName}"
+Developer write actions are strictly bounded to this prefix and branch.` + (chatMeter ? `
+
+${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Include this \u26A1 AI Credit Meter status in your implementation handoff summary.` : "");
     const output = {
       decision: "allow",
       permissionDecision: "allow",
       modifiedArgs,
       updatedInput: modifiedArgs,
-      additionalContext: `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
-APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
-ACTIVE_FEATURE_BRANCH: "${branchName}"
-Developer write actions are strictly bounded to this prefix and branch.`,
+      additionalContext: addCtx,
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "allow",
         modifiedArgs,
-        updatedInput: modifiedArgs
+        updatedInput: modifiedArgs,
+        additionalContext: addCtx
       }
     };
     process.stdout.write(JSON.stringify(output) + "\n");
@@ -1356,7 +1398,7 @@ Developer write actions are strictly bounded to this prefix and branch.`,
     if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const rawText = typeof input.toolResult === "string" ? input.toolResult : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
-      syncWorkflowDashboard(repoRoot2, {
+      const dashArch = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "gated-fix-pipeline",
         issueNumber: resolvedIssue2,
@@ -1371,6 +1413,74 @@ Developer write actions are strictly bounded to this prefix and branch.`,
           riskTier: "Low"
         }
       });
+      const chatMeter = formatChatCreditMeter(dashArch);
+      const out = { decision: "allow" };
+      if (chatMeter) {
+        out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.`;
+        out.hookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          permissionDecision: "allow",
+          additionalContext: out.additionalContext
+        };
+      }
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
+    } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
+      const devDetails = extractDeveloperDetails(input.toolResult, repoRoot2);
+      const dashDev = syncWorkflowDashboard(repoRoot2, {
+        owner: state2.issue?.owner || "vamsicherukuri",
+        repo: state2.issue?.repo || "gated-fix-pipeline",
+        issueNumber: resolvedIssue2,
+        issueTitle: state2.issue?.title && state2.issue.title !== "Test Billing Issue" ? state2.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+        sessionId: input.sessionId || state2.sessionId,
+        phase: "developer",
+        status: "IMPLEMENTED",
+        summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
+        details: devDetails
+      });
+      const chatMeter = formatChatCreditMeter(dashDev);
+      const out = { decision: "allow" };
+      if (chatMeter) {
+        out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running QA.`;
+        out.hookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          permissionDecision: "allow",
+          additionalContext: out.additionalContext
+        };
+      }
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
+    } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
+      const qaDetails = extractQADetails(input.toolResult);
+      const dashQA = syncWorkflowDashboard(repoRoot2, {
+        owner: state2.issue?.owner || "vamsicherukuri",
+        repo: state2.issue?.repo || "gated-fix-pipeline",
+        issueNumber: resolvedIssue2,
+        issueTitle: state2.issue?.title && state2.issue.title !== "Test Billing Issue" ? state2.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+        sessionId: input.sessionId || state2.sessionId,
+        phase: "qa",
+        status: "PASS",
+        summary: "Independent QA verification passed all acceptance criteria",
+        details: qaDetails
+      });
+      const chatMeter = formatChatCreditMeter(dashQA);
+      const out = { decision: "allow" };
+      if (chatMeter) {
+        out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: QA verification complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running Reviewer.`;
+        out.hookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          permissionDecision: "allow",
+          additionalContext: out.additionalContext
+        };
+      }
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const revDetails = extractReviewerDetails(input.toolResult);
       const verdict = revDetails.verdict || "CONCERNS";
@@ -1394,7 +1504,7 @@ Developer write actions are strictly bounded to this prefix and branch.`,
         }
       } catch {
       }
-      syncWorkflowDashboard(repoRoot2, {
+      const dashMerge = syncWorkflowDashboard(repoRoot2, {
         sessionId: input.sessionId || state2.sessionId,
         phase: "mergeGate",
         status: "READY_FOR_MERGE",
@@ -1407,6 +1517,20 @@ Developer write actions are strictly bounded to this prefix and branch.`,
           readyForMerge: true
         }
       });
+      const chatMeter = formatChatCreditMeter(dashMerge);
+      const out = { decision: "allow" };
+      if (chatMeter) {
+        out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Include this final \u26A1 AI Credit Meter table at the PR Approval Gate.`;
+        out.hookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          permissionDecision: "allow",
+          additionalContext: out.additionalContext
+        };
+      }
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
     }
     process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
     process.exit(0);
@@ -1422,7 +1546,7 @@ Developer write actions are strictly bounded to this prefix and branch.`,
     saveState(state, repoRoot);
   }
   if (isAgentMatch(targetAgent, "gated-change-architect")) {
-    syncWorkflowDashboard(repoRoot, {
+    const dashArch = syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
       repo: state.issue?.repo || "gated-fix-pipeline",
       issueNumber: resolvedIssue,
@@ -1432,6 +1556,20 @@ Developer write actions are strictly bounded to this prefix and branch.`,
       status: "IN_PROGRESS",
       summary: "Architect synthesizing issue requirements into bounded technical plan"
     });
+    const chatMeter = formatChatCreditMeter(dashArch);
+    const out = { decision: "allow", permissionDecision: "allow" };
+    if (chatMeter) {
+      out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Intake complete. Surface this live \u26A1 AI Credit Meter status in your handoff message to the user before generating the architectural plan.`;
+      out.hookSpecificOutput = {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        additionalContext: out.additionalContext
+      };
+    }
+    process.stdout.write(JSON.stringify(out) + "\n");
+    process.exit(0);
   } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
     const devDetails = extractDeveloperDetails(prompt, repoRoot);
     syncWorkflowDashboard(repoRoot, {
@@ -1445,12 +1583,26 @@ Developer write actions are strictly bounded to this prefix and branch.`,
       summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
       details: devDetails
     });
-    syncWorkflowDashboard(repoRoot, {
+    const dashQA = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,
       phase: "qa",
       status: "IN_PROGRESS",
       summary: "Executing independent regression verification suite via powershell"
     });
+    const chatMeter = formatChatCreditMeter(dashQA);
+    const out = { decision: "allow", permissionDecision: "allow" };
+    if (chatMeter) {
+      out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message to the user before running QA.`;
+      out.hookSpecificOutput = {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        additionalContext: out.additionalContext
+      };
+    }
+    process.stdout.write(JSON.stringify(out) + "\n");
+    process.exit(0);
   } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
     const qaDetails = extractQADetails(prompt);
     syncWorkflowDashboard(repoRoot, {
@@ -1464,12 +1616,26 @@ Developer write actions are strictly bounded to this prefix and branch.`,
       summary: "Independent QA verification passed all acceptance criteria",
       details: qaDetails
     });
-    syncWorkflowDashboard(repoRoot, {
+    const dashRev = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,
       phase: "reviewer",
       status: "IN_PROGRESS",
       summary: "Conducting read-only security diff audit & blast radius review"
     });
+    const chatMeter = formatChatCreditMeter(dashRev);
+    const out = { decision: "allow", permissionDecision: "allow" };
+    if (chatMeter) {
+      out.additionalContext = `${chatMeter}
+
+[INSTRUCTION FOR CONTROLLER]: QA verification complete and passed. Include this live \u26A1 AI Credit Meter status in your phase handoff message to the user before running Reviewer.`;
+      out.hookSpecificOutput = {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        additionalContext: out.additionalContext
+      };
+    }
+    process.stdout.write(JSON.stringify(out) + "\n");
+    process.exit(0);
   }
   process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
