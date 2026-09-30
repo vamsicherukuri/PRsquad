@@ -1,7 +1,13 @@
 #!/usr/bin/env node
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
+  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
+}) : x)(function(x) {
+  if (typeof require !== "undefined") return require.apply(this, arguments);
+  throw Error('Dynamic require of "' + x + '" is not supported');
+});
 
 // scripts/guardrails/hook-intake-ingest.ts
-import { readFileSync as readFileSync3, appendFileSync as appendFileSync2 } from "node:fs";
+import { readFileSync as readFileSync4, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/ingestIssue.ts
 import { execSync } from "node:child_process";
@@ -220,12 +226,300 @@ function isAgentMatch(targetAgent, expectedName) {
   return targetAgent === expectedName || targetAgent.endsWith(`:${expectedName}`) || targetAgent.endsWith(`/${expectedName}`);
 }
 
+// src/guardrails/issueDashboard.ts
+import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2, unlinkSync } from "node:fs";
+import { join as join3 } from "node:path";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
+var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
+function getStatusBadge(status) {
+  if (!status || status === "PENDING") return "\u26AA `PENDING`";
+  if (status === "IN_PROGRESS") return "\u23F3 `IN_PROGRESS`";
+  if (["READY", "PLAN_READY", "APPROVED", "IMPLEMENTED", "PASS", "CLEAR", "READY_FOR_MERGE"].includes(status)) {
+    return `\u2705 \`${status}\``;
+  }
+  if (["FAIL", "BLOCKED"].includes(status)) {
+    return `\u274C \`${status}\``;
+  }
+  if (["PAUSED", "CONCERNS"].includes(status)) {
+    return `\u26A0\uFE0F \`${status}\``;
+  }
+  return `\u2139\uFE0F \`${status}\``;
+}
+function renderDashboardMarkdown(data) {
+  const p = data.phases || {};
+  const currentBranch = data.activeBranch || p.scopeGate?.details?.activeBranch || "Pending Human Scope Gate";
+  const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+  let md = `${DASHBOARD_ANCHOR}
+## \u{1F6E1}\uFE0F Gated Change Workflow Dashboard
+
+> **Issue:** #${data.issueNumber}${data.issueTitle ? ` \u2014 ${data.issueTitle}` : ""}  
+> **Repository:** \`${data.owner}/${data.repo}\`  
+> **Target Branch:** \`${currentBranch}\`  
+> **Last Updated:** ${updatedIso}  
+> **Automation Engine:** 100% Deterministic Guardrail Hooks (Zero LLM Token Burn)
+
+### \u{1F4CA} Real-Time Phase Tracker
+
+| Phase | Specialist / Actor | Status | Key Artifact / Hand-off Summary |
+|:---|:---|:---:|:---|
+| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Awaiting triage"} |
+| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Pending intake triage"} |
+| **3. Human Scope Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
+| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${p.developer?.summary || "Locked until human approval"} |
+| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Awaiting implementation"} |
+| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Awaiting QA sign-off"} |
+| **7. Human Merge Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
+
+---
+`;
+  if (p.architect?.details?.plan || p.scopeGate?.details?.approvedScope) {
+    const scope = p.scopeGate?.details?.approvedScope || p.architect?.details?.proposedScope || "Pending";
+    const risk = p.architect?.details?.riskTier || "Tier 1";
+    md += `
+<details open>
+<summary><b>\u{1F4D0} Architecture Plan & Scope Specification</b></summary>
+
+`;
+    md += `- **Approved Scope**: \`${scope}\`
+`;
+    md += `- **Risk Assessment**: \`${risk}\`
+`;
+    if (p.scopeGate?.details?.approvedBy) {
+      md += `- **Human Approval**: Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`
+`;
+    }
+    if (p.architect?.details?.plan) {
+      md += `
+\`\`\`markdown
+${p.architect.details.plan}
+\`\`\`
+`;
+    }
+    md += `
+</details>
+`;
+  }
+  if (p.developer?.details?.commitSha || p.developer?.details?.changedFiles) {
+    md += `
+<details open>
+<summary><b>\u{1F528} Developer Implementation Evidence</b></summary>
+
+`;
+    if (p.developer.details.commitSha) {
+      md += `- **Commit Reference**: \`${p.developer.details.commitSha}\`
+`;
+    }
+    if (p.developer.details.changedFiles && Array.isArray(p.developer.details.changedFiles)) {
+      md += `- **Files Modified**:
+`;
+      for (const f of p.developer.details.changedFiles) {
+        md += `  - \`${f}\`
+`;
+      }
+    }
+    if (p.developer.details.testSummary) {
+      md += `- **Local Test Run**: \`${p.developer.details.testSummary}\`
+`;
+    }
+    md += `
+</details>
+`;
+  }
+  if (p.qa?.details?.verdict || p.qa?.summary) {
+    md += `
+<details open>
+<summary><b>\u{1F9EA} QA Verification Evidence</b></summary>
+
+`;
+    md += `- **Verdict**: \`${p.qa.details?.verdict || p.qa.status}\`
+`;
+    if (p.qa.details?.suiteResults) {
+      md += `- **Test Suites**:
+\`\`\`
+${p.qa.details.suiteResults}
+\`\`\`
+`;
+    } else if (p.qa.summary) {
+      md += `- **Summary**: ${p.qa.summary}
+`;
+    }
+    md += `
+</details>
+`;
+  }
+  if (p.reviewer?.details?.verdict || p.reviewer?.summary) {
+    md += `
+<details open>
+<summary><b>\u{1F50D} Security & Review Audit</b></summary>
+
+`;
+    md += `- **Verdict**: \`${p.reviewer.details?.verdict || p.reviewer.status}\`
+`;
+    if (p.reviewer.summary) {
+      md += `- **Audit Notes**: ${p.reviewer.summary}
+`;
+    }
+    md += `
+</details>
+`;
+  }
+  md += `
+> *This live dashboard was updated automatically by the Gated Change Guardrails Engine via authenticated local GitHub CLI.*`;
+  return md;
+}
+function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
+  try {
+    const gatedDir = findGatedChangeDir(rootDir);
+    const dashboardFile = join3(gatedDir, "dashboard.json");
+    let current = {
+      issueNumber: update.issueNumber || 0,
+      issueTitle: update.issueTitle,
+      owner: update.owner || "vamsicherukuri",
+      repo: update.repo || "gated-fix-pipeline",
+      activeBranch: update.activeBranch,
+      lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
+      phases: {}
+    };
+    if (existsSync3(dashboardFile)) {
+      try {
+        const raw = readFileSync3(dashboardFile, "utf-8");
+        const parsed = JSON.parse(raw);
+        current = {
+          ...parsed,
+          phases: { ...parsed.phases }
+        };
+      } catch {
+      }
+    }
+    if (update.owner) current.owner = update.owner;
+    if (update.repo) current.repo = update.repo;
+    if (update.issueNumber && update.issueNumber > 0) current.issueNumber = update.issueNumber;
+    if (update.issueTitle) current.issueTitle = update.issueTitle;
+    if (update.activeBranch) current.activeBranch = update.activeBranch;
+    current.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
+    if (update.phase) {
+      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      current.phases[update.phase] = {
+        ...existingPhase,
+        status: update.status || existingPhase.status,
+        summary: update.summary || existingPhase.summary,
+        updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+        details: {
+          ...existingPhase.details || {},
+          ...update.details || {}
+        }
+      };
+    }
+    writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
+    if (current.issueNumber > 0 && current.owner && current.repo && !isTest) {
+      postOrPatchGitHubComment(current);
+      writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    }
+    return current;
+  } catch (err) {
+    try {
+      const { appendFileSync: appendFileSync3 } = __require("node:fs");
+      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+        event: "syncWorkflowDashboard_error",
+        error: String(err?.message || err),
+        time: (/* @__PURE__ */ new Date()).toISOString()
+      }) + "\n");
+    } catch {
+    }
+    return null;
+  }
+}
+function postOrPatchGitHubComment(state) {
+  const content = renderDashboardMarkdown(state);
+  const tempPath = join3(tmpdir(), `gated-change-dashboard-${state.issueNumber}-${Date.now()}.md`);
+  try {
+    writeFileSync2(tempPath, content, "utf-8");
+    if (!state.commentId) {
+      try {
+        const commentsJson = execFileSync("gh", [
+          "api",
+          `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
+          "--jq",
+          `map(select(.body | contains("${DASHBOARD_ANCHOR}"))) | .[0].id`
+        ], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 7e3
+        }).trim();
+        if (commentsJson && commentsJson !== "null") {
+          const parsedId = parseInt(commentsJson, 10);
+          if (!isNaN(parsedId) && parsedId > 0) {
+            state.commentId = parsedId;
+          }
+        }
+      } catch {
+      }
+    }
+    if (state.commentId) {
+      try {
+        execFileSync("gh", [
+          "api",
+          `repos/${state.owner}/${state.repo}/issues/comments/${state.commentId}`,
+          "-X",
+          "PATCH",
+          "-F",
+          `body=@${tempPath}`
+        ], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+          timeout: 7e3
+        });
+        return;
+      } catch {
+        state.commentId = null;
+      }
+    }
+    const createOut = execFileSync("gh", [
+      "api",
+      `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
+      "-F",
+      `body=@${tempPath}`,
+      "--jq",
+      ".id"
+    ], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 7e3
+    }).trim();
+    if (createOut) {
+      const newId = parseInt(createOut, 10);
+      if (!isNaN(newId) && newId > 0) {
+        state.commentId = newId;
+      }
+    }
+  } catch (err) {
+    try {
+      const { appendFileSync: appendFileSync3 } = __require("node:fs");
+      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
+        event: "postOrPatchGitHubComment_error",
+        error: String(err?.message || err),
+        time: (/* @__PURE__ */ new Date()).toISOString()
+      }) + "\n");
+    } catch {
+    }
+  } finally {
+    try {
+      if (existsSync3(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {
+    }
+  }
+}
+
 // scripts/guardrails/hook-intake-ingest.ts
 async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync3(0, "utf-8");
+      rawInput = readFileSync4(0, "utf-8");
     } catch {
     }
   }
@@ -315,6 +609,15 @@ async function main() {
       state.issue = { owner, repo, number: issueData.number, title: issueData.title };
       state.phase = "INTAKE";
       saveState(state);
+      syncWorkflowDashboard(process.cwd(), {
+        owner,
+        repo,
+        issueNumber: issueData.number,
+        issueTitle: issueData.title,
+        phase: "intake",
+        status: "READY",
+        summary: `Deterministic triage verified OPEN status with verified criteria`
+      });
       appendAuditLog({
         sessionId: state.sessionId,
         agent: "controller",

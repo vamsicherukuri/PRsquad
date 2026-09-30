@@ -8,6 +8,7 @@
 import { readFileSync, appendFileSync } from "node:fs";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
+import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -126,6 +127,16 @@ async function main() {
       state.issue = { owner, repo, number: issueData.number, title: issueData.title };
       state.phase = "INTAKE";
       saveState(state);
+
+      syncWorkflowDashboard(process.cwd(), {
+        owner,
+        repo,
+        issueNumber: issueData.number,
+        issueTitle: issueData.title,
+        phase: "intake",
+        status: "READY",
+        summary: `Deterministic triage verified OPEN status with verified criteria`,
+      });
 
       appendAuditLog({
         sessionId: state.sessionId,
