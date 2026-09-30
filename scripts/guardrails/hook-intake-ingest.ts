@@ -126,6 +126,9 @@ async function main() {
       // Update state
       state.issue = { owner, repo, number: issueData.number, title: issueData.title };
       state.phase = "INTAKE";
+      if (input.sessionId) {
+        state.sessionId = input.sessionId;
+      }
       saveState(state);
 
       syncWorkflowDashboard(process.cwd(), {
@@ -133,6 +136,7 @@ async function main() {
         repo,
         issueNumber: issueData.number,
         issueTitle: issueData.title,
+        sessionId: input.sessionId || state.sessionId,
         phase: "intake",
         status: "READY",
         summary: `Deterministic triage verified OPEN status with verified criteria`,

@@ -1,14 +1,31 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { execFileSync, execSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { findGatedChangeDir, getRepoRoot } from "./stateStore.js";
 
 export interface PhaseRecord {
   status: string;
   updatedAt?: string;
   summary?: string;
+  credits?: number;
   details?: Record<string, any>;
+}
+
+export interface SessionTelemetry {
+  model: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  actualAiCredits: number;
+  cacheHitRatePercent: number;
+  firstEventId?: number;
+  latestEventId?: number;
+  durationSeconds?: number;
 }
 
 export interface DashboardState {
@@ -18,6 +35,9 @@ export interface DashboardState {
   repo: string;
   activeBranch?: string;
   commentId?: number | null;
+  sessionId?: string;
+  startEventId?: number;
+  telemetry?: SessionTelemetry;
   lastUpdated: string;
   phases: {
     intake?: PhaseRecord;
@@ -47,11 +67,77 @@ function getStatusBadge(status?: string): string {
   return `ℹ️ \`${status}\``;
 }
 
+function renderCredits(credits?: number): string {
+  if (credits === undefined || credits === null) return "—";
+  return `**${credits.toFixed(2)} AIU**`;
+}
+
+export function getGroundTruthTelemetry(sessionId?: string, startEventId: number = 0): SessionTelemetry | null {
+  if (!sessionId) return null;
+  const dbPath = join(homedir(), ".copilot", "session-store.db");
+  if (!existsSync(dbPath)) return null;
+
+  let db: any = null;
+  try {
+    const req = typeof require !== "undefined" ? require : createRequire(import.meta.url);
+    const { DatabaseSync } = req("node:sqlite");
+    if (!DatabaseSync) return null;
+    db = new DatabaseSync(dbPath, { readOnly: true });
+
+    const row = db.prepare(`
+      SELECT 
+        model,
+        COUNT(*) as turns,
+        COALESCE(SUM(input_tokens), 0) as input_tokens,
+        COALESCE(SUM(output_tokens), 0) as output_tokens,
+        COALESCE(SUM(cache_read_tokens), 0) as cache_read_tokens,
+        COALESCE(SUM(cache_write_tokens), 0) as cache_write_tokens,
+        COALESCE(SUM(reasoning_tokens), 0) as reasoning_tokens,
+        ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as actual_credits,
+        ROUND(COALESCE(SUM(duration_ms), 0) / 1000.0, 1) as duration_seconds,
+        MIN(id) as first_event_id,
+        MAX(id) as latest_event_id
+      FROM assistant_usage_events
+      WHERE session_id = ? AND id >= ?
+    `).get(sessionId, startEventId);
+
+    if (!row || !row.turns || row.turns === 0) return null;
+
+    const totalInput = Number(row.input_tokens) || 0;
+    const cacheRead = Number(row.cache_read_tokens) || 0;
+    const cacheHitRate = totalInput > 0 ? Math.round((cacheRead / totalInput) * 1000) / 10 : 0;
+
+    return {
+      model: String(row.model || "claude-sonnet-5"),
+      turns: Number(row.turns) || 0,
+      inputTokens: totalInput,
+      outputTokens: Number(row.output_tokens) || 0,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: Number(row.cache_write_tokens) || 0,
+      reasoningTokens: Number(row.reasoning_tokens) || 0,
+      actualAiCredits: Number(row.actual_credits) || 0,
+      cacheHitRatePercent: cacheHitRate,
+      firstEventId: Number(row.first_event_id) || 0,
+      latestEventId: Number(row.latest_event_id) || 0,
+      durationSeconds: Number(row.duration_seconds) || 0,
+    };
+  } catch {
+    return null;
+  } finally {
+    if (db) {
+      try {
+        db.close();
+      } catch {}
+    }
+  }
+}
+
 export function renderDashboardMarkdown(data: DashboardState): string {
   const p = data.phases || {};
   const currentBranch = data.activeBranch || (p.scopeGate?.details?.activeBranch) || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "gated-fix-pipeline"}`;
+  const t = data.telemetry;
 
   let md = `${DASHBOARD_ANCHOR}
 ## 🛡️ Gated Change Workflow Dashboard
@@ -64,18 +150,41 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
 ### 📊 Real-Time Phase Tracker
 
-| Phase | Specialist / Actor | Status | Key Artifact / Hand-off Summary |
-|:---|:---|:---:|:---|
-| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Awaiting triage"} |
-| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Pending intake triage"} |
-| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
-| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${p.developer?.summary || "Locked until human approval"} |
-| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Awaiting implementation"} |
-| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Awaiting QA sign-off"} |
-| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
+| Phase | Specialist / Actor | Status | Actual AI Credits | Key Artifact / Hand-off Summary |
+|:---|:---|:---:|:---:|:---|
+| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} | ${p.intake?.summary || "Awaiting triage"} |
+| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${renderCredits(p.architect?.credits)} | ${p.architect?.summary || "Pending intake triage"} |
+| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | **0.00 AIU** *(Deterministic)* | ${p.scopeGate?.summary || "Pending architecture plan"} |
+| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${renderCredits(p.developer?.credits)} | ${p.developer?.summary || "Locked until human approval"} |
+| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${renderCredits(p.qa?.credits)} | ${p.qa?.summary || "Awaiting implementation"} |
+| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${renderCredits(p.reviewer?.credits)} | ${p.reviewer?.summary || "Awaiting QA sign-off"} |
+| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | **0.00 AIU** *(Deterministic)* | ${p.mergeGate?.summary || "Awaiting audit report"} |
 
 ---
 `;
+
+  // Telemetry Section: Real-time Ground-Truth AI Credit Meter
+  if (t && t.turns > 0) {
+    md += `\n### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)\n\n`;
+    md += `> **Billing Model:** \`${t.model}\`  \n`;
+    md += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** *(Official Copilot AI Units)*  \n`;
+    md += `> **Prompt Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} cold input tokens)*  \n`;
+    md += `> **Model Interaction Turns:** ${t.turns} turns recorded across active specialists  \n`;
+    md += `> **Mechanical Guardrails:** **0.00 AIU / 0 Tokens** *(Scope Gate, Write Barrier, Shell Sandbox, PR Hook)*  \n\n`;
+
+    md += `| Ground-Truth Metric | Actual Count | Notes / Billing Weight |\n`;
+    md += `|:---|:---:|:---|\n`;
+    md += `| **Raw Input Tokens** | ${t.inputTokens.toLocaleString()} | Cumulative prompt context evaluated across turns |\n`;
+    md += `| ↳ *Cache Read (Hit)* | ${t.cacheReadTokens.toLocaleString()} | Billed at ~90% prompt-cache discount |\n`;
+    md += `| ↳ *Cache Write (Miss)* | ${t.cacheWriteTokens.toLocaleString()} | Initial prompt cache population |\n`;
+    md += `| **Output Tokens** | ${t.outputTokens.toLocaleString()} | Completion tokens generated across ${t.turns} turns |\n`;
+    if (t.reasoningTokens > 0) {
+      md += `| **Reasoning Tokens** | ${t.reasoningTokens.toLocaleString()} | Extended thinking / reasoning capacity |\n`;
+    }
+    md += `| **Mechanical Guardrails** | **0 tokens / 0 AIU** | Scope Gate, Sandbox, PR Creator, Dashboard Sync (Deterministic) |\n`;
+    md += `| **Total Billed AI Credits** | **${t.actualAiCredits.toFixed(2)} AIU** | Ground-truth measurement via Copilot App session store |\n\n`;
+    md += `---\n`;
+  }
 
   // Section 1: Architecture Plan & Scope Approval Gate Specification
   const archPlan = p.architect?.details?.plan || p.scopeGate?.details?.plan;
@@ -273,6 +382,7 @@ export function syncWorkflowDashboard(
     issueNumber?: number;
     issueTitle?: string;
     activeBranch?: string;
+    sessionId?: string;
     phase?: keyof DashboardState["phases"];
     status?: string;
     summary?: string;
@@ -289,6 +399,7 @@ export function syncWorkflowDashboard(
       owner: update.owner || "vamsicherukuri",
       repo: update.repo || "gated-fix-pipeline",
       activeBranch: update.activeBranch,
+      sessionId: update.sessionId,
       lastUpdated: new Date().toISOString(),
       phases: {},
     };
@@ -315,14 +426,46 @@ export function syncWorkflowDashboard(
     if (update.activeBranch && !update.activeBranch.includes("999")) {
       current.activeBranch = update.activeBranch;
     }
+    if (update.sessionId) {
+      current.sessionId = update.sessionId;
+    }
     current.lastUpdated = new Date().toISOString();
+
+    // Query Ground-Truth Telemetry from Copilot App session store
+    if (current.sessionId) {
+      const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+      if (tele) {
+        if (!current.startEventId && tele.firstEventId) {
+          current.startEventId = tele.firstEventId;
+        }
+        current.telemetry = tele;
+      }
+    }
 
     if (update.phase) {
       const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+
+      // Calculate incremental phase credits
+      let phaseCredits = existingPhase.credits;
+      if (current.telemetry && current.telemetry.actualAiCredits !== undefined) {
+        if (update.phase === "scopeGate" || update.phase === "mergeGate") {
+          phaseCredits = 0.0;
+        } else {
+          const recordedCredits = Object.entries(current.phases)
+            .filter(([k]) => k !== update.phase)
+            .reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+          const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+          if (phaseCredits === undefined || update.status !== "IN_PROGRESS") {
+            phaseCredits = computed;
+          }
+        }
+      }
+
       current.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
+        credits: phaseCredits,
         updatedAt: new Date().toISOString(),
         details: {
           ...(existingPhase.details || {}),

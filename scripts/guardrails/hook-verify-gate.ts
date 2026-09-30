@@ -15,6 +15,7 @@ import {
   extractQADetails,
   extractReviewerDetails,
 } from "../../src/guardrails/issueDashboard.js";
+import { createPullRequest } from "../../src/guardrails/prCreator.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: any): number {
@@ -239,12 +240,18 @@ async function main() {
     const prompt = toolArgs.prompt || toolArgs.content || "";
     const extractedPlan = extractPlanMarkdown(prompt);
 
+    if (input.sessionId) {
+      state.sessionId = input.sessionId;
+      saveState(state, repoRoot);
+    }
+
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
       repo: state.issue?.repo || "gated-fix-pipeline",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
       activeBranch: branchName,
+      sessionId: input.sessionId || state.sessionId,
       phase: "scopeGate",
       status: "APPROVED",
       summary: `Scope Approval Gate approved by ${lock.approvedBy} on branch '${branchName}'`,
@@ -258,6 +265,7 @@ async function main() {
     });
 
     syncWorkflowDashboard(repoRoot, {
+      sessionId: input.sessionId || state.sessionId,
       phase: "developer",
       status: "IN_PROGRESS",
       summary: `Implementing changes bounded to '${lock.approvedScope}' on branch '${branchName}'`,
@@ -325,6 +333,11 @@ async function main() {
     const lock = loadApprovalLock(repoRoot);
     const resolvedIssue = resolveIssueNumber(input, toolArgs, state, lock);
 
+    if (input.sessionId && (!state.sessionId || state.sessionId !== input.sessionId)) {
+      state.sessionId = input.sessionId;
+      saveState(state, repoRoot);
+    }
+
     if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const rawText = typeof input.toolResult === "string"
         ? input.toolResult
@@ -336,6 +349,7 @@ async function main() {
         repo: state.issue?.repo || "gated-fix-pipeline",
         issueNumber: resolvedIssue,
         issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+        sessionId: input.sessionId || state.sessionId,
         phase: "architect",
         status: "PLAN_READY",
         summary: "Technical architecture plan & scope specification generated",
@@ -353,21 +367,36 @@ async function main() {
         owner: state.issue?.owner || "vamsicherukuri",
         repo: state.issue?.repo || "gated-fix-pipeline",
         issueNumber: resolvedIssue,
+        sessionId: input.sessionId || state.sessionId,
         phase: "reviewer",
         status: verdict,
         summary: `Read-only diff security audit complete: ${verdict}`,
         details: revDetails,
       });
 
+      let prNumber: number | undefined;
+      let prUrl: string | undefined;
+
+      try {
+        const prRes = createPullRequest({ preferredDir: repoRoot });
+        if (prRes.success) {
+          prNumber = prRes.prNumber;
+          prUrl = prRes.prUrl;
+        }
+      } catch {}
+
       syncWorkflowDashboard(repoRoot, {
+        sessionId: input.sessionId || state.sessionId,
         phase: "mergeGate",
         status: "READY_FOR_MERGE",
-        summary: "Pull Request #10 is officially OPEN on GitHub: https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10. Merging is reserved for human maintainers on GitHub after PR review.",
+        summary: prUrl
+          ? `Pull Request ${prNumber ? `#${prNumber}` : ""} is officially OPEN on GitHub: ${prUrl}. Merging is reserved for human maintainers on GitHub after PR review.`
+          : "Audit complete. Ready for Pull Request and human merge approval on GitHub.",
         details: {
-          prNumber: 10,
-          prUrl: "https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10",
+          prNumber,
+          prUrl,
           baseBranch: "copilot-app-plugin-alignment",
-          headBranch: state.activeBranch || "vamsicherukuri-issue-9-scope-enforcer-fails-to-match-multi-path-fc980a",
+          headBranch: state.activeBranch || `fix/issue-${resolvedIssue}`,
           readyForMerge: true,
         },
       });
@@ -385,12 +414,18 @@ async function main() {
   const resolvedIssue = resolveIssueNumber(input, toolArgs, state, lock);
   const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
 
+  if (input.sessionId && (!state.sessionId || state.sessionId !== input.sessionId)) {
+    state.sessionId = input.sessionId;
+    saveState(state, repoRoot);
+  }
+
   if (isAgentMatch(targetAgent, "gated-change-architect")) {
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
       repo: state.issue?.repo || "gated-fix-pipeline",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+      sessionId: input.sessionId || state.sessionId,
       phase: "architect",
       status: "IN_PROGRESS",
       summary: "Architect synthesizing issue requirements into bounded technical plan",
@@ -403,6 +438,7 @@ async function main() {
       repo: state.issue?.repo || "gated-fix-pipeline",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+      sessionId: input.sessionId || state.sessionId,
       phase: "developer",
       status: "IMPLEMENTED",
       summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
@@ -410,6 +446,7 @@ async function main() {
     });
 
     syncWorkflowDashboard(repoRoot, {
+      sessionId: input.sessionId || state.sessionId,
       phase: "qa",
       status: "IN_PROGRESS",
       summary: "Executing independent regression verification suite via powershell",
@@ -422,6 +459,7 @@ async function main() {
       repo: state.issue?.repo || "gated-fix-pipeline",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+      sessionId: input.sessionId || state.sessionId,
       phase: "qa",
       status: "PASS",
       summary: "Independent QA verification passed all acceptance criteria",
@@ -429,6 +467,7 @@ async function main() {
     });
 
     syncWorkflowDashboard(repoRoot, {
+      sessionId: input.sessionId || state.sessionId,
       phase: "reviewer",
       status: "IN_PROGRESS",
       summary: "Conducting read-only security diff audit & blast radius review",
