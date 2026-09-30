@@ -101,21 +101,38 @@ export function isEditAllowed(
     };
   }
 
-  const cleanScope = approvedScope
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  const normalizeScopeEntry = (entry: string): string =>
+    entry
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
 
-  // 4. Prefix containment
+  // 4. Split multi-path scope declarations (semicolon/comma-separated) into
+  //    individual normalized candidate entries.
+  const scopeCandidates = approvedScope
+    .split(/[;,]/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map(normalizeScopeEntry);
+
+  const cleanScope = normalizeScopeEntry(approvedScope);
+
+  // 5. Prefix containment: allowed if the target path matches (or is nested
+  //    under) ANY approved scope candidate. Preserve the empty-scope edge case.
   const isMatch =
     cleanScope === "" ||
-    normalized === cleanScope ||
-    normalized.startsWith(cleanScope + "/");
+    scopeCandidates.some(
+      (candidate) =>
+        candidate === "" ||
+        normalized === candidate ||
+        normalized.startsWith(candidate + "/")
+    );
 
   if (!isMatch) {
+    const approvedList = scopeCandidates.length > 0 ? scopeCandidates : [cleanScope];
     return {
       allowed: false,
-      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${cleanScope}/'.`,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope. Approved entries: ${approvedList.map((c) => `'${c}/'`).join(", ")}.`,
       normalizedPath: normalized,
     };
   }

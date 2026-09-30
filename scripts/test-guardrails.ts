@@ -159,6 +159,37 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   const nudge = formatScopeDenialNudge("src/common/errors.ts", scope);
   assert(nudge.includes("SCOPE_AMENDMENT_REQUIRED"), "Nudge payload contains SCOPE_AMENDMENT_REQUIRED instruction");
   assert(nudge.includes("src/common/errors.ts"), "Nudge payload includes specific blocked path");
+
+  // --- Multi-path scope regression tests (issue #9) ---
+  const multiScope = "src/scopeTool.ts; scripts/test-guardrails.ts";
+
+  // (a) exact issue repro: first entry of a semicolon-separated multi-path scope
+  const multiExact = isEditAllowed("src/scopeTool.ts", multiScope);
+  assert(multiExact.allowed, "Multi-path (semicolon) scope permits exact match on first declared entry");
+
+  // (b) second entry of a semicolon-separated multi-path scope
+  const multiSecond = isEditAllowed("scripts/test-guardrails.ts", multiScope);
+  assert(multiSecond.allowed, "Multi-path (semicolon) scope permits exact match on second declared entry");
+
+  // (c) comma-separated variant
+  const commaScope = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  const commaMatch = isEditAllowed("scripts/test-guardrails.ts", commaScope);
+  assert(commaMatch.allowed, "Multi-path (comma-separated) scope permits match on declared entry");
+
+  // (d) path outside all declared multi-path entries must still be blocked
+  const multiOutOfScope = isEditAllowed("src/common/errors.ts", multiScope);
+  assert(!multiOutOfScope.allowed, "Multi-path scope still blocks paths outside all declared entries");
+  assert(
+    multiOutOfScope.reason?.includes("SCOPE_VIOLATION") ?? false,
+    "Multi-path scope violation reason identifies SCOPE_VIOLATION"
+  );
+
+  // (e) whitespace-padded entries are trimmed correctly
+  const paddedScope = " src/scopeTool.ts ; scripts/test-guardrails.ts ";
+  const paddedMatch1 = isEditAllowed("src/scopeTool.ts", paddedScope);
+  assert(paddedMatch1.allowed, "Whitespace-padded multi-path scope trims and permits first entry");
+  const paddedMatch2 = isEditAllowed("scripts/test-guardrails.ts", paddedScope);
+  assert(paddedMatch2.allowed, "Whitespace-padded multi-path scope trims and permits second entry");
 }
 
 // ---------------------------------------------------------------------------
