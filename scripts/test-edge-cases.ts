@@ -151,6 +151,7 @@ async function runEdgeCases() {
   {
     const state = loadState();
     state.phase = "ARCHITECTING";
+    state.humanApproval = false;
     saveState(state);
 
     // Simulate Architect returning BLOCKED

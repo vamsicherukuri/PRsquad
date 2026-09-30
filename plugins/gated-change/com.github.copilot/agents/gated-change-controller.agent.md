@@ -81,13 +81,12 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
-   - End the plan presentation with this exact instruction to the human: "To approve: switch this session from Plan mode to Agent mode, then reply confirming both that you've made the switch and that you approve this plan (e.g. 'Switched to Agent mode, approved')."
-   - Do not delegate to `gated-change-developer` as a way to test or discover whether the mode switch happened. A failed/blocked Developer turn is wasted cost, not a valid detection mechanism.
-   - Treat the human's reply as sufficient to proceed only if it explicitly confirms the mode switch (not just the word "approved" alone). If the reply only says "approved" without confirming the mode switch, stop and ask them to confirm they've switched to Agent mode before delegating — do not attempt Developer in the meantime.
-   - Done when: the human's reply explicitly confirms both the mode switch to Agent mode and approval of the plan — only then may Developer be delegated to.
+   - End the plan presentation with this exact instruction to the human: "To approve: reply with explicit approval (e.g. 'Approved', 'Proceed with implementation'), and sign the scope lock by running `npm run gate:approve -- --scope <path> --issue <number>`."
+   - Explicit typed approval (e.g. "Approved", "Proceed", "Plan approved") is sufficient to proceed; do not require manual UI mode switching between Plan mode and Agent mode, as mechanical lock verification and process hooks deterministically enforce scope boundaries.
+   - Done when: the human's reply explicitly confirms approval of the plan — only then may Developer be delegated to.
 
 4. **Developer**
-   - Only after both Scope Gate conditions are met (Agent mode AND explicit typed approval), delegate to `gated-change-developer`.
+   - Only after explicit human scope approval is granted, delegate to `gated-change-developer`.
    - Pass the approved plan, original acceptance criteria, risk tier, approved scope, and implementation-attempt number. Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.

@@ -184,7 +184,7 @@ async function main() {
       });
       const output2 = {
         decision: "deny",
-        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without a verified human scope approval lock in .gated-change/approval.lock. The human must switch to Agent mode and approve the plan (e.g. by running `npm run gate:approve -- --scope <path>`) before implementation can start."
+        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without a verified human scope approval lock in .gated-change/approval.lock. The human must approve the plan (e.g. by running `npm run gate:approve -- --scope <path>`) before implementation can start."
       };
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);
