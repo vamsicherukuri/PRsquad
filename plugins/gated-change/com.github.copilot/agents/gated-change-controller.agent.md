@@ -77,8 +77,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Done when: Architect has returned `PLAN_READY` (presented at the Scope Approval Gate) or `BLOCKED` (reported to the human and stopped).
 
 3. **Scope Approval Gate**
-   - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, and plain-language summary.
-   - Present the live `⚡ Actual AI Credit & Token Consumption` meter table injected into your context by the guardrail hook. This shows the human approver the exact ground-truth AI credits burned so far (Intake + Architecture) before approving implementation.
+   - Execute the live credit meter command via powershell to fetch the exact ground-truth telemetry table:
+     `node "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs" --meter`
+   - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, plain-language summary, and the returned `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table. This shows the human approver the exact ground-truth AI credits burned so far (Intake + Architecture) before approving implementation.
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
@@ -139,8 +140,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 ## In-chat live AI credit meter
 
-At every major phase handoff and human gate, deterministic guardrail hooks query the Copilot App's local session store (`assistant_usage_events`) and inject ground-truth billing telemetry directly into the specialist's tool result and context.
-Look for the `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table in the tool result or context, and always render it verbatim in your user-facing response:
+At the Scope Approval Gate and every major phase handoff, execute the deterministic telemetry command via powershell to fetch the ground-truth table:
+`node "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs" --meter`
+Always render the returned `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response:
 - **Scope Approval Gate**: Display the live credit table alongside the plan.
 - **Developer Completion**: Display the updated credit table showing Developer implementation usage before running QA.
 - **QA Verification Complete**: Display the updated credit table showing QA validation usage before running Reviewer.

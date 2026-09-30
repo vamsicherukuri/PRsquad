@@ -94,7 +94,6 @@ export function formatChatCreditMeter(data?: DashboardState | null): string {
 }
 
 export function getGroundTruthTelemetry(sessionId?: string, startEventId: number = 0): SessionTelemetry | null {
-  if (!sessionId) return null;
   const dbPath = join(homedir(), ".copilot", "session-store.db");
   if (!existsSync(dbPath)) return null;
 
@@ -104,6 +103,16 @@ export function getGroundTruthTelemetry(sessionId?: string, startEventId: number
     const { DatabaseSync } = req("node:sqlite");
     if (!DatabaseSync) return null;
     db = new DatabaseSync(dbPath, { readOnly: true });
+
+    let effectiveSessionId = sessionId;
+    if (!effectiveSessionId) {
+      const latestRow = db.prepare(`SELECT session_id FROM assistant_usage_events ORDER BY id DESC LIMIT 1`).get();
+      if (latestRow && latestRow.session_id) {
+        effectiveSessionId = String(latestRow.session_id);
+      } else {
+        return null;
+      }
+    }
 
     const row = db.prepare(`
       SELECT 
@@ -120,7 +129,7 @@ export function getGroundTruthTelemetry(sessionId?: string, startEventId: number
         MAX(id) as latest_event_id
       FROM assistant_usage_events
       WHERE session_id = ? AND id >= ?
-    `).get(sessionId, startEventId);
+    `).get(effectiveSessionId, startEventId);
 
     if (!row || !row.turns || row.turns === 0) return null;
 

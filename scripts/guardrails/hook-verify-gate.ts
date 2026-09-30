@@ -44,6 +44,25 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
 }
 
 async function main() {
+  if (process.argv.includes("--meter")) {
+    const effectiveCwd = process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
+    const lock = loadApprovalLock(repoRoot);
+    const resolvedIssue = resolveIssueNumber({}, {}, state, lock);
+    const dash = syncWorkflowDashboard(repoRoot, {
+      issueNumber: resolvedIssue,
+      sessionId: state.sessionId,
+    });
+    const meter = formatChatCreditMeter(dash);
+    if (meter) {
+      process.stdout.write(meter + "\n");
+    } else {
+      process.stdout.write("⚡ Live AI Credit Meter: Active\n");
+    }
+    process.exit(0);
+  }
+
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
