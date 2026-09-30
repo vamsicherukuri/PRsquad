@@ -24,7 +24,7 @@
         "timeoutSec": 15
       },
       {
-        "tools": ["bash", "execute", "terminal"],
+        "tools": ["bash", "execute", "terminal", "powershell"],
         "command": "node",
         "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-sandbox-bash.mjs"],
         "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-sandbox-bash.mjs'",

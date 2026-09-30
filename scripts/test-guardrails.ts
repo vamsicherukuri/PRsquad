@@ -290,6 +290,46 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
 
   const revDeleteBranch = validateCommandForAgent("git branch -D feature", "gated-change-reviewer");
   assert(!revDeleteBranch.allowed, "Reviewer strictly blocked from deleting branches (human-only)");
+
+  // PowerShell execution tool tests (Windows Copilot host compatibility)
+  const psDevInput = JSON.stringify({
+    tool: "powershell",
+    toolArgs: { command: "git commit -m 'fix: scoped read tool'", agent_type: "gated-change-developer" }
+  });
+  const psDevOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+    cwd: REPO_ROOT,
+    input: psDevInput,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  const psDevParsed = JSON.parse(psDevOut);
+  assert(psDevParsed.decision === "allow", "Sandbox permits Developer to run git commit via 'powershell' tool");
+
+  const psQaTestInput = JSON.stringify({
+    tool: "powershell",
+    toolArgs: { command: "npx -y tsx scripts/test-guardrails.ts", agent_type: "gated-change-qa" }
+  });
+  const psQaTestOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+    cwd: REPO_ROOT,
+    input: psQaTestInput,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  const psQaTestParsed = JSON.parse(psQaTestOut);
+  assert(psQaTestParsed.decision === "allow", "Sandbox permits QA to run tests via 'powershell' tool");
+
+  const psBlockedInput = JSON.stringify({
+    tool: "powershell",
+    toolArgs: { command: "git push origin main", agent_type: "gated-change-developer" }
+  });
+  const psBlockedOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+    cwd: REPO_ROOT,
+    input: psBlockedInput,
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "ignore"],
+  });
+  const psBlockedParsed = JSON.parse(psBlockedOut);
+  assert(psBlockedParsed.decision === "deny", "Sandbox blocks Developer from git push to main via 'powershell' tool with clean exit 0");
 }
 
 // ---------------------------------------------------------------------------

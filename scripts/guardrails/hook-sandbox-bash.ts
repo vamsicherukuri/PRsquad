@@ -6,7 +6,7 @@
 
 import { readFileSync, appendFileSync } from "node:fs";
 import { validateCommandForAgent } from "../../src/guardrails/bashSandbox.js";
-import { loadState, appendAuditLog } from "../../src/guardrails/stateStore.js";
+import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -44,30 +44,35 @@ async function main() {
   const command = toolArgs.command || toolArgs.cmd || "";
   const agent = input.agent || toolArgs.agent_type || "unknown";
 
-  const isBashTool =
+  const isShellTool =
     tool === "bash" ||
+    tool === "powershell" ||
+    tool === "pwsh" ||
     tool === "execute" ||
     tool === "terminal" ||
     tool === "shell" ||
     tool.includes("bash") ||
+    tool.includes("powershell") ||
     tool.includes("terminal");
 
-  if (isBashTool && command) {
-    const state = loadState();
+  if (isShellTool && command) {
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
     const result = validateCommandForAgent(command, agent);
 
     if (!result.allowed) {
       appendAuditLog({
         sessionId: state.sessionId,
         agent,
-        tool: "bash",
+        tool: tool.includes("powershell") ? "powershell" : "bash",
         action: "command_blocked_by_sandbox",
         decision: "deny",
         details: {
           command,
           reason: result.reason,
         },
-      });
+      }, repoRoot);
 
       const output = {
         decision: "deny",
@@ -76,17 +81,17 @@ async function main() {
         permissionDecisionReason: result.reason || "POLICY_DENIAL: Command blocked by guardrail.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
-      process.exit(1);
+      process.exit(0);
     }
 
     appendAuditLog({
       sessionId: state.sessionId,
       agent,
-      tool: "bash",
+      tool: tool.includes("powershell") ? "powershell" : "bash",
       action: "command_allowed",
       decision: "allow",
       details: { command },
-    });
+    }, repoRoot);
 
     process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
     process.exit(0);

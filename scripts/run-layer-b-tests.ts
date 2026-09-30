@@ -343,6 +343,50 @@ async function runLayerB() {
         "hook-enforce-scope provides SCOPE_AMENDMENT_REQUIRED nudge in worktree"
       );
 
+      // 7. Test hook-sandbox-bash permits Developer to commit on feature branch via powershell in worktree
+      const psCommitInput = JSON.stringify({
+        tool: "powershell",
+        toolArgs: {
+          command: "git commit -m 'fix: parse multi-path approved scopes'",
+          agent_type: "gated-change-developer"
+        },
+        cwd: tempWorktreeDir,
+      });
+      const psCommitOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+        cwd: REPO_ROOT,
+        input: psCommitInput,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const psCommitParsed = JSON.parse(psCommitOut);
+      assert(psCommitParsed.decision === "allow", "hook-sandbox-bash permits Developer to commit via powershell tool in worktree");
+
+      // 8. Test hook-sandbox-bash blocks unauthorized git push via powershell with clean exit 0
+      const psPushInput = JSON.stringify({
+        tool: "powershell",
+        toolArgs: {
+          command: "git push origin main",
+          agent_type: "gated-change-developer"
+        },
+        cwd: tempWorktreeDir,
+      });
+      let psPushThrown = false;
+      let psPushOut = "";
+      try {
+        psPushOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+          cwd: REPO_ROOT,
+          input: psPushInput,
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "ignore"],
+        });
+      } catch (e: any) {
+        psPushThrown = true;
+        psPushOut = e.stdout || "";
+      }
+      assert(!psPushThrown, "hook-sandbox-bash exits cleanly (code 0) when denying powershell push to main in worktree");
+      const psPushParsed = JSON.parse(psPushOut);
+      assert(psPushParsed.decision === "deny", "hook-sandbox-bash returns decision 'deny' for powershell push to main");
+
       // Clean up lock in REPO_ROOT
       revokeApprovalLock("CONSUMED", REPO_ROOT);
     } finally {

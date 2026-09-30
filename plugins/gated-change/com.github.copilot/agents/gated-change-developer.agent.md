@@ -2,7 +2,7 @@
 name: gated-change-developer
 description: Implements only a human-approved Gated Change plan and writes the corresponding regression tests.
 target: github-copilot
-tools: ["read", "search", "edit", "bash"]
+tools: ["read", "search", "edit", "bash", "powershell"]
 user-invocable: false
 ---
 
@@ -25,10 +25,10 @@ Resuming after a mid-task stall: if you were invoked to continue a previous atte
 
 Responsibilities:
 - Work strictly on the active feature branch provided in your inputs (created automatically by the Scope Gate hook).
-- Before the first edit of an implementation attempt, capture `baseRef` with `git rev-parse HEAD`.
+- Before the first edit of an implementation attempt, capture `baseRef` with `git rev-parse HEAD` using your shell tool (`powershell` on Windows, `bash` on macOS/Linux).
 - Implement the approved fix.
 - Write/update the regression tests required to prove the acceptance criteria.
-- Run the narrowest relevant existing validation commands while implementing.
+- Run the narrowest relevant existing validation commands while implementing (e.g. `npx -y tsx scripts/test-guardrails.ts` or `npm test`). In isolated worktrees where local `node_modules` may not be installed, use `npx -y tsx` to execute tests.
 - Stage and commit your changes on the active feature branch (`git commit -m "fix: ..."`) before reporting `IMPLEMENTED`.
 - Never checkout, switch to, or commit to `main` or `master`. Never run `git push`.
 - Preserve repository conventions and avoid unrelated refactors.
