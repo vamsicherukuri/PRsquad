@@ -252,7 +252,6 @@ function renderCredits(credits) {
   return `**${credits.toFixed(2)} AIU**`;
 }
 function getGroundTruthTelemetry(sessionId, startEventId = 0) {
-  if (!sessionId) return null;
   const dbPath = join3(homedir(), ".copilot", "session-store.db");
   if (!existsSync3(dbPath)) return null;
   let db = null;
@@ -261,6 +260,15 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
     const { DatabaseSync } = req("node:sqlite");
     if (!DatabaseSync) return null;
     db = new DatabaseSync(dbPath, { readOnly: true });
+    let effectiveSessionId = sessionId;
+    if (!effectiveSessionId) {
+      const latestRow = db.prepare(`SELECT session_id FROM assistant_usage_events ORDER BY id DESC LIMIT 1`).get();
+      if (latestRow && latestRow.session_id) {
+        effectiveSessionId = String(latestRow.session_id);
+      } else {
+        return null;
+      }
+    }
     const row = db.prepare(`
       SELECT 
         model,
@@ -276,7 +284,7 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
         MAX(id) as latest_event_id
       FROM assistant_usage_events
       WHERE session_id = ? AND id >= ?
-    `).get(sessionId, startEventId);
+    `).get(effectiveSessionId, startEventId);
     if (!row || !row.turns || row.turns === 0) return null;
     const totalInput = Number(row.input_tokens) || 0;
     const cacheRead = Number(row.cache_read_tokens) || 0;
