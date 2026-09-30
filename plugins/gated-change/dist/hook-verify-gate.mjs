@@ -6,26 +6,46 @@ import { execSync as execSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join } from "node:path";
+import { resolve, relative, join, isAbsolute, dirname } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
 var LOCK_FILE = "approval.lock";
 var AUDIT_FILE = "audit.jsonl";
 var cachedRepoRoot = null;
-function getRepoRoot() {
-  if (cachedRepoRoot) return cachedRepoRoot;
+function getRepoRoot(preferredDir) {
+  const startDir = preferredDir || process.cwd();
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
+      cwd: startDir,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     });
-    cachedRepoRoot = stdout.trim().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    return stdout.trim().replace(/\\/g, "/");
   } catch {
-    cachedRepoRoot = process.cwd().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    if (cachedRepoRoot && !preferredDir) return cachedRepoRoot;
+    const fallback = startDir.replace(/\\/g, "/");
+    if (!preferredDir) cachedRepoRoot = fallback;
+    return fallback;
   }
+}
+function findGatedChangeDir(rootDir = getRepoRoot()) {
+  const localDir = join(rootDir, GATED_CHANGE_DIR);
+  if (existsSync(localDir)) return localDir;
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      const parentDir = join(parentRepo, GATED_CHANGE_DIR);
+      if (existsSync(parentDir)) return parentDir;
+    }
+  } catch {
+  }
+  return localDir;
 }
 function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   const dir = join(rootDir, GATED_CHANGE_DIR);
@@ -36,7 +56,8 @@ function ensureGatedChangeDir(rootDir = getRepoRoot()) {
 }
 function loadState(rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
     try {
       const raw = readFileSync(filePath, "utf-8");
@@ -72,10 +93,26 @@ function saveState(state, rootDir = getRepoRoot()) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
   writeFileSync(filePath, JSON.stringify(state, null, 2), "utf-8");
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join(parentRepo, GATED_CHANGE_DIR, STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
 }
 function loadApprovalLock(rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
   try {
     const raw = readFileSync(filePath, "utf-8");
@@ -107,10 +144,26 @@ function saveApprovalLock(lock, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
   const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
   writeFileSync(filePath, JSON.stringify(lock, null, 2), "utf-8");
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join(parentRepo, GATED_CHANGE_DIR, LOCK_FILE), JSON.stringify(lock, null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
 }
 function revokeApprovalLock(status, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return;
   try {
     const raw = readFileSync(filePath, "utf-8");
@@ -167,11 +220,13 @@ async function main() {
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetAgent = toolArgs.agent_type || toolArgs.name || toolArgs.agent || input.agent;
   if (isAgentMatch(targetAgent, "gated-change-developer")) {
-    const state = loadState();
-    let lock = loadApprovalLock();
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
+    let lock = loadApprovalLock(repoRoot);
     if (!lock || lock.status !== "ACTIVE") {
       const prompt2 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
-      const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt2.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt2.includes("Human Approval: Confirmed") || prompt2.includes("humanApprovalConfirmed: true");
+      const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt2.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt2.includes("Human Approval: Confirmed") || prompt2.includes("humanApprovalConfirmed: true") || prompt2.includes("/approve");
       let extractedScope = toolArgs.approvedScope || toolArgs.scope;
       if (!extractedScope) {
         const scopeMatch = prompt2.match(/\[HUMAN_SCOPE_GATE_APPROVED:\s*([^\]]+)\]/i);
@@ -195,7 +250,7 @@ async function main() {
           approvedBy: "human-in-chat",
           status: "ACTIVE"
         };
-        saveApprovalLock(newLock);
+        saveApprovalLock(newLock, repoRoot);
         lock = newLock;
         appendAuditLog({
           sessionId: state.sessionId,
@@ -208,7 +263,7 @@ async function main() {
             approvedScope: newLock.approvedScope,
             approvedBy: newLock.approvedBy
           }
-        });
+        }, repoRoot);
       }
     }
     if (!lock || lock.status !== "ACTIVE") {
@@ -223,7 +278,7 @@ async function main() {
           phase: state.phase,
           humanApproval: state.humanApproval
         }
-      });
+      }, repoRoot);
       const output2 = {
         decision: "deny",
         reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human must explicitly approve the plan at the Human Scope Gate before implementation can start."
@@ -232,9 +287,9 @@ async function main() {
       process.exit(1);
     }
     if (lock.currentAttempt > lock.maxAttempts) {
-      revokeApprovalLock("EXHAUSTED");
+      revokeApprovalLock("EXHAUSTED", repoRoot);
       state.phase = "ESCALATED";
-      saveState(state);
+      saveState(state, repoRoot);
       appendAuditLog({
         sessionId: state.sessionId,
         agent: "controller",
@@ -245,7 +300,7 @@ async function main() {
           currentAttempt: lock.currentAttempt,
           maxAttempts: lock.maxAttempts
         }
-      });
+      }, repoRoot);
       const output2 = {
         decision: "deny",
         reason: `BLOCKED BY POLICY: Implementation retry limit exhausted (${lock.currentAttempt - 1}/${lock.maxAttempts} attempts used). Workflow is escalated to human engineers.`
@@ -255,7 +310,6 @@ async function main() {
     }
     const issueNum = lock.issueNumber || state.issue?.number || "patch";
     const branchName = `fix/issue-${issueNum}`;
-    const repoRoot = getRepoRoot();
     let branchStatus = "unknown";
     try {
       const currentBranch = execSync2("git rev-parse --abbrev-ref HEAD", {
@@ -284,7 +338,7 @@ async function main() {
     state.approvedScope = lock.approvedScope;
     state.implementationAttempt = lock.currentAttempt;
     state.activeBranch = branchName;
-    saveState(state);
+    saveState(state, repoRoot);
     appendAuditLog({
       sessionId: state.sessionId,
       agent: "controller",

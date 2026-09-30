@@ -94,25 +94,45 @@ function formatIntakePayload(issueData, round = 0) {
 
 // src/guardrails/stateStore.ts
 import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join as join2 } from "node:path";
+import { resolve, relative, join as join2, isAbsolute, dirname } from "node:path";
 import { execSync as execSync2 } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
 var AUDIT_FILE = "audit.jsonl";
 var cachedRepoRoot = null;
-function getRepoRoot() {
-  if (cachedRepoRoot) return cachedRepoRoot;
+function getRepoRoot(preferredDir) {
+  const startDir = preferredDir || process.cwd();
   try {
     const stdout = execSync2("git rev-parse --show-toplevel", {
+      cwd: startDir,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     });
-    cachedRepoRoot = stdout.trim().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    return stdout.trim().replace(/\\/g, "/");
   } catch {
-    cachedRepoRoot = process.cwd().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    if (cachedRepoRoot && !preferredDir) return cachedRepoRoot;
+    const fallback = startDir.replace(/\\/g, "/");
+    if (!preferredDir) cachedRepoRoot = fallback;
+    return fallback;
   }
+}
+function findGatedChangeDir(rootDir = getRepoRoot()) {
+  const localDir = join2(rootDir, GATED_CHANGE_DIR);
+  if (existsSync2(localDir)) return localDir;
+  try {
+    const gitCommonDir = execSync2("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      const parentDir = join2(parentRepo, GATED_CHANGE_DIR);
+      if (existsSync2(parentDir)) return parentDir;
+    }
+  } catch {
+  }
+  return localDir;
 }
 function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   const dir = join2(rootDir, GATED_CHANGE_DIR);
@@ -123,7 +143,8 @@ function ensureGatedChangeDir(rootDir = getRepoRoot()) {
 }
 function loadState(rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
-  const filePath = join2(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join2(searchDir, STATE_FILE);
   if (existsSync2(filePath)) {
     try {
       const raw = readFileSync2(filePath, "utf-8");
@@ -159,6 +180,21 @@ function saveState(state, rootDir = getRepoRoot()) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const filePath = join2(rootDir, GATED_CHANGE_DIR, STATE_FILE);
   writeFileSync(filePath, JSON.stringify(state, null, 2), "utf-8");
+  try {
+    const gitCommonDir = execSync2("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join2(parentRepo, GATED_CHANGE_DIR, STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
 }
 function appendAuditLog(entry, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);

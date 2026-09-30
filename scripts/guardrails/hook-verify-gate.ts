@@ -48,8 +48,10 @@ async function main() {
 
   // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
   if (isAgentMatch(targetAgent, "gated-change-developer")) {
-    const state = loadState();
-    let lock = loadApprovalLock();
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
+    let lock = loadApprovalLock(repoRoot);
 
     // If an active physical lock does not exist on disk, check for verified in-chat human approval
     if (!lock || lock.status !== "ACTIVE") {
@@ -59,7 +61,8 @@ async function main() {
         toolArgs.humanApproval === true ||
         prompt.includes("[HUMAN_SCOPE_GATE_APPROVED") ||
         prompt.includes("Human Approval: Confirmed") ||
-        prompt.includes("humanApprovalConfirmed: true");
+        prompt.includes("humanApprovalConfirmed: true") ||
+        prompt.includes("/approve");
 
       // Extract approved scope from tool arguments, verification header, or state
       let extractedScope = toolArgs.approvedScope || toolArgs.scope;
@@ -87,7 +90,7 @@ async function main() {
           approvedBy: "human-in-chat",
           status: "ACTIVE",
         };
-        saveApprovalLock(newLock);
+        saveApprovalLock(newLock, repoRoot);
         lock = newLock;
 
         appendAuditLog({
@@ -101,7 +104,7 @@ async function main() {
             approvedScope: newLock.approvedScope,
             approvedBy: newLock.approvedBy,
           },
-        });
+        }, repoRoot);
       }
     }
 
@@ -118,7 +121,7 @@ async function main() {
           phase: state.phase,
           humanApproval: state.humanApproval,
         },
-      });
+      }, repoRoot);
 
       const output: HookOutput = {
         decision: "deny",
@@ -132,9 +135,9 @@ async function main() {
 
     // 2. Attempt budget exceeded
     if (lock.currentAttempt > lock.maxAttempts) {
-      revokeApprovalLock("EXHAUSTED");
+      revokeApprovalLock("EXHAUSTED", repoRoot);
       state.phase = "ESCALATED";
-      saveState(state);
+      saveState(state, repoRoot);
 
       appendAuditLog({
         sessionId: state.sessionId,
@@ -146,7 +149,7 @@ async function main() {
           currentAttempt: lock.currentAttempt,
           maxAttempts: lock.maxAttempts,
         },
-      });
+      }, repoRoot);
 
       const output: HookOutput = {
         decision: "deny",
@@ -161,7 +164,6 @@ async function main() {
     // 3. Lock is valid -> create/switch branch & authorize execution
     const issueNum = lock.issueNumber || state.issue?.number || "patch";
     const branchName = `fix/issue-${issueNum}`;
-    const repoRoot = getRepoRoot();
     let branchStatus = "unknown";
 
     try {
@@ -200,7 +202,7 @@ async function main() {
     state.approvedScope = lock.approvedScope;
     state.implementationAttempt = lock.currentAttempt;
     state.activeBranch = branchName;
-    saveState(state);
+    saveState(state, repoRoot);
 
     appendAuditLog({
       sessionId: state.sessionId,

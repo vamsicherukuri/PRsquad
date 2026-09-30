@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join } from "node:path";
+import { resolve, relative, join, isAbsolute, dirname } from "node:path";
 import { execSync } from "node:child_process";
 import type { WorkflowState, ApprovalLock, AuditLogEntry } from "./types.js";
 
@@ -11,21 +11,23 @@ export const AUDIT_FILE = "audit.jsonl";
 let cachedRepoRoot: string | null = null;
 
 /**
- * Dynamically resolves the true git repository root.
- * Guarantees that hooks and agents never create or read .gated-change from a subfolder.
+ * Resolves the repository root directory safely.
+ * Supports explicit working directories (such as isolated Copilot worktrees).
  */
-export function getRepoRoot(): string {
-  if (cachedRepoRoot) return cachedRepoRoot;
+export function getRepoRoot(preferredDir?: string): string {
+  const startDir = preferredDir || process.cwd();
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
+      cwd: startDir,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    cachedRepoRoot = stdout.trim().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    return stdout.trim().replace(/\\/g, "/");
   } catch {
-    cachedRepoRoot = process.cwd().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    if (cachedRepoRoot && !preferredDir) return cachedRepoRoot;
+    const fallback = startDir.replace(/\\/g, "/");
+    if (!preferredDir) cachedRepoRoot = fallback;
+    return fallback;
   }
 }
 
@@ -34,9 +36,60 @@ export function getRepoRoot(): string {
  * from the repository root (e.g. "src/auth/service.ts").
  */
 export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot()): string {
+  const cleanFilePath = filePath.replace(/\\/g, "/");
+  const cleanRootDir = rootDir.replace(/\\/g, "/");
+
+  // If filePath is already prefixed with rootDir, cleanly strip it
+  if (cleanFilePath.startsWith(cleanRootDir + "/")) {
+    return cleanFilePath.slice(cleanRootDir.length + 1);
+  }
+  if (cleanFilePath === cleanRootDir) {
+    return "";
+  }
+
   const full = resolve(rootDir, filePath);
-  const rel = relative(rootDir, full);
+  let rel = relative(rootDir, full);
+
+  // If relative path escaped rootDir with '..' but filePath is an absolute path,
+  // attempt to locate the true worktree root for filePath
+  if (rel.startsWith("..") && isAbsolute(filePath)) {
+    try {
+      const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: dirname(filePath),
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim().replace(/\\/g, "/");
+      if (fileWorktreeRoot && cleanFilePath.startsWith(fileWorktreeRoot + "/")) {
+        return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+      }
+    } catch {}
+  }
+
   return rel.split("\\").join("/").replace(/^\.\//, "");
+}
+
+/**
+ * Finds the nearest .gated-change directory, checking the worktree first,
+ * then falling back to the parent git common repository root.
+ */
+export function findGatedChangeDir(rootDir: string = getRepoRoot()): string {
+  const localDir = join(rootDir, GATED_CHANGE_DIR);
+  if (existsSync(localDir)) return localDir;
+
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      const parentDir = join(parentRepo, GATED_CHANGE_DIR);
+      if (existsSync(parentDir)) return parentDir;
+    }
+  } catch {}
+
+  return localDir;
 }
 
 /**
@@ -55,7 +108,8 @@ export function ensureGatedChangeDir(rootDir: string = getRepoRoot()): string {
  */
 export function loadState(rootDir: string = getRepoRoot()): WorkflowState {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
     try {
       const raw = readFileSync(filePath, "utf-8");
@@ -98,6 +152,22 @@ export function saveState(state: WorkflowState, rootDir: string = getRepoRoot())
   state.updatedAt = new Date().toISOString();
   const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
   writeFileSync(filePath, JSON.stringify(state, null, 2), "utf-8");
+
+  // Synchronize to parent repo if running inside an isolated git worktree
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join(parentRepo, GATED_CHANGE_DIR, STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -106,7 +176,8 @@ export function saveState(state: WorkflowState, rootDir: string = getRepoRoot())
  */
 export function loadApprovalLock(rootDir: string = getRepoRoot()): ApprovalLock | null {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
 
   try {
@@ -146,6 +217,22 @@ export function saveApprovalLock(lock: ApprovalLock, rootDir: string = getRepoRo
   ensureGatedChangeDir(rootDir);
   const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
   writeFileSync(filePath, JSON.stringify(lock, null, 2), "utf-8");
+
+  // Synchronize to parent repo if running inside an isolated git worktree
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join(parentRepo, GATED_CHANGE_DIR, LOCK_FILE), JSON.stringify(lock, null, 2), "utf-8");
+      }
+    }
+  } catch {}
 }
 
 /**
@@ -156,7 +243,8 @@ export function revokeApprovalLock(
   rootDir: string = getRepoRoot()
 ): void {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return;
 
   try {

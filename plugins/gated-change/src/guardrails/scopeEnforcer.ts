@@ -101,21 +101,32 @@ export function isEditAllowed(
     };
   }
 
-  const cleanScope = approvedScope
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  // 4. Split multi-path approved scopes on ';' and ',' into individual candidate entries
+  const scopeEntries = approvedScope
+    .split(/[;,]/)
+    .map((entry) =>
+      entry
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "")
+        .replace(/\/+$/, "")
+    )
+    .filter((entry) => entry.length > 0 || approvedScope.trim() === "");
 
-  // 4. Prefix containment
-  const isMatch =
-    cleanScope === "" ||
-    normalized === cleanScope ||
-    normalized.startsWith(cleanScope + "/");
+  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
+
+  // 5. Prefix containment against candidate entries
+  const isMatch = effectiveEntries.some(
+    (cleanScope) =>
+      cleanScope === "" ||
+      normalized === cleanScope ||
+      normalized.startsWith(cleanScope + "/")
+  );
 
   if (!isMatch) {
     return {
       allowed: false,
-      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${cleanScope}/'.`,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${effectiveEntries.join("/' or '")}/'.`,
       normalizedPath: normalized,
     };
   }

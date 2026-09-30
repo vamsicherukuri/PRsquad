@@ -6,7 +6,7 @@
 
 import { readFileSync, appendFileSync } from "node:fs";
 import { isEditAllowed, formatScopeDenialNudge } from "../../src/guardrails/scopeEnforcer.js";
-import { loadState, appendAuditLog } from "../../src/guardrails/stateStore.js";
+import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
 async function main() {
@@ -57,8 +57,10 @@ async function main() {
 
   // Only enforce write scope if this is an edit tool and has a valid file path target
   if (isEditTool && targetPath && typeof targetPath === "string") {
-    const state = loadState();
-    const result = isEditAllowed(targetPath || "", state.approvedScope);
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
+    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot);
 
     if (!result.allowed) {
       const nudge = formatScopeDenialNudge(
@@ -78,7 +80,7 @@ async function main() {
           approvedScope: state.approvedScope,
           reason: result.reason,
         },
-      });
+      }, repoRoot);
 
       const output = {
         decision: "deny",
@@ -87,7 +89,7 @@ async function main() {
         permissionDecisionReason: nudge,
       };
       process.stdout.write(JSON.stringify(output) + "\n");
-      process.exit(1);
+      process.exit(0);
     }
 
     // Write is in scope
@@ -101,7 +103,7 @@ async function main() {
         path: result.normalizedPath,
         approvedScope: state.approvedScope,
       },
-    });
+    }, repoRoot);
 
     process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
     process.exit(0);

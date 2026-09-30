@@ -8,30 +8,71 @@ import { execSync as execSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join } from "node:path";
+import { resolve, relative, join, isAbsolute, dirname } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
 var AUDIT_FILE = "audit.jsonl";
 var cachedRepoRoot = null;
-function getRepoRoot() {
-  if (cachedRepoRoot) return cachedRepoRoot;
+function getRepoRoot(preferredDir) {
+  const startDir = preferredDir || process.cwd();
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
+      cwd: startDir,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
     });
-    cachedRepoRoot = stdout.trim().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    return stdout.trim().replace(/\\/g, "/");
   } catch {
-    cachedRepoRoot = process.cwd().replace(/\\/g, "/");
-    return cachedRepoRoot;
+    if (cachedRepoRoot && !preferredDir) return cachedRepoRoot;
+    const fallback = startDir.replace(/\\/g, "/");
+    if (!preferredDir) cachedRepoRoot = fallback;
+    return fallback;
   }
 }
 function toPosixRelative(filePath, rootDir = getRepoRoot()) {
+  const cleanFilePath = filePath.replace(/\\/g, "/");
+  const cleanRootDir = rootDir.replace(/\\/g, "/");
+  if (cleanFilePath.startsWith(cleanRootDir + "/")) {
+    return cleanFilePath.slice(cleanRootDir.length + 1);
+  }
+  if (cleanFilePath === cleanRootDir) {
+    return "";
+  }
   const full = resolve(rootDir, filePath);
-  const rel = relative(rootDir, full);
+  let rel = relative(rootDir, full);
+  if (rel.startsWith("..") && isAbsolute(filePath)) {
+    try {
+      const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: dirname(filePath),
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim().replace(/\\/g, "/");
+      if (fileWorktreeRoot && cleanFilePath.startsWith(fileWorktreeRoot + "/")) {
+        return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+      }
+    } catch {
+    }
+  }
   return rel.split("\\").join("/").replace(/^\.\//, "");
+}
+function findGatedChangeDir(rootDir = getRepoRoot()) {
+  const localDir = join(rootDir, GATED_CHANGE_DIR);
+  if (existsSync(localDir)) return localDir;
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      const parentDir = join(parentRepo, GATED_CHANGE_DIR);
+      if (existsSync(parentDir)) return parentDir;
+    }
+  } catch {
+  }
+  return localDir;
 }
 function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   const dir = join(rootDir, GATED_CHANGE_DIR);
@@ -42,7 +83,8 @@ function ensureGatedChangeDir(rootDir = getRepoRoot()) {
 }
 function loadState(rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
-  const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
+  const searchDir = findGatedChangeDir(rootDir);
+  const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
     try {
       const raw = readFileSync(filePath, "utf-8");
@@ -78,6 +120,21 @@ function saveState(state, rootDir = getRepoRoot()) {
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
   writeFileSync(filePath, JSON.stringify(state, null, 2), "utf-8");
+  try {
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    if (gitCommonDir) {
+      const parentRepo = resolve(rootDir, gitCommonDir, "..");
+      if (parentRepo.replace(/\\/g, "/") !== rootDir.replace(/\\/g, "/")) {
+        ensureGatedChangeDir(parentRepo);
+        writeFileSync(join(parentRepo, GATED_CHANGE_DIR, STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
+      }
+    }
+  } catch {
+  }
 }
 function appendAuditLog(entry, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
@@ -155,12 +212,17 @@ function isEditAllowed(filePath, approvedScope, rootDir = process.cwd(), issueNu
       normalizedPath: normalized
     };
   }
-  const cleanScope = approvedScope.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-  const isMatch = cleanScope === "" || normalized === cleanScope || normalized.startsWith(cleanScope + "/");
+  const scopeEntries = approvedScope.split(/[;,]/).map(
+    (entry) => entry.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "")
+  ).filter((entry) => entry.length > 0 || approvedScope.trim() === "");
+  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
+  const isMatch = effectiveEntries.some(
+    (cleanScope) => cleanScope === "" || normalized === cleanScope || normalized.startsWith(cleanScope + "/")
+  );
   if (!isMatch) {
     return {
       allowed: false,
-      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${cleanScope}/'.`,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${effectiveEntries.join("/' or '")}/'.`,
       normalizedPath: normalized
     };
   }
@@ -225,8 +287,10 @@ async function main() {
   const targetPath = toolArgs.path || toolArgs.file || toolArgs.targetFile || toolArgs.filePath;
   const isEditTool = tool === "edit" || tool === "edit_file" || tool === "write_to_file" || tool === "create_file" || tool === "write" || tool.includes("edit");
   if (isEditTool && targetPath && typeof targetPath === "string") {
-    const state = loadState();
-    const result = isEditAllowed(targetPath || "", state.approvedScope);
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const state = loadState(repoRoot);
+    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot);
     if (!result.allowed) {
       const nudge = formatScopeDenialNudge(
         result.normalizedPath,
@@ -244,7 +308,7 @@ async function main() {
           approvedScope: state.approvedScope,
           reason: result.reason
         }
-      });
+      }, repoRoot);
       const output = {
         decision: "deny",
         permissionDecision: "deny",
@@ -252,7 +316,7 @@ async function main() {
         permissionDecisionReason: nudge
       };
       process.stdout.write(JSON.stringify(output) + "\n");
-      process.exit(1);
+      process.exit(0);
     }
     appendAuditLog({
       sessionId: state.sessionId,
@@ -264,7 +328,7 @@ async function main() {
         path: result.normalizedPath,
         approvedScope: state.approvedScope
       }
-    });
+    }, repoRoot);
     process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
     process.exit(0);
   }
