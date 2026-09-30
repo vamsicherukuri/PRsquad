@@ -49,7 +49,7 @@ function getStatusBadge(status?: string): string {
 
 export function renderDashboardMarkdown(data: DashboardState): string {
   const p = data.phases || {};
-  const currentBranch = data.activeBranch || (p.scopeGate?.details?.activeBranch) || "Pending Human Scope Gate";
+  const currentBranch = data.activeBranch || (p.scopeGate?.details?.activeBranch) || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
 
   let md = `${DASHBOARD_ANCHOR}
@@ -67,20 +67,20 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 |:---|:---|:---:|:---|
 | **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Awaiting triage"} |
 | **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Pending intake triage"} |
-| **3. Human Scope Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
+| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
 | **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${p.developer?.summary || "Locked until human approval"} |
 | **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Awaiting implementation"} |
 | **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Awaiting QA sign-off"} |
-| **7. Human Merge Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
+| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
 
 ---
 `;
 
-  // Section 1: Architect Plan & Proposed Scope (Human Scope Gate Presentation)
+  // Section 1: Architect Plan & Proposed Scope (Scope Approval Gate Presentation)
   if (p.architect?.details?.plan || p.scopeGate?.details?.approvedScope) {
     const scope = p.scopeGate?.details?.approvedScope || p.architect?.details?.proposedScope || "Pending";
     const risk = p.architect?.details?.riskTier || "Tier 1";
-    md += `\n<details open>\n<summary><b>📐 Architecture Plan & Human Scope Gate Specification</b></summary>\n\n`;
+    md += `\n<details open>\n<summary><b>📐 Architecture Plan & Scope Approval Gate Specification</b></summary>\n\n`;
     md += `- **Approved Scope**: \`${scope}\`\n`;
     md += `- **Risk Assessment**: \`${risk}\`\n`;
     if (p.scopeGate?.details?.approvedBy) {

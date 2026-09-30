@@ -128,7 +128,7 @@ async function main() {
         decision: "deny",
         reason:
           "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. " +
-          "The human must explicitly approve the plan at the Human Scope Gate before implementation can start.",
+          "The human must explicitly approve the plan at the Scope Approval Gate before implementation can start.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
@@ -216,7 +216,7 @@ async function main() {
       activeBranch: branchName,
       phase: "scopeGate",
       status: "APPROVED",
-      summary: `Human Scope Gate approved by ${lock.approvedBy} on branch '${branchName}'`,
+      summary: `Scope Approval Gate approved by ${lock.approvedBy} on branch '${branchName}'`,
       details: {
         approvedScope: lock.approvedScope,
         approvedBy: lock.approvedBy,
@@ -323,7 +323,7 @@ async function main() {
       syncWorkflowDashboard(repoRoot, {
         phase: "mergeGate",
         status: "READY_FOR_MERGE",
-        summary: "Pipeline complete. Ready for human PR review & merge.",
+        summary: "Reviewer audit complete. Awaiting human PR Approval Gate confirmation.",
       });
     }
 

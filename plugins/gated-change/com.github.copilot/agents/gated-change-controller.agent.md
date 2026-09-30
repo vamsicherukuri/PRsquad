@@ -2,7 +2,7 @@
 name: gated-change-controller
 description: Coordinates the Gated Change issue-to-PR workflow using specialist agents and explicit human gates.
 target: github-copilot
-tools: ["agent"]
+tools: ["agent", "powershell", "bash"]
 agents: ["gated-change-intake", "gated-change-architect", "gated-change-developer", "gated-change-qa", "gated-change-reviewer"]
 disable-model-invocation: true
 user-invocable: true
@@ -49,7 +49,7 @@ Route Intake's structured status:
 - `FETCH_FAILED`: if a deterministic `PRE_FETCHED_ISSUE_PAYLOAD` was provided by the ingestion hook in additional context, invoke `gated-change-intake` with that exact verified payload; otherwise report the fetch failure and stop. Never substitute remembered, plausible, or fabricated issue content.
 - `EMPTY`: ask the user to add reproduction or expected-vs-actual behavior, acceptance criteria, and a repository scope to the issue, then confirm.
 - `NOT_READY`: show Intake's one clarifying question and ask the user to update the issue, then confirm.
-- `READY`: proceed immediately and autonomously to `gated-change-architect` with the complete Intake result, including its fetched issue payload. Do not create conversational pauses or ask for confirmation before Architect; surface any contextual notes alongside the plan at the Human Scope Gate.
+- `READY`: proceed immediately and autonomously to `gated-change-architect` with the complete Intake result, including its fetched issue payload. Do not create conversational pauses or ask for confirmation before Architect; surface any contextual notes alongside the plan at the Scope Approval Gate.
 
 Treat any clear confirmation from the human (for example "done", "updated", "fixed", "completed", or equivalent) as ready to re-check. Do not accept clarification content supplied only in chat as a substitute — the GitHub issue itself must be updated; chat text alone never advances the round. Once confirmed, invoke Intake again with the same issue reference and increment the clarification round. Rounds `1` and `2` are two real human clarification opportunities; each is a new Intake invocation, not a resumed subagent. If round `2` still returns `EMPTY` or `NOT_READY`, stop and escalate. Never show raw issue JSON or tool output to the user.
 
@@ -73,10 +73,10 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Only after Intake returns READY, delegate to `gated-change-architect`.
    - Pass the complete structured Intake output forward, including its fetched issue payload; do not re-fetch, summarize, or ask Architect to re-derive requirements.
    - For initial planning, require Architect status `PLAN_READY` and a technical + impact specification, not code.
-   - `BLOCKED`: Architect could not produce a confident plan. Report its `blockedReason` to the human plainly and stop — do not proceed to the Human Scope Gate.
-   - Done when: Architect has returned `PLAN_READY` (presented at the Human Scope Gate) or `BLOCKED` (reported to the human and stopped).
+   - `BLOCKED`: Architect could not produce a confident plan. Report its `blockedReason` to the human plainly and stop — do not proceed to the Scope Approval Gate.
+   - Done when: Architect has returned `PLAN_READY` (presented at the Scope Approval Gate) or `BLOCKED` (reported to the human and stopped).
 
-3. **Human Scope Gate**
+3. **Scope Approval Gate**
    - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, and plain-language summary.
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
@@ -98,7 +98,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
        - `BLOCKED`: pause and report `blocker`. Do not invoke QA. Consume an implementation attempt only when `blocker.partialWorkExists` is true.
        - `SCOPE_AMENDMENT_REQUIRED`: do not invoke QA. Pass the request and approved plan to Architect for a scope-amendment decision.
     - For `SCOPE_AMENDMENT_REQUIRED`, route Architect response:
-       - `SCOPE_AMENDMENT_CONFIRMED`: require a revised plan and `proposedScope`, then return to the Human Scope Gate. Architect confirmation never constitutes approval.
+       - `SCOPE_AMENDMENT_CONFIRMED`: require a revised plan and `proposedScope`, then return to the Scope Approval Gate. Architect confirmation never constitutes approval.
        - `SCOPE_AMENDMENT_REJECTED`: re-invoke Developer under the unchanged approved scope, carrying Architect's reason. This does not itself consume an implementation attempt.
    - If Developer stops or errors out mid-task (as opposed to failing to invoke at all), treat this differently from the invocation-failure case above: real file edits may already exist in the worktree, so a blind fresh retry risks double-applying or corrupting them. Re-delegate to `gated-change-developer` with an explicit instruction to first check the current git status/diff of the approved scope and report what already exists before writing anything further — never assume a clean starting point. This resumed attempt consumes one of the bounded Developer -> QA -> Reviewer attempts below (unlike a pure invocation failure, which does not, since no real work happened). If the partial state looks ambiguous or risky, stop and let the human choose: resume from the existing diff, discard the partial changes and restart clean, or escalate — do not decide this unilaterally.
    - Done when: Developer has returned a validated `IMPLEMENTED` handoff (passed to QA), a `BLOCKED` pause reported to the human, or a `SCOPE_AMENDMENT_REQUIRED` routed to Architect.
@@ -120,14 +120,18 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Delegate to `gated-change-reviewer` only after QA returns a valid `PASS`.
    - Pass the approved Architect plan, original acceptance criteria, complete final Developer handoff, approved scope, final diff reference, complete QA result/evidence, Architect risk/blast-radius data, and any deterministic cross-package hits available.
    - Reviewer reads and reviews the actual final diff. Reviewer is read-only, does not re-run QA tests, does not fix code, and does not autonomously consume retry budget.
-   - Route both `CLEAR` and `CONCERNS` to the human Merge Gate. `CONCERNS` are informational flags and never trigger an automatic retry.
-   - Done when: Reviewer has returned `CLEAR` or `CONCERNS`, both routed to the Human Merge Gate.
+   - Route both `CLEAR` and `CONCERNS` to the PR Approval Gate. `CONCERNS` are informational flags and never trigger an automatic retry.
+   - Done when: Reviewer has returned `CLEAR` or `CONCERNS`, both routed to the PR Approval Gate.
 
-7. **PR / Merge Gate**
+7. **PR Approval Gate**
    - Summarize implementation, QA evidence, Reviewer flags, residual risks, and scope/audit information.
-   - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Reviewer findings, and residual risks). Use a native create-PR capability only when it is actually available in the session; otherwise stop at `PR_READY` and never claim a PR was opened.
-   - Do not merge automatically. Human developer technical review and PM business/scope review form the Merge Gate.
-   - Done when: the `PR_READY` package (or an actually opened native PR) has been presented to the human. Controller stops here and never merges automatically.
+   - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Reviewer findings, and residual risks).
+   - Present the package to the human at the **PR Approval Gate** and conclude with this exact instruction:
+     "To open the official Pull Request on GitHub: type `/create-pr` or reply with explicit approval (e.g. 'Approved, open PR', 'Create PR'). Merging is strictly reserved for human maintainers on GitHub after PR review."
+   - When the human confirms approval via `/create-pr` or in chat, execute the deterministic PR creation command via powershell: `npx -y tsx scripts/guardrails/pr-create.ts`.
+   - Report the opened Pull Request URL directly to the human.
+   - Do not merge automatically. The Gated Change workflow concludes at PR creation; merging is handled by human maintainers on GitHub.
+   - Done when: the Pull Request is open on GitHub and its URL is presented to the human. Controller stops here and never merges automatically.
 
 ## Bounded-loop rules
 

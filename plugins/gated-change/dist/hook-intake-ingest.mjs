@@ -248,7 +248,7 @@ function getStatusBadge(status) {
 }
 function renderDashboardMarkdown(data) {
   const p = data.phases || {};
-  const currentBranch = data.activeBranch || p.scopeGate?.details?.activeBranch || "Pending Human Scope Gate";
+  const currentBranch = data.activeBranch || p.scopeGate?.details?.activeBranch || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   let md = `${DASHBOARD_ANCHOR}
 ## \u{1F6E1}\uFE0F Gated Change Workflow Dashboard
@@ -265,11 +265,11 @@ function renderDashboardMarkdown(data) {
 |:---|:---|:---:|:---|
 | **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Awaiting triage"} |
 | **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Pending intake triage"} |
-| **3. Human Scope Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
+| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Pending architecture plan"} |
 | **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${p.developer?.summary || "Locked until human approval"} |
 | **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Awaiting implementation"} |
 | **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Awaiting QA sign-off"} |
-| **7. Human Merge Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
+| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | ${p.mergeGate?.summary || "Awaiting audit report"} |
 
 ---
 `;
@@ -278,7 +278,7 @@ function renderDashboardMarkdown(data) {
     const risk = p.architect?.details?.riskTier || "Tier 1";
     md += `
 <details open>
-<summary><b>\u{1F4D0} Architecture Plan & Human Scope Gate Specification</b></summary>
+<summary><b>\u{1F4D0} Architecture Plan & Scope Approval Gate Specification</b></summary>
 
 `;
     md += `- **Approved Scope**: \`${scope}\`

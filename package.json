@@ -9,6 +9,7 @@
     "check:plugin": "tsx scripts/check-plugin-consistency.ts",
     "gate:approve": "tsx scripts/guardrails/gate-approve.ts",
     "gate:reject": "tsx scripts/guardrails/gate-approve.ts --reject",
+    "pr:create": "tsx scripts/guardrails/pr-create.ts",
     "sweep": "tsx scripts/guardrails/ast-symbol-sweep.ts",
     "test:guardrails": "tsx scripts/test-guardrails.ts",
     "test:e2e": "tsx scripts/test-e2e-simulation.ts",
