@@ -5,8 +5,8 @@ import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from
 import { execSync as execSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join, isAbsolute, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
@@ -14,7 +14,13 @@ var LOCK_FILE = "approval.lock";
 var AUDIT_FILE = "audit.jsonl";
 var cachedRepoRoot = null;
 function getRepoRoot(preferredDir) {
-  const startDir = preferredDir || process.cwd();
+  let startDir = preferredDir || process.cwd();
+  try {
+    if (existsSync(startDir)) {
+      startDir = realpathSync.native(startDir);
+    }
+  } catch {
+  }
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
       cwd: startDir,
@@ -31,7 +37,11 @@ function getRepoRoot(preferredDir) {
 }
 function findGatedChangeDir(rootDir = getRepoRoot()) {
   const localDir = join(rootDir, GATED_CHANGE_DIR);
-  if (existsSync(localDir)) return localDir;
+  const localLock = join(localDir, LOCK_FILE);
+  const localState = join(localDir, STATE_FILE);
+  if (existsSync(localLock) || existsSync(localState)) {
+    return localDir;
+  }
   try {
     const gitCommonDir = execSync("git rev-parse --git-common-dir", {
       cwd: rootDir,
@@ -55,7 +65,6 @@ function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   return dir;
 }
 function loadState(rootDir = getRepoRoot()) {
-  ensureGatedChangeDir(rootDir);
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
@@ -110,7 +119,6 @@ function saveState(state, rootDir = getRepoRoot()) {
   }
 }
 function loadApprovalLock(rootDir = getRepoRoot()) {
-  ensureGatedChangeDir(rootDir);
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
@@ -119,7 +127,7 @@ function loadApprovalLock(rootDir = getRepoRoot()) {
     const lock = JSON.parse(raw);
     if (lock.status !== "ACTIVE") return null;
     const state = loadState(rootDir);
-    if (state.issue.number > 0 && lock.issueNumber !== state.issue.number) {
+    if (state.issue && state.issue.number > 0 && lock.issueNumber > 0 && lock.issueNumber !== state.issue.number) {
       appendAuditLog(
         {
           sessionId: state.sessionId,

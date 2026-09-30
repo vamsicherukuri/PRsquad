@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join, isAbsolute, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
 import { execSync } from "node:child_process";
 import type { WorkflowState, ApprovalLock, AuditLogEntry } from "./types.js";
 
@@ -15,7 +15,12 @@ let cachedRepoRoot: string | null = null;
  * Supports explicit working directories (such as isolated Copilot worktrees).
  */
 export function getRepoRoot(preferredDir?: string): string {
-  const startDir = preferredDir || process.cwd();
+  let startDir = preferredDir || process.cwd();
+  try {
+    if (existsSync(startDir)) {
+      startDir = realpathSync.native(startDir);
+    }
+  } catch {}
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
       cwd: startDir,
@@ -36,14 +41,30 @@ export function getRepoRoot(preferredDir?: string): string {
  * from the repository root (e.g. "src/auth/service.ts").
  */
 export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot()): string {
-  const cleanFilePath = filePath.replace(/\\/g, "/");
-  const cleanRootDir = rootDir.replace(/\\/g, "/");
+  let cleanFilePath = filePath.replace(/\\/g, "/");
+  let cleanRootDir = rootDir.replace(/\\/g, "/");
+
+  // On Windows, resolve 8.3 short paths (e.g. VCHERU~1 -> vcherukuri)
+  try {
+    if (existsSync(filePath)) {
+      cleanFilePath = realpathSync.native(filePath).replace(/\\/g, "/");
+    } else if (existsSync(dirname(filePath))) {
+      const canonicalDir = realpathSync.native(dirname(filePath)).replace(/\\/g, "/");
+      cleanFilePath = `${canonicalDir}/${basename(filePath)}`;
+    }
+  } catch {}
+
+  try {
+    if (existsSync(rootDir)) {
+      cleanRootDir = realpathSync.native(rootDir).replace(/\\/g, "/");
+    }
+  } catch {}
 
   // If filePath is already prefixed with rootDir, cleanly strip it
-  if (cleanFilePath.startsWith(cleanRootDir + "/")) {
+  if (cleanFilePath.toLowerCase().startsWith(cleanRootDir.toLowerCase() + "/")) {
     return cleanFilePath.slice(cleanRootDir.length + 1);
   }
-  if (cleanFilePath === cleanRootDir) {
+  if (cleanFilePath.toLowerCase() === cleanRootDir.toLowerCase()) {
     return "";
   }
 
@@ -59,7 +80,7 @@ export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot(
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],
       }).trim().replace(/\\/g, "/");
-      if (fileWorktreeRoot && cleanFilePath.startsWith(fileWorktreeRoot + "/")) {
+      if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
         return cleanFilePath.slice(fileWorktreeRoot.length + 1);
       }
     } catch {}
@@ -74,7 +95,13 @@ export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot(
  */
 export function findGatedChangeDir(rootDir: string = getRepoRoot()): string {
   const localDir = join(rootDir, GATED_CHANGE_DIR);
-  if (existsSync(localDir)) return localDir;
+  const localLock = join(localDir, LOCK_FILE);
+  const localState = join(localDir, STATE_FILE);
+
+  // If local directory has either lock or state, prioritize local
+  if (existsSync(localLock) || existsSync(localState)) {
+    return localDir;
+  }
 
   try {
     const gitCommonDir = execSync("git rev-parse --git-common-dir", {
@@ -107,7 +134,6 @@ export function ensureGatedChangeDir(rootDir: string = getRepoRoot()): string {
  * Loads the current workflow state, or initializes a default state if not present.
  */
 export function loadState(rootDir: string = getRepoRoot()): WorkflowState {
-  ensureGatedChangeDir(rootDir);
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
@@ -175,7 +201,6 @@ export function saveState(state: WorkflowState, rootDir: string = getRepoRoot())
  * Automatically invalidates stale locks if the issue number does not match current state.
  */
 export function loadApprovalLock(rootDir: string = getRepoRoot()): ApprovalLock | null {
-  ensureGatedChangeDir(rootDir);
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
@@ -187,7 +212,7 @@ export function loadApprovalLock(rootDir: string = getRepoRoot()): ApprovalLock 
 
     // Detect stale lock from a previous issue
     const state = loadState(rootDir);
-    if (state.issue.number > 0 && lock.issueNumber !== state.issue.number) {
+    if (state.issue && state.issue.number > 0 && lock.issueNumber > 0 && lock.issueNumber !== state.issue.number) {
       appendAuditLog(
         {
           sessionId: state.sessionId,

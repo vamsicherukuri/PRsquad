@@ -8,11 +8,13 @@
  *   Scenario B-2: Scope Boundary Breach Injection (Developer attempts unauthorized edit)
  *   Scenario B-3: QA Rejection & Developer Rework Cycle (verdict: FAIL triggers Attempt 2)
  *   Scenario B-4: Bounded Stop on Persistent Failure (Exhaustion at Attempt 3 triggers ESCALATED)
+ *   Scenario B-5: Live Isolated Git Worktree Execution & Multi-Path Scopes (Cross-worktree lock resolution & scope checks)
  */
 
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import {
   loadState,
   saveState,
@@ -124,6 +126,7 @@ async function runLayerB() {
 
     const forbiddenPath = "package.json";
     let hookOutput = "";
+    let didThrow = false;
 
     try {
       const input = JSON.stringify({
@@ -141,9 +144,11 @@ async function runLayerB() {
         stdio: ["pipe", "pipe", "ignore"],
       });
     } catch (err: any) {
+      didThrow = true;
       hookOutput = err.stdout || "";
     }
 
+    assert(!didThrow, "Write barrier exits cleanly with code 0 on policy denial without crashing (Copilot App protocol)");
     const parsed = JSON.parse(hookOutput);
     assert(parsed.decision === "deny", "Write barrier hook denies edit to unauthorized path");
     assert(
@@ -224,6 +229,131 @@ async function runLayerB() {
     // Clean up lock
     revokeApprovalLock("CONSUMED");
     assert(loadApprovalLock() === null, "Active approval lock safely revoked at end of cycle");
+  }
+
+  // -------------------------------------------------------------------------
+  // SCENARIO B-5: Live Isolated Git Worktree Execution & Multi-Path Scopes
+  // -------------------------------------------------------------------------
+  logScenario("B-5", "Live Isolated Git Worktree Execution & Multi-Path Scopes");
+  {
+    const tempWorktreeDir = path.join(os.tmpdir(), `copilot-wt-test-${Date.now()}`);
+    try {
+      // 1. Create a detached worktree from HEAD
+      execSync(`git worktree add --detach "${tempWorktreeDir}" HEAD`, {
+        cwd: REPO_ROOT,
+        stdio: "ignore",
+      });
+
+      // 2. Set multi-path scope in main repo state
+      const multiScope = "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+      saveApprovalLock({
+        issueNumber: 9,
+        approvedScope: multiScope,
+        maxAttempts: 3,
+        currentAttempt: 1,
+        approvedAt: new Date().toISOString(),
+        approvedBy: "security-auditor",
+        status: "ACTIVE",
+      }, REPO_ROOT);
+
+      const state = loadState(REPO_ROOT);
+      state.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: 9 };
+      state.approvedScope = multiScope;
+      state.phase = "DEVELOPING";
+      saveState(state, REPO_ROOT);
+
+      // 3. Test hook-verify-gate when invoked with input.cwd pointing to worktree
+      const verifyInput = JSON.stringify({
+        agent: "gated-change-developer",
+        cwd: tempWorktreeDir,
+      });
+      const verifyOut = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input: verifyInput,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const verifyParsed = verifyOut.trim() ? JSON.parse(verifyOut) : {};
+      assert(verifyParsed.decision === "allow", "hook-verify-gate successfully resolves parent lock from isolated worktree");
+      assert(verifyParsed.modifiedArgs?.activeBranch !== undefined, "hook-verify-gate injects activeBranch into modifiedArgs for worktree");
+
+      // 4. Test hook-enforce-scope with absolute worktree path for file #1 in multi-path scope
+      const editInScope1 = JSON.stringify({
+        tool: "edit",
+        toolArgs: {
+          path: path.join(tempWorktreeDir, "src/guardrails/scopeEnforcer.ts"),
+          content: "// valid edit in worktree",
+        },
+        cwd: tempWorktreeDir,
+      });
+      const editOut1 = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+        cwd: REPO_ROOT,
+        input: editInScope1,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const editParsed1 = editOut1.trim() ? JSON.parse(editOut1) : {};
+      assert(editParsed1.decision === "allow", "hook-enforce-scope permits edit to file #1 in worktree using absolute path");
+
+      // 5. Test hook-enforce-scope with relative path for file #2 in multi-path scope
+      const editInScope2 = JSON.stringify({
+        tool: "edit",
+        toolArgs: {
+          path: "scripts/test-guardrails.ts",
+          content: "// valid edit in worktree",
+        },
+        cwd: tempWorktreeDir,
+      });
+      const editOut2 = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+        cwd: REPO_ROOT,
+        input: editInScope2,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const editParsed2 = editOut2.trim() ? JSON.parse(editOut2) : {};
+      assert(editParsed2.decision === "allow", "hook-enforce-scope permits edit to file #2 in worktree using relative path");
+
+      // 6. Test hook-enforce-scope denies out-of-scope edit in worktree with clean exit code 0
+      const editOutOfScope = JSON.stringify({
+        tool: "edit",
+        toolArgs: {
+          path: path.join(tempWorktreeDir, "package.json"),
+          content: "// unauthorized edit",
+        },
+        cwd: tempWorktreeDir,
+      });
+      let outOfScopeThrown = false;
+      let editOutDenied = "";
+      try {
+        editOutDenied = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+          cwd: REPO_ROOT,
+          input: editOutOfScope,
+          encoding: "utf-8",
+          stdio: ["pipe", "pipe", "ignore"],
+        });
+      } catch (e: any) {
+        outOfScopeThrown = true;
+        editOutDenied = e.stdout || "";
+      }
+      assert(!outOfScopeThrown, "hook-enforce-scope exits cleanly (code 0) when denying out-of-scope edit in worktree");
+      const editDeniedParsed = JSON.parse(editOutDenied);
+      assert(editDeniedParsed.decision === "deny", "hook-enforce-scope returns decision 'deny' for out-of-scope edit in worktree");
+      assert(
+        editDeniedParsed.permissionDecisionReason?.includes("SCOPE_AMENDMENT_REQUIRED"),
+        "hook-enforce-scope provides SCOPE_AMENDMENT_REQUIRED nudge in worktree"
+      );
+
+      // Clean up lock in REPO_ROOT
+      revokeApprovalLock("CONSUMED", REPO_ROOT);
+    } finally {
+      // Cleanup worktree safely
+      try {
+        execSync(`git worktree remove --force "${tempWorktreeDir}"`, {
+          cwd: REPO_ROOT,
+          stdio: "ignore",
+        });
+      } catch {}
+    }
   }
 
   // -------------------------------------------------------------------------

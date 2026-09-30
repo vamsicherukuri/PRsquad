@@ -18,7 +18,11 @@ import {
   saveApprovalLock,
   loadApprovalLock,
   revokeApprovalLock,
+  toPosixRelative,
+  getRepoRoot,
 } from "../src/guardrails/stateStore.js";
+
+const REPO_ROOT = getRepoRoot();
 
 let passedCount = 0;
 let totalCount = 0;
@@ -188,6 +192,44 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   const nudge = formatScopeDenialNudge("src/common/errors.ts", scope);
   assert(nudge.includes("SCOPE_AMENDMENT_REQUIRED"), "Nudge payload contains SCOPE_AMENDMENT_REQUIRED instruction");
   assert(nudge.includes("src/common/errors.ts"), "Nudge payload includes specific blocked path");
+
+  // Multi-path scope testing (Issue #9: Comma and semicolon delimiters)
+  const multiScope = "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+  const multi1 = isEditAllowed("src/guardrails/scopeEnforcer.ts", multiScope);
+  assert(multi1.allowed, "Permits edit to first candidate in multi-path scope (comma-separated)");
+  const multi2 = isEditAllowed("scripts/test-guardrails.ts", multiScope);
+  assert(multi2.allowed, "Permits edit to second candidate in multi-path scope (comma-separated)");
+  const multiBlocked = isEditAllowed("src/other.ts", multiScope);
+  assert(!multiBlocked.allowed, "Blocks edit to file outside multi-path scope");
+
+  const semiScope = "src/guardrails/scopeEnforcer.ts; scripts/test-guardrails.ts";
+  const semi1 = isEditAllowed("src/guardrails/scopeEnforcer.ts", semiScope);
+  assert(semi1.allowed, "Permits edit to candidate in multi-path scope (semicolon-separated)");
+
+  // Path normalization for worktree absolute paths
+  const fakeWorktreeRoot = "C:/virtual/worktrees/issue-9";
+  const fakeFile = "C:/virtual/worktrees/issue-9/src/guardrails/scopeEnforcer.ts";
+  const normalizedWorktree = toPosixRelative(fakeFile, fakeWorktreeRoot);
+  assert(normalizedWorktree === "src/guardrails/scopeEnforcer.ts", "Cleanly normalizes absolute worktree file path without '..' traversal");
+
+  // Clean denial protocol: hook-enforce-scope exits with code 0 on denial (not crashing with code 1)
+  try {
+    const input = JSON.stringify({
+      tool: "edit",
+      toolArgs: { path: "package.json", content: "unauthorized" }
+    });
+    const stdout = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+      cwd: REPO_ROOT,
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const parsed = JSON.parse(stdout);
+    assert(parsed.decision === "deny", "Hook returns decision 'deny' on unauthorized edit");
+    assert(true, "Hook exits cleanly with code 0 on policy denial (Copilot App clean block protocol)");
+  } catch (err: any) {
+    assert(false, `Hook crashed instead of clean exit: ${err.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

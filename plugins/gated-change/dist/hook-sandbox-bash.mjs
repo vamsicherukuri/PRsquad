@@ -4,15 +4,22 @@
 import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/stateStore.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
-import { resolve, relative, join, isAbsolute, dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
+var LOCK_FILE = "approval.lock";
 var AUDIT_FILE = "audit.jsonl";
 var cachedRepoRoot = null;
 function getRepoRoot(preferredDir) {
-  const startDir = preferredDir || process.cwd();
+  let startDir = preferredDir || process.cwd();
+  try {
+    if (existsSync(startDir)) {
+      startDir = realpathSync.native(startDir);
+    }
+  } catch {
+  }
   try {
     const stdout = execSync("git rev-parse --show-toplevel", {
       cwd: startDir,
@@ -29,7 +36,11 @@ function getRepoRoot(preferredDir) {
 }
 function findGatedChangeDir(rootDir = getRepoRoot()) {
   const localDir = join(rootDir, GATED_CHANGE_DIR);
-  if (existsSync(localDir)) return localDir;
+  const localLock = join(localDir, LOCK_FILE);
+  const localState = join(localDir, STATE_FILE);
+  if (existsSync(localLock) || existsSync(localState)) {
+    return localDir;
+  }
   try {
     const gitCommonDir = execSync("git rev-parse --git-common-dir", {
       cwd: rootDir,
@@ -53,7 +64,6 @@ function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   return dir;
 }
 function loadState(rootDir = getRepoRoot()) {
-  ensureGatedChangeDir(rootDir);
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, STATE_FILE);
   if (existsSync(filePath)) {
