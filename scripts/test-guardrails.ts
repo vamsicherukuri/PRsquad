@@ -8,6 +8,8 @@
  *   5. Tier 1 AST Symbol Sweep across package boundaries
  */
 
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
@@ -23,6 +25,10 @@ import {
 } from "../src/guardrails/stateStore.js";
 
 const REPO_ROOT = getRepoRoot();
+const gatedDir = join(REPO_ROOT, ".gated-change");
+const stateBackup = existsSync(join(gatedDir, "state.json")) ? readFileSync(join(gatedDir, "state.json"), "utf-8") : null;
+const lockBackup = existsSync(join(gatedDir, "approval.lock")) ? readFileSync(join(gatedDir, "approval.lock"), "utf-8") : null;
+
 
 let passedCount = 0;
 let totalCount = 0;
@@ -350,6 +356,17 @@ console.log("\n=======================================================");
 console.log(`  VERIFICATION COMPLETE: ${passedCount}/${totalCount} checks passed.`);
 console.log("=======================================================\n");
 
+function restoreBackups() {
+  if (stateBackup !== null) {
+    writeFileSync(join(gatedDir, "state.json"), stateBackup, "utf-8");
+  }
+  if (lockBackup !== null) {
+    writeFileSync(join(gatedDir, "approval.lock"), lockBackup, "utf-8");
+  }
+}
+restoreBackups();
+
 if (passedCount < totalCount) {
   process.exit(1);
 }
+
