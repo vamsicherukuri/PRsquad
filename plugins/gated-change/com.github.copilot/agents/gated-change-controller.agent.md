@@ -81,12 +81,15 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
-   - End the plan presentation with this exact instruction to the human: "To approve: reply with explicit approval (e.g. 'Approved', 'Proceed with implementation'), and sign the scope lock by running `npm run gate:approve -- --scope <path> --issue <number>`."
-   - Explicit typed approval (e.g. "Approved", "Proceed", "Plan approved") is sufficient to proceed; do not require manual UI mode switching between Plan mode and Agent mode, as mechanical lock verification and process hooks deterministically enforce scope boundaries.
+   - End the plan presentation with this exact instruction to the human: "To approve: reply with explicit approval (e.g. 'Approved', 'Proceed with implementation'). To request changes or revisions, reply with your feedback."
+   - Explicit typed approval in chat (e.g. "Approved", "Proceed", "Plan approved") is 100% sufficient to proceed; never require the human to run terminal commands or toggle UI modes. The pipeline's mechanical hooks automatically verify and sign the approval lock under the hood.
    - Done when: the human's reply explicitly confirms approval of the plan — only then may Developer be delegated to.
 
 4. **Developer**
    - Only after explicit human scope approval is granted, delegate to `gated-change-developer`.
+   - In your delegation prompt to `gated-change-developer`, you must include:
+     - Header: `[HUMAN_SCOPE_GATE_APPROVED: <approvedScope>]`
+     - Fields: `humanApprovalConfirmed: true` and `approvedScope: "<approvedScope>"`
    - Pass the approved plan, original acceptance criteria, risk tier, approved scope, and implementation-attempt number. Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.

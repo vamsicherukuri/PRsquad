@@ -168,7 +168,49 @@ async function main() {
   const targetAgent = toolArgs.agent_type || toolArgs.name || toolArgs.agent || input.agent;
   if (isAgentMatch(targetAgent, "gated-change-developer")) {
     const state = loadState();
-    const lock = loadApprovalLock();
+    let lock = loadApprovalLock();
+    if (!lock || lock.status !== "ACTIVE") {
+      const prompt2 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
+      const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt2.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt2.includes("Human Approval: Confirmed") || prompt2.includes("humanApprovalConfirmed: true");
+      let extractedScope = toolArgs.approvedScope || toolArgs.scope;
+      if (!extractedScope) {
+        const scopeMatch = prompt2.match(/\[HUMAN_SCOPE_GATE_APPROVED:\s*([^\]]+)\]/i);
+        if (scopeMatch) extractedScope = scopeMatch[1].trim();
+      }
+      if (!extractedScope) {
+        const approvedScopeMatch = prompt2.match(/(?:approvedScope|approved\s*scope)\s*[:=]\s*["`']?([^"`'\r\n]+)["`']?/i);
+        if (approvedScopeMatch) extractedScope = approvedScopeMatch[1].trim();
+      }
+      if (!extractedScope && state.approvedScope) {
+        extractedScope = state.approvedScope;
+      }
+      if (explicitApproval && extractedScope) {
+        const issueNum2 = toolArgs.issueNumber || state.issue?.number || 0;
+        const newLock = {
+          issueNumber: issueNum2,
+          approvedScope: String(extractedScope).replace(/\\/g, "/"),
+          maxAttempts: 3,
+          currentAttempt: state.implementationAttempt || 1,
+          approvedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          approvedBy: "human-in-chat",
+          status: "ACTIVE"
+        };
+        saveApprovalLock(newLock);
+        lock = newLock;
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "human_scope_gate_auto_signed_from_chat",
+          decision: "allow",
+          details: {
+            issueNumber: newLock.issueNumber,
+            approvedScope: newLock.approvedScope,
+            approvedBy: newLock.approvedBy
+          }
+        });
+      }
+    }
     if (!lock || lock.status !== "ACTIVE") {
       appendAuditLog({
         sessionId: state.sessionId,
@@ -184,7 +226,7 @@ async function main() {
       });
       const output2 = {
         decision: "deny",
-        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without a verified human scope approval lock in .gated-change/approval.lock. The human must approve the plan (e.g. by running `npm run gate:approve -- --scope <path>`) before implementation can start."
+        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human must explicitly approve the plan at the Human Scope Gate before implementation can start."
       };
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);

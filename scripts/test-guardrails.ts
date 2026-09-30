@@ -133,6 +133,32 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
   } catch (err: any) {
     assert(false, `Hook failed on valid lock: ${err.message}`);
   }
+
+  // Verify in-chat human approval auto-signs mechanical lock when physical lock is absent
+  revokeApprovalLock("REVOKED");
+  try {
+    const input = JSON.stringify({
+      tool: "agent",
+      toolArgs: {
+        name: "gated-change-developer",
+        humanApprovalConfirmed: true,
+        approvedScope: "src/services/billing/",
+        prompt: "[HUMAN_SCOPE_GATE_APPROVED: src/services/billing/] Implement fix",
+      },
+    });
+    const stdout = execSync(`node --import tsx scripts/guardrails/hook-verify-gate.ts`, {
+      input,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const parsed = JSON.parse(stdout);
+    assert(parsed.decision === "allow", "Hook auto-signs lock and allows developer on confirmed in-chat approval");
+    const autoSignedLock = loadApprovalLock();
+    assert(autoSignedLock?.status === "ACTIVE", "Auto-signed lock is active on disk");
+    assert(autoSignedLock?.approvedBy === "human-in-chat", "Auto-signed lock records human-in-chat approver");
+  } catch (err: any) {
+    assert(false, `Hook failed to auto-sign on in-chat approval: ${err.message}`);
+  }
 }
 
 // ---------------------------------------------------------------------------

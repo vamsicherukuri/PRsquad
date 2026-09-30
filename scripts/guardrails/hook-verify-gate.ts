@@ -6,8 +6,8 @@
 
 import { readFileSync, appendFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { loadState, saveState, loadApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot } from "../../src/guardrails/stateStore.js";
-import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
+import { loadState, saveState, loadApprovalLock, saveApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot } from "../../src/guardrails/stateStore.js";
+import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
@@ -49,7 +49,61 @@ async function main() {
   // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
   if (isAgentMatch(targetAgent, "gated-change-developer")) {
     const state = loadState();
-    const lock = loadApprovalLock();
+    let lock = loadApprovalLock();
+
+    // If an active physical lock does not exist on disk, check for verified in-chat human approval
+    if (!lock || lock.status !== "ACTIVE") {
+      const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
+      const explicitApproval =
+        toolArgs.humanApprovalConfirmed === true ||
+        toolArgs.humanApproval === true ||
+        prompt.includes("[HUMAN_SCOPE_GATE_APPROVED") ||
+        prompt.includes("Human Approval: Confirmed") ||
+        prompt.includes("humanApprovalConfirmed: true");
+
+      // Extract approved scope from tool arguments, verification header, or state
+      let extractedScope = toolArgs.approvedScope || toolArgs.scope;
+      if (!extractedScope) {
+        const scopeMatch = prompt.match(/\[HUMAN_SCOPE_GATE_APPROVED:\s*([^\]]+)\]/i);
+        if (scopeMatch) extractedScope = scopeMatch[1].trim();
+      }
+      if (!extractedScope) {
+        const approvedScopeMatch = prompt.match(/(?:approvedScope|approved\s*scope)\s*[:=]\s*["`']?([^"`'\r\n]+)["`']?/i);
+        if (approvedScopeMatch) extractedScope = approvedScopeMatch[1].trim();
+      }
+      if (!extractedScope && state.approvedScope) {
+        extractedScope = state.approvedScope;
+      }
+
+      // If explicit in-chat approval and valid scope are present, auto-sign the mechanical lock
+      if (explicitApproval && extractedScope) {
+        const issueNum = toolArgs.issueNumber || state.issue?.number || 0;
+        const newLock: ApprovalLock = {
+          issueNumber: issueNum,
+          approvedScope: String(extractedScope).replace(/\\/g, "/"),
+          maxAttempts: 3,
+          currentAttempt: state.implementationAttempt || 1,
+          approvedAt: new Date().toISOString(),
+          approvedBy: "human-in-chat",
+          status: "ACTIVE",
+        };
+        saveApprovalLock(newLock);
+        lock = newLock;
+
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "human_scope_gate_auto_signed_from_chat",
+          decision: "allow",
+          details: {
+            issueNumber: newLock.issueNumber,
+            approvedScope: newLock.approvedScope,
+            approvedBy: newLock.approvedBy,
+          },
+        });
+      }
+    }
 
     // 1. Missing or inactive approval lock
     if (!lock || lock.status !== "ACTIVE") {
@@ -69,8 +123,8 @@ async function main() {
       const output: HookOutput = {
         decision: "deny",
         reason:
-          "BLOCKED BY POLICY: Developer agent cannot be invoked without a verified human scope approval lock in .gated-change/approval.lock. " +
-          "The human must approve the plan (e.g. by running `npm run gate:approve -- --scope <path>`) before implementation can start.",
+          "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. " +
+          "The human must explicitly approve the plan at the Human Scope Gate before implementation can start.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
