@@ -24,6 +24,38 @@ const BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 const DANGEROUS_SYSTEM_REGEX =
   /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
 
+// Any 'git clean' invocation, captured so we can inspect its flags regardless of order
+const GIT_CLEAN_COMMAND_REGEX = /\bgit\s+clean\b(.*)$/i;
+
+/**
+ * Determines whether a 'git clean' invocation includes any force-type flag
+ * (e.g. -f, --force, -fd, -fdx, -fx, -xdf, -df, -dfx), in any flag order,
+ * while explicitly exempting dry-run invocations (-n / --dry-run).
+ */
+function isForceGitClean(trimmed: string): boolean {
+  const match = trimmed.match(GIT_CLEAN_COMMAND_REGEX);
+  if (!match) {
+    return false;
+  }
+
+  const tokens = (match[1] || "").split(/\s+/).filter(Boolean);
+
+  for (const token of tokens) {
+    if (token === "--force") {
+      return true;
+    }
+    if (token === "--dry-run" || token === "-n") {
+      continue;
+    }
+    // Short-option cluster (e.g. -f, -fd, -fdx, -fx, -xdf, -df, -dfx) containing 'f'
+    if (/^-[^-]*f[^-]*$/i.test(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Validates whether a shell command is permissible for the calling agent.
  */
@@ -32,6 +64,16 @@ export function validateCommandForAgent(
   agent: string = "unknown"
 ): BashValidationResult {
   const trimmed = command.trim();
+
+  // 0. Global Safety: Block destructive 'git clean' force-flag invocations for ALL agents.
+  // Dry-run invocations ('git clean -n' / 'git clean --dry-run') remain allowed and fall
+  // through to the normal per-agent logic below.
+  if (isForceGitClean(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL: Destructive git clean operations with force flags are prohibited.",
+    };
+  }
 
   // 1. Reviewer Agent: Strict Allowlist (supports qualified names)
   if (isAgentMatch(agent, "gated-change-reviewer")) {

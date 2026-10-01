@@ -319,6 +319,64 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
   const revDeleteBranch = validateCommandForAgent("git branch -D feature", "gated-change-reviewer");
   assert(!revDeleteBranch.allowed, "Reviewer strictly blocked from deleting branches (human-only)");
 
+  // Destructive 'git clean' force-flag guardrail (agent-agnostic)
+  const CLEAN_DENIAL_REASON = "POLICY_DENIAL: Destructive git clean operations with force flags are prohibited.";
+
+  const devCleanF = validateCommandForAgent("git clean -f", "gated-change-developer");
+  assert(
+    !devCleanF.allowed && devCleanF.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from 'git clean -f' with exact POLICY_DENIAL reason",
+    devCleanF.reason
+  );
+
+  const devCleanFd = validateCommandForAgent("git clean -fd", "gated-change-developer");
+  assert(
+    !devCleanFd.allowed && devCleanFd.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from 'git clean -fd'",
+    devCleanFd.reason
+  );
+
+  const devCleanFdx = validateCommandForAgent("git clean -fdx", "gated-change-developer");
+  assert(
+    !devCleanFdx.allowed && devCleanFdx.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from 'git clean -fdx'",
+    devCleanFdx.reason
+  );
+
+  const devCleanXdf = validateCommandForAgent("git clean -xdf", "gated-change-developer");
+  assert(
+    !devCleanXdf.allowed && devCleanXdf.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from flag-order-independent 'git clean -xdf'",
+    devCleanXdf.reason
+  );
+
+  const devCleanForceLong = validateCommandForAgent("git clean --force", "gated-change-developer");
+  assert(
+    !devCleanForceLong.allowed && devCleanForceLong.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from 'git clean --force'",
+    devCleanForceLong.reason
+  );
+
+  const devCleanDryRun = validateCommandForAgent("git clean -n", "gated-change-developer");
+  assert(devCleanDryRun.allowed, "Developer allowed 'git clean -n' (dry-run)");
+
+  const devCleanDryRunLong = validateCommandForAgent("git clean --dry-run", "gated-change-developer");
+  assert(devCleanDryRunLong.allowed, "Developer allowed 'git clean --dry-run'");
+
+  const qaCleanForce = validateCommandForAgent("git clean -fdx", "gated-change-qa");
+  assert(
+    !qaCleanForce.allowed && qaCleanForce.reason === CLEAN_DENIAL_REASON,
+    "QA strictly blocked from force-flag 'git clean' (agent-agnostic rule)",
+    qaCleanForce.reason
+  );
+
+  const revCleanForce = validateCommandForAgent("git clean -f", "gated-change-reviewer");
+  assert(
+    !revCleanForce.allowed && revCleanForce.reason === CLEAN_DENIAL_REASON,
+    "Reviewer strictly blocked from force-flag 'git clean' (agent-agnostic rule)",
+    revCleanForce.reason
+  );
+
   // PowerShell execution tool tests (Windows Copilot host compatibility)
   const psDevInput = JSON.stringify({
     tool: "powershell",
