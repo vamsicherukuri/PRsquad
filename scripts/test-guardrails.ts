@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -216,6 +217,40 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   const semiScope = "src/guardrails/scopeEnforcer.ts; scripts/test-guardrails.ts";
   const semi1 = isEditAllowed("src/guardrails/scopeEnforcer.ts", semiScope);
   assert(semi1.allowed, "Permits edit to candidate in multi-path scope (semicolon-separated)");
+
+  // Issue #11: isWithinScope (read-path tool) must also split multi-path declaredScope on
+  // ';'/',' -- it previously treated the whole unsplit string as one literal prefix, so no real
+  // file path could ever match and valid in-scope reads were falsely blocked.
+  const readRoot = REPO_ROOT;
+  const commaDeclaredScope = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", commaDeclaredScope, readRoot),
+    "isWithinScope permits read of first candidate in multi-path scope (comma-separated)"
+  );
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", commaDeclaredScope, readRoot),
+    "isWithinScope permits read of second candidate in multi-path scope (comma-separated)"
+  );
+
+  const semiDeclaredScope = "src/scopeTool.ts; scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", semiDeclaredScope, readRoot),
+    "isWithinScope permits read of first candidate in multi-path scope (semicolon-separated, issue repro)"
+  );
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", semiDeclaredScope, readRoot),
+    "isWithinScope permits read of second candidate in multi-path scope (semicolon-separated, issue repro)"
+  );
+
+  assert(
+    isWithinScope("src/guardrails/scopeEnforcer.ts", "src/guardrails; scripts/test-guardrails.ts", readRoot),
+    "isWithinScope permits read of file nested under a multi-path entry via prefix containment"
+  );
+
+  assert(
+    !isWithinScope("src/other.ts", semiDeclaredScope, readRoot),
+    "isWithinScope blocks read of file outside all declared multi-path entries"
+  );
 
   // Path normalization for worktree absolute paths
   const fakeWorktreeRoot = "C:/virtual/worktrees/issue-9";

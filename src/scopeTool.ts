@@ -11,8 +11,24 @@ import { defineTool, type Tool } from "@github/copilot-sdk";
  */
 export function isWithinScope(path: string, declaredScope: string, root: string): boolean {
   const rel = isAbsolute(path) ? relative(root, path) : path;
-  const normalizedScope = declaredScope.replace(/^\/+/, "").replace(/\/+$/, "");
-  return rel === normalizedScope || rel.startsWith(`${normalizedScope}/`);
+
+  // Split multi-path declared scopes on ';' and ',' into individual candidate entries, mirroring
+  // the write-path fix in isEditAllowed (src/guardrails/scopeEnforcer.ts) so a declaredScope like
+  // "src/scopeTool.ts; scripts/test-guardrails.ts" is treated as two independent prefixes rather
+  // than one unsplit (and therefore unmatchable) literal string.
+  const scopeEntries = declaredScope
+    .split(/[;,]/)
+    .map((entry) => entry.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, ""))
+    .filter((entry) => entry.length > 0);
+
+  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
+
+  return effectiveEntries.some(
+    (normalizedScope) =>
+      normalizedScope === "" ||
+      rel === normalizedScope ||
+      rel.startsWith(`${normalizedScope}/`)
+  );
 }
 
 export function makeScopedReadTool(declaredScope: string, root: string): Tool<{ path: string }> {
