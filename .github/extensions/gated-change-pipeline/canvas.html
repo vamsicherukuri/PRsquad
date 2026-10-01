@@ -480,62 +480,86 @@
       gap: 10px;
     }
 
-    .details-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 8px;
-      margin-top: 4px;
-    }
-
-    .stat-pill {
+    /* Deterministic Governance Cards in Stage Overview */
+    .gov-card {
       background: var(--bg);
       border: 1px solid var(--border-muted);
       border-radius: 6px;
-      padding: 6px 8px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 10px;
+      margin-top: 4px;
     }
 
-    .stat-label {
+    .gov-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-muted);
+      padding-bottom: 6px;
+    }
+
+    .gov-title {
+      font-size: 10px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      color: var(--purple-text);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .gov-cost {
       font-size: 9.5px;
-      font-family: ui-monospace, monospace;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 600;
+      color: var(--green-text);
+      background: rgba(46, 160, 67, 0.12);
+      border: 1px solid rgba(46, 160, 67, 0.35);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .gov-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .gov-pill {
+      background: var(--card-bg);
+      border: 1px solid var(--border-muted);
+      border-radius: 6px;
+      padding: 7px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .gov-label {
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-    }
-
-    .stat-val {
-      font-size: 11.5px;
       font-weight: 600;
-      color: var(--text);
-      font-family: ui-monospace, monospace;
-      word-break: break-all;
     }
 
-    /* Hook Architecture Matrix Table */
-    .hook-matrix-table {
-      width: 100%;
-      border-collapse: collapse;
+    .gov-val {
       font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      line-height: 1.25;
     }
-    .hook-matrix-table th {
-      text-align: left;
-      padding: 6px 8px;
-      font-family: ui-monospace, monospace;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border);
-      font-weight: 600;
+
+    .gov-desc {
       font-size: 10px;
-      text-transform: uppercase;
-    }
-    .hook-matrix-table td {
-      padding: 7px 8px;
-      border-bottom: 1px solid var(--border-muted);
-      vertical-align: middle;
-    }
-    .hook-matrix-table tr:hover td {
-      background: var(--card-bg-hover);
+      color: #8b949e;
+      line-height: 1.35;
+      margin-top: 1px;
     }
 
     /* Hook Events Stream */
@@ -812,22 +836,19 @@
 
   </div>
 
-  <!-- Section Tabs: Stage Details vs Hook Architecture vs Live Guardrail Hook Feed -->
+  <!-- Section Tabs: Stage Overview vs Live Guardrail Hook Feed -->
   <div class="section-tabs">
     <button class="tab-btn active" id="tab-btn-details" onclick="switchView('details')">
-      📋 Stage Overview
-    </button>
-    <button class="tab-btn" id="tab-btn-matrix" onclick="switchView('matrix')">
-      🛡️ Hook Architecture
+      Stage Overview
     </button>
     <button class="tab-btn" id="tab-btn-hooks" onclick="switchView('hooks')">
-      📜 Live Audit Feed <span class="badge-count" id="hook-count-badge">0</span>
+      Live Audit Feed <span class="badge-count" id="hook-count-badge">0</span>
     </button>
   </div>
 
   <!-- Content Area -->
   <div class="content-area">
-    <!-- View 1: Stage Details -->
+    <!-- View 1: Stage Details & Deterministic Governance Policy -->
     <div class="panel-box" id="view-details">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--text-muted); font-weight:600;" id="detail-title">
@@ -837,7 +858,7 @@
           READY FOR MERGE
         </span>
       </div>
-      <div style="font-size:12px; line-height:1.5; color:#c9d1d9;" id="detail-content">
+      <div style="font-size:12px; line-height:1.45; color:#c9d1d9;" id="detail-content">
         Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.
       </div>
 
@@ -850,98 +871,9 @@
         </a>
       </div>
 
-      <div class="details-grid" id="detail-stats">
-        <div class="stat-pill">
-          <div class="stat-label">Active Guardrail Hook</div>
-          <div class="stat-val" style="color:var(--purple-text);">hook-verify-gate: PR review</div>
-        </div>
-        <div class="stat-pill">
-          <div class="stat-label">Pull Request Link</div>
-          <div class="stat-val" style="font-size:11px; color:var(--blue-text);" id="stat-pr-val">PR #23 (Open)</div>
-        </div>
-        <div class="stat-pill">
-          <div class="stat-label">Governance Policy</div>
-          <div class="stat-val">Human Approval Required</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- View 2: Hook Architecture Matrix -->
-    <div class="panel-box" id="view-matrix" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--purple-text); font-weight:600;">
-          🛡️ Deterministic Governance Architecture (Process-Level Hooks)
-        </span>
-        <span style="font-size:10.5px; color:var(--green-text); font-family:ui-monospace; font-weight:600;">0.00 AIU · Zero Token Overhead</span>
-      </div>
-      
-      <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">
-        Specialist agents are governed by deterministic OS and process-level hooks intercepting tool calls before file writes or shell execution:
-      </div>
-
-      <div style="overflow-x:auto;">
-        <table class="hook-matrix-table">
-          <thead>
-            <tr>
-              <th>Agent / Stage</th>
-              <th>Hook Bundle</th>
-              <th>Trigger Point</th>
-              <th>Deterministic Policy Enforced</th>
-              <th>Cost</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Intake</strong></td>
-              <td><code>hook-intake-ingest.mjs</code></td>
-              <td><code>preToolUse: fetch</code></td>
-              <td>Fast-rejects <code>CLOSED</code> / duplicate issues in &lt;2s with 0 tokens</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>Architect</strong></td>
-              <td><code>makeScopedReadTool</code></td>
-              <td><code>toolWrap: read</code></td>
-              <td>Strict path containment; prevents whole-repository scanning</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>Scope Gate</strong></td>
-              <td><code>hook-verify-gate.mjs</code></td>
-              <td><code>preToolUse: agent</code></td>
-              <td>Blocks developer execution until cryptographic <code>approval.lock</code> is signed</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>Developer</strong></td>
-              <td><code>hook-enforce-scope.mjs</code><br><code>hook-sandbox-bash.mjs</code></td>
-              <td><code>preToolUse: edit</code><br><code>preToolUse: bash</code></td>
-              <td><strong>Write Barrier</strong>: Hard blocks edits outside scope with smart nudge<br><strong>Sandbox</strong>: Blocks <code>git push origin main</code> &amp; branch deletion</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>QA Test</strong></td>
-              <td><code>hook-sandbox-bash.mjs</code></td>
-              <td><code>preToolUse: bash</code></td>
-              <td>Allows test commands (<code>npm test</code>, <code>tsx</code>); strictly denies push, commit, or file tampering</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>Reviewer</strong></td>
-              <td><code>hook-sandbox-bash.mjs</code><br><code>ast-symbol-sweep.ts</code></td>
-              <td><code>preToolUse: bash</code><br><code>ast-analysis</code></td>
-              <td>Restricted to read-only git diff/status (blocks <code>&gt;</code> file redirects); runs AST export sweep</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-            <tr>
-              <td><strong>PR Gate</strong></td>
-              <td><code>prCreator.ts</code></td>
-              <td><code>gate / postToolUse</code></td>
-              <td>Autonomous merging physically disabled (<code>auto-merge: disabled</code>); requires maintainer merge</td>
-              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Dedicated Deterministic Governance Section -->
+      <div id="detail-gov">
+        <!-- Rendered dynamically by renderDetail(index) -->
       </div>
     </div>
 
@@ -971,77 +903,105 @@
         badge: "READY",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Validates issue completeness, reproducibility, and acceptance criteria before engaging model planning.",
-        stats: [
-          { label: "Active Hook", val: "hook-intake-ingest.mjs" },
-          { label: "Trigger Point", val: "preToolUse: fetch_issue" },
-          { label: "Policy Enforced", val: "Fast-fail CLOSED issues in <2s (0 tokens)" }
-        ]
+        gov: {
+          hookName: "hook-intake-ingest.mjs",
+          hookDesc: "Autonomous gatekeeper validating issue status against GitHub API before invoking any LLM.",
+          triggerName: "preToolUse: fetch_issue",
+          triggerDesc: "Intercepts the initial issue fetch before reasoning tokens are spent.",
+          policyName: "Fast-Fail Inactive / Closed Issues",
+          policyDesc: "Aborts closed, duplicate, or non-bug issues in <2s with 0 tokens spent.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "Architect Agent Plan",
         badge: "PLAN_READY",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Investigated root cause using read-scoped tools. Produced surgical modification plan with strict blast-radius bounding.",
-        stats: [
-          { label: "Active Hook", val: "makeScopedReadTool" },
-          { label: "Trigger Point", val: "toolWrap: read_file" },
-          { label: "Policy Enforced", val: "Strict directory boundary isolation" }
-        ]
+        content: "Diagnoses root cause using read-scoped tools and produces surgical modification boundaries with blast-radius containment.",
+        gov: {
+          hookName: "makeScopedReadTool",
+          hookDesc: "Filesystem isolation jail restricting file reads strictly to relevant symbol scope.",
+          triggerName: "toolWrap: read_file",
+          triggerDesc: "Wraps file reader to inspect target paths before disk access occurs.",
+          policyName: "Strict Read-Boundary Isolation",
+          policyDesc: "Blocks full repository scanning; prevents context blowout and token drain.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "Scope Approval Gate",
         badge: "APPROVED",
         badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Hard human-in-the-loop review barrier. Developer execution remained blocked until PM confirmed proposed boundaries in chat.",
-        stats: [
-          { label: "Active Hook", val: "hook-verify-gate.mjs" },
-          { label: "Trigger Point", val: "preToolUse: agent" },
-          { label: "Policy Enforced", val: "Cryptographic approval.lock verification" }
-        ]
+        content: "Human-in-the-loop review barrier. Developer execution remains blocked until PM confirms proposed boundaries in chat.",
+        gov: {
+          hookName: "hook-verify-gate.mjs",
+          hookDesc: "Cryptographic lock verifier enforcing physical human consent before developer invocation.",
+          triggerName: "preAgent: developer",
+          triggerDesc: "Intercepts agent lifecycle before Developer agent process is spawned.",
+          policyName: "Cryptographic Scope Verification",
+          policyDesc: "Hard-stops execution until maintainer signs approval.lock in chat.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "Developer Implementation",
         badge: "IMPLEMENTED",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Developer applied code fix strictly within approved boundaries. Guardrail write barrier and command sandbox active.",
-        stats: [
-          { label: "Active Hook 1", val: "hook-enforce-scope.mjs (Write Barrier)" },
-          { label: "Active Hook 2", val: "hook-sandbox-bash.mjs (Deny Push/BranchDel)" },
-          { label: "Write Barrier", val: "Hard Block on non-approved files" }
-        ]
+        content: "Developer applies code fix strictly within approved boundary files. Guardrail write barrier and command sandbox active.",
+        gov: {
+          hookName: "hook-enforce-scope.mjs & hook-sandbox-bash.mjs",
+          hookDesc: "Runtime write barrier and destructive command filter protecting repository integrity.",
+          triggerName: "preToolUse: edit / bash",
+          triggerDesc: "Evaluates every edit path and shell command before execution on disk.",
+          policyName: "Scope Containment & Command Sandbox",
+          policyDesc: "Hard-blocks edits outside approved files with smart nudges; denies branch deletions.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "QA Independent Verification",
         badge: "PASS",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Fresh independent QA agent verified all acceptance criteria and ran regression test suite in isolated sandbox.",
-        stats: [
-          { label: "Active Hook", val: "hook-sandbox-bash.mjs" },
-          { label: "Trigger Point", val: "preToolUse: bash (Sandbox)" },
-          { label: "Policy Enforced", val: "Allow test runner; block git mutations" }
-        ]
+        content: "Fresh independent QA agent runs regression test suites and verifies acceptance criteria in an isolated sandbox.",
+        gov: {
+          hookName: "hook-sandbox-bash.mjs",
+          hookDesc: "Test-execution sandbox isolating test runners from repository state mutations.",
+          triggerName: "preToolUse: bash (Sandbox)",
+          triggerDesc: "Filters terminal commands in real time during test execution.",
+          policyName: "Test Runner Execution Jail",
+          policyDesc: "Allows test runners (npm test, tsx); strictly denies git push, commit, or file tampering.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "Reviewer Security Audit",
         badge: "CLEAR",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Read-only security & diff inspection agent reviewed git changes for regressions, secrets, and policy compliance.",
-        stats: [
-          { label: "Active Hook 1", val: "hook-sandbox-bash.mjs (Read-Only)" },
-          { label: "Active Hook 2", val: "ast-symbol-sweep.ts (API Audit)" },
-          { label: "Policy Enforced", val: "Deny redirects ('>'); verify exported symbols" }
-        ]
+        content: "Read-only security agent inspects git changes for regressions, leaked secrets, and API contract stability.",
+        gov: {
+          hookName: "ast-symbol-sweep.ts & hook-sandbox-bash.mjs",
+          hookDesc: "AST syntax parser and read-only inspection jail checking API contract stability.",
+          triggerName: "preAgent: review / preToolUse: bash",
+          triggerDesc: "Inspects TypeScript AST and diff output before approving PR creation.",
+          policyName: "AST Symbol Audit & Read-Only Diff",
+          policyDesc: "Denies output redirects ('>'); guarantees zero unintended public symbol drift.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       },
       {
         title: "Pull Request Gate",
         badge: "READY FOR MERGE",
         badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed. Human maintainer review required to merge.",
-        stats: [
-          { label: "Active Guard", val: "prCreator.ts (auto-merge: disabled)" },
-          { label: "Trigger Point", val: "gate / postToolUse" },
-          { label: "Governance", val: "Human Approval Required on GitHub" }
-        ]
+        content: "Pull Request is officially OPEN on GitHub passing all checks. Human maintainer review required to merge into baseline.",
+        gov: {
+          hookName: "prCreator.ts",
+          hookDesc: "Deterministic PR governor enforcing enterprise review policies.",
+          triggerName: "gate: postToolUse (PR)",
+          triggerDesc: "Validates QA and Reviewer audit clearance before creating GitHub pull request.",
+          policyName: "Human Approval Required",
+          policyDesc: "Auto-merge physically disabled (auto-merge: disabled); requires maintainer review.",
+          cost: "0.00 AIU · Zero Token Overhead"
+        }
       }
     ];
 
@@ -1077,22 +1037,41 @@
       bEl.style.cssText = d.badgeStyle;
       document.getElementById('detail-content').innerHTML = d.content;
 
-      const statsEl = document.getElementById('detail-stats');
-      statsEl.innerHTML = d.stats.map(s => `
-        <div class="stat-pill">
-          <div class="stat-label">${s.label}</div>
-          <div class="stat-val">${s.val}</div>
-        </div>
-      `).join('');
+      const govEl = document.getElementById('detail-gov');
+      if (govEl && d.gov) {
+        govEl.innerHTML = `
+          <div class="gov-card">
+            <div class="gov-header">
+              <span class="gov-title">Deterministic Governance Policy</span>
+              <span class="gov-cost">${d.gov.cost}</span>
+            </div>
+            <div class="gov-grid">
+              <div class="gov-pill">
+                <div class="gov-label">Active Hook</div>
+                <div class="gov-val" style="color:var(--purple-text);">${d.gov.hookName}</div>
+                <div class="gov-desc">${d.gov.hookDesc}</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Trigger Point</div>
+                <div class="gov-val" style="color:var(--blue-text);">${d.gov.triggerName}</div>
+                <div class="gov-desc">${d.gov.triggerDesc}</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Policy Enforced</div>
+                <div class="gov-val" style="color:var(--amber-text);">${d.gov.policyName}</div>
+                <div class="gov-desc">${d.gov.policyDesc}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
     }
 
     function switchView(tab) {
       activeTab = tab;
       document.getElementById('tab-btn-details').className = 'tab-btn' + (tab === 'details' ? ' active' : '');
-      document.getElementById('tab-btn-matrix').className = 'tab-btn' + (tab === 'matrix' ? ' active' : '');
       document.getElementById('tab-btn-hooks').className = 'tab-btn' + (tab === 'hooks' ? ' active' : '');
       document.getElementById('view-details').style.display = tab === 'details' ? 'flex' : 'none';
-      document.getElementById('view-matrix').style.display = tab === 'matrix' ? 'flex' : 'none';
       document.getElementById('view-hooks').style.display = tab === 'hooks' ? 'flex' : 'none';
     }
 
@@ -1249,11 +1228,6 @@
         stageMeta[4].badge = 'PASS';
         stageMeta[4].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
         if (p.qa.summary) stageMeta[4].content = p.qa.summary;
-        stageMeta[4].stats = [
-          { label: 'Active Hook', val: 'hook-sandbox-bash' },
-          { label: 'Verdict', val: 'PASS (100% tests passed)' },
-          { label: 'Scope Check', val: p.qa.details?.scopeCompliance || 'PASS' }
-        ];
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'TESTING'].includes(qaStatus)) {
         s4.className = 'stage-card active' + (currentSelected === 4 ? ' selected' : '');
         m4.textContent = 'Testing...';
@@ -1279,11 +1253,6 @@
         stageMeta[5].badge = 'CLEAR';
         stageMeta[5].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
         if (p.reviewer.summary) stageMeta[5].content = p.reviewer.summary;
-        stageMeta[5].stats = [
-          { label: 'Active Hook', val: 'hook-sandbox-bash (Read-Only)' },
-          { label: 'Audit Verdict', val: 'CLEAR (Safe to merge)' },
-          { label: 'Scope Compliance', val: p.reviewer.details?.scopeCompliance || 'PASS' }
-        ];
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'AUDITING'].includes(revStatus)) {
         s5.className = 'stage-card active' + (currentSelected === 5 ? ' selected' : '');
         m5.textContent = 'Auditing...';
@@ -1307,25 +1276,20 @@
         stageMeta[6].badge = 'READY FOR MERGE';
         stageMeta[6].badgeStyle = 'background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);';
         stageMeta[6].content = mg.summary || `Pull Request #${prNum} is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.`;
-        stageMeta[6].stats = [
-          { label: 'Active Hook', val: 'hook-verify-gate: PR review' },
-          { label: 'PR Link', val: `<a href="${prUrl}" target="_blank" style="color:var(--blue-text); text-decoration:underline;">PR #${prNum}</a>` },
-          { label: 'Merge Policy', val: 'Human Approval Required' }
-        ];
 
         // Header and banner buttons
         const headerPr = document.getElementById('header-pr-link');
         if (headerPr) {
           headerPr.style.display = 'inline-flex';
           headerPr.href = prUrl;
-          headerPr.textContent = '🔗 PR #' + prNum + ' Ready';
+          headerPr.textContent = 'PR #' + prNum + ' Ready';
         }
 
         const prBanner = document.getElementById('pr-banner');
         if (prBanner) {
           prBanner.style.display = 'flex';
           document.getElementById('pr-banner-link').href = prUrl;
-          document.getElementById('pr-banner-link').textContent = '🔗 View Pull Request #' + prNum + ' on GitHub';
+          document.getElementById('pr-banner-link').textContent = 'View Pull Request #' + prNum + ' on GitHub';
         }
       } else {
         s6.className = 'stage-card pending' + (currentSelected === 6 ? ' selected' : '');
