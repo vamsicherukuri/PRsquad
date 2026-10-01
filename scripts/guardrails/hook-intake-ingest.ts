@@ -118,6 +118,7 @@ async function main() {
       // Update state
       state.issue = { owner, repo, number: issueData.number, title: issueData.title, body: issueData.body };
       state.phase = "INTAKE";
+      state.activeBranch = `fix/issue-${issueData.number}`;
       if (input.sessionId) {
         state.sessionId = input.sessionId;
       }
@@ -128,6 +129,7 @@ async function main() {
         repo,
         issueNumber: issueData.number,
         issueTitle: issueData.title,
+        activeBranch: `fix/issue-${issueData.number}`,
         sessionId: input.sessionId || state.sessionId,
         phase: "intake",
         status: "READY",

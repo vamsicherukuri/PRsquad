@@ -651,9 +651,9 @@
     <div class="title-group">
       <span class="status-dot"></span>
       <span class="pipeline-title">PRSquad</span>
-      <span class="issue-tag" id="issue-tag">Issue #11</span>
-      <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17" target="_blank" class="pr-link-badge" id="header-pr-link" style="display:none;">
-        🔗 PR #17 Open
+      <span class="issue-tag" id="issue-tag">Issue</span>
+      <a href="#" target="_blank" class="pr-link-badge" id="header-pr-link" style="display:none;">
+        🔗 PR Open
       </a>
     </div>
     <div class="meta-metrics">
@@ -1212,25 +1212,41 @@
       // Stage 1: Architect
       const s1 = document.getElementById('stage-1');
       const m1 = document.getElementById('metric-1');
-      if (p.architect) {
+      const archStatus = p.architect?.status || '';
+      if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
         s1.className = 'stage-card done' + (currentSelected === 1 ? ' selected' : '');
         m1.textContent = (p.architect.credits || 6.71).toFixed(2) + ' AIU';
-        stageMeta[1].badge = p.architect.status || 'PLAN_READY';
+        stageMeta[1].badge = 'PLAN_READY';
+        stageMeta[1].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
         if (p.architect.summary) stageMeta[1].content = p.architect.summary;
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) {
+        s1.className = 'stage-card active' + (currentSelected === 1 ? ' selected' : '');
+        m1.textContent = 'Planning...';
+        stageMeta[1].badge = 'PLANNING';
+        stageMeta[1].badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
+      } else {
+        s1.className = 'stage-card pending' + (currentSelected === 1 ? ' selected' : '');
+        m1.textContent = 'Queued';
       }
 
       // Stage 2: Scope Gate
       const s2 = document.getElementById('stage-2');
       const m2 = document.getElementById('metric-2');
-      if (p.scopeGate && p.scopeGate.status === 'APPROVED') {
+      const sgStatus = p.scopeGate?.status || '';
+      if (sgStatus === 'APPROVED') {
         s2.className = 'stage-card gate-approved' + (currentSelected === 2 ? ' selected' : '');
         m2.textContent = 'APPROVED';
         stageMeta[2].badge = 'APPROVED';
         if (p.scopeGate.summary) stageMeta[2].content = p.scopeGate.summary;
-      } else {
+      } else if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
         s2.className = 'stage-card active' + (currentSelected === 2 ? ' selected' : '');
         m2.textContent = 'AWAITING';
         stageMeta[2].badge = 'AWAITING';
+        stageMeta[2].badgeStyle = 'background:rgba(210,153,34,0.15); color:var(--orange-text); border:1px solid var(--orange-border);';
+      } else {
+        s2.className = 'stage-card pending' + (currentSelected === 2 ? ' selected' : '');
+        m2.textContent = 'Queued';
+        stageMeta[2].badge = 'PENDING';
       }
 
       // Stage 3: Developer
@@ -1302,10 +1318,11 @@
       const s6 = document.getElementById('stage-6');
       const m6 = document.getElementById('metric-6');
       const mg = p.mergeGate || {};
-      const prUrl = mg.details?.prUrl || 'https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17';
-      const prNum = mg.details?.prNumber || 17;
+      const prUrl = mg.details?.prUrl || '';
+      const prNum = mg.details?.prNumber || (data.issueNumber ? data.issueNumber : null);
+      const isPrOpen = ['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) && !!prUrl;
 
-      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) || prUrl) {
+      if (isPrOpen) {
         s6.className = 'stage-card gate-approved' + (currentSelected === 6 ? ' selected' : '');
         m6.textContent = 'PR #' + prNum + ' Open';
         stageMeta[6].badge = 'PR OPEN · AWAITING REVIEW';
@@ -1317,7 +1334,7 @@
         if (headerPr) {
           headerPr.style.display = 'inline-flex';
           headerPr.href = prUrl;
-          headerPr.textContent = 'PR #' + prNum + ' Open';
+          headerPr.textContent = '🔗 PR #' + prNum + ' Open';
         }
 
         const prBanner = document.getElementById('pr-banner');
@@ -1330,6 +1347,10 @@
       } else {
         s6.className = 'stage-card pending' + (currentSelected === 6 ? ' selected' : '');
         m6.textContent = 'Queued';
+        const headerPr = document.getElementById('header-pr-link');
+        if (headerPr) headerPr.style.display = 'none';
+        const prBanner = document.getElementById('pr-banner');
+        if (prBanner) prBanner.style.display = 'none';
         pollIntervalMs = 1500;
       }
 
@@ -1377,15 +1398,18 @@
       }
 
       // Compute latest active stage
-      let latestActive = 2; // Default Scope Gate
-      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'PR_CREATED'].includes(mg.status) || p.mergeGate) latestActive = 6;
+      let latestActive = 0;
+      if (isPrOpen) latestActive = 6;
       else if (revStatus === 'IN_PROGRESS') latestActive = 5;
       else if (revStatus === 'CLEAR') latestActive = 6;
       else if (qaStatus === 'IN_PROGRESS') latestActive = 4;
       else if (qaStatus === 'PASS') latestActive = 5;
       else if (devStatus === 'IN_PROGRESS') latestActive = 3;
       else if (['IMPLEMENTED', 'DONE'].includes(devStatus)) latestActive = 4;
-      else if (p.scopeGate?.status === 'APPROVED') latestActive = 3;
+      else if (sgStatus === 'APPROVED') latestActive = 3;
+      else if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) latestActive = 2; // Scope Gate
+      else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) latestActive = 1; // Architect
+      else latestActive = 0; // Intake
 
       if (!userHasManuallySelected) {
         selectStage(latestActive, false);

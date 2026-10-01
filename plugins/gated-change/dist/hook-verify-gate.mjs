@@ -338,7 +338,7 @@ function formatChatCreditMeter(data) {
   if (!data) return "";
   const t = data.telemetry;
   const credits = t?.actualAiCredits !== void 0 && t.actualAiCredits > 0 ? `${t.actualAiCredits.toFixed(2)} AIU` : "0.00 AIU";
-  const branch = data.activeBranch || "fix/issue-11";
+  const branch = data.activeBranch || (data.issueNumber ? `fix/issue-${data.issueNumber}` : "main");
   return `> \u26A1 **Live AI Credit Burn:** **${credits}** \xB7 **Branch:** \`${branch}\` \xB7 *(Visual Pipeline: [Canvas Panel](http://localhost:54321))*
 `;
 }
@@ -758,9 +758,10 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       try {
         const raw = readFileSync2(dashboardFile, "utf-8");
         const parsed = JSON.parse(raw);
+        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
         current = {
           ...parsed,
-          phases: { ...parsed.phases }
+          phases: isSameIssue ? { ...parsed.phases } : {}
         };
       } catch {
       }

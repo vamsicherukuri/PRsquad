@@ -200,7 +200,7 @@ export function formatChatCreditMeter(data?: DashboardState | null): string {
   const credits = t?.actualAiCredits !== undefined && t.actualAiCredits > 0
     ? `${t.actualAiCredits.toFixed(2)} AIU`
     : "0.00 AIU";
-  const branch = data.activeBranch || "fix/issue-11";
+  const branch = data.activeBranch || (data.issueNumber ? `fix/issue-${data.issueNumber}` : "main");
   return `> ⚡ **Live AI Credit Burn:** **${credits}** · **Branch:** \`${branch}\` · *(Visual Pipeline: [Canvas Panel](http://localhost:54321))*\n`;
 }
 
@@ -615,9 +615,10 @@ export function syncWorkflowDashboard(
       try {
         const raw = readFileSync(dashboardFile, "utf-8");
         const parsed = JSON.parse(raw);
+        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
         current = {
           ...parsed,
-          phases: { ...parsed.phases },
+          phases: isSameIssue ? { ...parsed.phases } : {},
         };
       } catch {}
     }
