@@ -145,39 +145,58 @@
       border-color: #2ea043;
     }
 
-    /* 7-Stage Pipeline Grid */
-    .pipeline-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 6px;
+    /* 7-Stage Pipeline Flow with Directional Connectors */
+    .pipeline-flow {
+      display: flex;
+      align-items: center;
+      gap: 3px;
       width: 100%;
       margin-bottom: 12px;
+      overflow-x: auto;
+      padding: 4px 2px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
     }
 
-    @container (max-width: 680px) {
-      .pipeline-grid {
-        grid-template-columns: repeat(4, 1fr);
-      }
+    .pipeline-flow::-webkit-scrollbar {
+      height: 4px;
     }
-
-    @container (max-width: 420px) {
-      .pipeline-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
+    .pipeline-flow::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 4px;
     }
 
     .stage-card {
+      flex: 1 1 0;
+      min-width: 78px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 7px 9px;
-      min-height: 68px;
+      padding: 6px 7px;
+      min-height: 64px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       cursor: pointer;
-      transition: all 0.2s ease-in-out;
+      transition: all 0.15s ease-in-out;
       position: relative;
+    }
+
+    .stage-connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--border);
+      flex-shrink: 0;
+      padding: 0 1px;
+      transition: all 0.2s ease;
+    }
+    .stage-connector.done {
+      color: var(--green-text);
+    }
+    .stage-connector.active {
+      color: var(--blue-text);
+      filter: drop-shadow(0 0 4px var(--blue-border));
     }
 
     .stage-card:hover {
@@ -200,8 +219,12 @@
       color: var(--text-muted);
     }
 
+    .role-icon {
+      font-size: 11px;
+    }
+
     .hook-tag {
-      font-size: 9px;
+      font-size: 8.5px;
       padding: 1px 4px;
       border-radius: 4px;
       font-family: ui-monospace, monospace;
@@ -212,6 +235,10 @@
       display: inline-flex;
       align-items: center;
       gap: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 72px;
     }
 
     .stage-name {
@@ -365,6 +392,31 @@
       word-break: break-all;
     }
 
+    /* Hook Architecture Matrix Table */
+    .hook-matrix-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .hook-matrix-table th {
+      text-align: left;
+      padding: 6px 8px;
+      font-family: ui-monospace, monospace;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .hook-matrix-table td {
+      padding: 7px 8px;
+      border-bottom: 1px solid var(--border-muted);
+      vertical-align: middle;
+    }
+    .hook-matrix-table tr:hover td {
+      background: var(--card-bg-hover);
+    }
+
     /* Hook Events Stream */
     .hook-event-list {
       display: flex;
@@ -467,86 +519,113 @@
     </div>
   </div>
 
-  <!-- 7 Stage Cards with Guardrail Hook Indicators -->
-  <div class="pipeline-grid" id="pipeline-nodes">
-    <!-- 1. Intake -->
+  <!-- 7 Stage Cards with Flow Connectors & Hook Badges -->
+  <div class="pipeline-flow" id="pipeline-nodes">
+    <!-- Intake -->
     <div class="stage-card done" id="stage-0" onclick="selectStage(0)">
       <div class="stage-card-top">
-        <span>1</span>
-        <span class="hook-tag">🛡️ Ingress</span>
+        <span class="role-icon">📥</span>
+        <span class="hook-tag" title="hook-intake-ingest: Fast-reject closed/invalid issues">🛡️ Ingest</span>
       </div>
       <div class="stage-name">Intake</div>
-      <div class="stage-metric" id="metric-0">1.24 AIU</div>
+      <div class="stage-metric" id="metric-0">1.31 AIU</div>
     </div>
 
-    <!-- 2. Architect -->
+    <div class="stage-connector done" id="arrow-0">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- Architect -->
     <div class="stage-card done" id="stage-1" onclick="selectStage(1)">
       <div class="stage-card-top">
-        <span>2</span>
-        <span class="hook-tag">🛡️ ReadScope</span>
+        <span class="role-icon">📐</span>
+        <span class="hook-tag" title="makeScopedReadTool: Read-boundary isolation">🛡️ ReadScope</span>
       </div>
       <div class="stage-name">Architect</div>
-      <div class="stage-metric" id="metric-1">6.71 AIU</div>
+      <div class="stage-metric" id="metric-1">6.63 AIU</div>
     </div>
 
-    <!-- 3. Scope Gate -->
+    <div class="stage-connector done" id="arrow-1">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- Scope Gate -->
     <div class="stage-card gate-approved" id="stage-2" onclick="selectStage(2)">
       <div class="stage-card-top">
-        <span>3</span>
-        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);">🛡️ VerifyGate</span>
+        <span class="role-icon">🔒</span>
+        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);" title="hook-verify-gate: Cryptographic approval.lock verification">🛡️ VerifyGate</span>
       </div>
       <div class="stage-name">Scope Gate</div>
       <div class="stage-metric" id="metric-2">APPROVED</div>
     </div>
 
-    <!-- 4. Developer -->
+    <div class="stage-connector done" id="arrow-2">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- Developer -->
     <div class="stage-card done" id="stage-3" onclick="selectStage(3)">
       <div class="stage-card-top">
-        <span>4</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);">🛡️ EnforceScope</span>
+        <span class="role-icon">🔨</span>
+        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-enforce-scope: Write-barrier containment & smart nudge">🛡️ EnforceScope</span>
       </div>
       <div class="stage-name">Developer</div>
-      <div class="stage-metric" id="metric-3">30.54 AIU</div>
+      <div class="stage-metric" id="metric-3">19.46 AIU</div>
     </div>
 
-    <!-- 5. QA -->
+    <div class="stage-connector done" id="arrow-3">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- QA -->
     <div class="stage-card done" id="stage-4" onclick="selectStage(4)">
       <div class="stage-card-top">
-        <span>5</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);">🛡️ Sandbox</span>
+        <span class="role-icon">🧪</span>
+        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-sandbox-bash: Test runner isolation">🛡️ Sandbox</span>
       </div>
       <div class="stage-name">QA Test</div>
-      <div class="stage-metric" id="metric-4">20.31 AIU</div>
+      <div class="stage-metric" id="metric-4">7.60 AIU</div>
     </div>
 
-    <!-- 6. Reviewer -->
+    <div class="stage-connector done" id="arrow-4">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- Reviewer -->
     <div class="stage-card done" id="stage-5" onclick="selectStage(5)">
       <div class="stage-card-top">
-        <span>6</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);">🛡️ ReadOnly</span>
+        <span class="role-icon">🔍</span>
+        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-sandbox-bash: Read-only inspection & AST sweep">🛡️ ReadOnly</span>
       </div>
       <div class="stage-name">Reviewer</div>
-      <div class="stage-metric" id="metric-5">3.97 AIU</div>
+      <div class="stage-metric" id="metric-5">8.80 AIU</div>
     </div>
 
-    <!-- 7. PR Gate -->
+    <div class="stage-connector done" id="arrow-5">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <!-- PR Gate -->
     <div class="stage-card gate-approved selected" id="stage-6" onclick="selectStage(6)">
       <div class="stage-card-top">
-        <span>7</span>
-        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);">🛡️ PRGate</span>
+        <span class="role-icon">🚀</span>
+        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);" title="prCreator: Bounded PR creation with disabled auto-merge">🛡️ PRBarrier</span>
       </div>
       <div class="stage-name">PR Gate</div>
-      <div class="stage-metric" id="metric-6">PR #17 Ready</div>
+      <div class="stage-metric" id="metric-6">PR Ready</div>
     </div>
   </div>
 
-  <!-- Section Tabs: Stage Details vs Live Guardrail Hook Feed -->
+  <!-- Section Tabs: Stage Details vs Hook Architecture vs Live Guardrail Hook Feed -->
   <div class="section-tabs">
     <button class="tab-btn active" id="tab-btn-details" onclick="switchView('details')">
-      Stage Details
+      📋 Stage Overview
+    </button>
+    <button class="tab-btn" id="tab-btn-matrix" onclick="switchView('matrix')">
+      🛡️ Hook Architecture
     </button>
     <button class="tab-btn" id="tab-btn-hooks" onclick="switchView('hooks')">
-      🛡️ Live Guardrail Hooks <span class="badge-count" id="hook-count-badge">0</span>
+      📜 Live Audit Feed <span class="badge-count" id="hook-count-badge">0</span>
     </button>
   </div>
 
@@ -556,22 +635,22 @@
     <div class="panel-box" id="view-details">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--text-muted); font-weight:600;" id="detail-title">
-          Stage 7: Human Pull Request Gate
+          Pull Request Gate
         </span>
         <span id="detail-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; font-family:ui-monospace; background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);">
           READY FOR MERGE
         </span>
       </div>
       <div style="font-size:12px; line-height:1.5; color:#c9d1d9;" id="detail-content">
-        Pull Request #17 is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.
+        Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.
       </div>
 
       <div class="pr-banner-box" id="pr-banner" style="display:none;">
         <div style="font-size:11.5px; color:var(--green-text); font-weight:600;">
           🚀 PR is open and passing all checks!
         </div>
-        <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17" target="_blank" id="pr-banner-link" class="pr-link-badge">
-          🔗 View Pull Request #17 on GitHub
+        <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/23" target="_blank" id="pr-banner-link" class="pr-link-badge">
+          🔗 View Pull Request on GitHub
         </a>
       </div>
 
@@ -582,12 +661,91 @@
         </div>
         <div class="stat-pill">
           <div class="stat-label">Pull Request Link</div>
-          <div class="stat-val" style="font-size:11px; color:var(--blue-text);">PR #17 (Open)</div>
+          <div class="stat-val" style="font-size:11px; color:var(--blue-text);" id="stat-pr-val">PR #23 (Open)</div>
         </div>
         <div class="stat-pill">
           <div class="stat-label">Governance Policy</div>
           <div class="stat-val">Human Approval Required</div>
         </div>
+      </div>
+    </div>
+
+    <!-- View 2: Hook Architecture Matrix -->
+    <div class="panel-box" id="view-matrix" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--purple-text); font-weight:600;">
+          🛡️ Deterministic Governance Architecture (Process-Level Hooks)
+        </span>
+        <span style="font-size:10.5px; color:var(--green-text); font-family:ui-monospace; font-weight:600;">0.00 AIU · Zero Token Overhead</span>
+      </div>
+      
+      <div style="font-size:11.5px; color:var(--text-muted); line-height:1.4;">
+        Specialist agents are governed by deterministic OS and process-level hooks intercepting tool calls before file writes or shell execution:
+      </div>
+
+      <div style="overflow-x:auto;">
+        <table class="hook-matrix-table">
+          <thead>
+            <tr>
+              <th>Agent / Stage</th>
+              <th>Hook Bundle</th>
+              <th>Trigger Point</th>
+              <th>Deterministic Policy Enforced</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>📥 Intake</strong></td>
+              <td><code>hook-intake-ingest.mjs</code></td>
+              <td><code>preToolUse: fetch</code></td>
+              <td>Fast-rejects <code>CLOSED</code> / duplicate issues in &lt;2s with 0 tokens</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>📐 Architect</strong></td>
+              <td><code>makeScopedReadTool</code></td>
+              <td><code>toolWrap: read</code></td>
+              <td>Strict path containment; prevents whole-repository scanning</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>🔒 Scope Gate</strong></td>
+              <td><code>hook-verify-gate.mjs</code></td>
+              <td><code>preToolUse: agent</code></td>
+              <td>Blocks developer execution until cryptographic <code>approval.lock</code> is signed</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>🔨 Developer</strong></td>
+              <td><code>hook-enforce-scope.mjs</code><br><code>hook-sandbox-bash.mjs</code></td>
+              <td><code>preToolUse: edit</code><br><code>preToolUse: bash</code></td>
+              <td><strong>Write Barrier</strong>: Hard blocks edits outside scope with smart nudge<br><strong>Sandbox</strong>: Blocks <code>git push origin main</code> &amp; branch deletion</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>🧪 QA Test</strong></td>
+              <td><code>hook-sandbox-bash.mjs</code></td>
+              <td><code>preToolUse: bash</code></td>
+              <td>Allows test commands (<code>npm test</code>, <code>tsx</code>); strictly denies push, commit, or file tampering</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>🔍 Reviewer</strong></td>
+              <td><code>hook-sandbox-bash.mjs</code><br><code>ast-symbol-sweep.ts</code></td>
+              <td><code>preToolUse: bash</code><br><code>ast-analysis</code></td>
+              <td>Restricted to read-only git diff/status (blocks <code>&gt;</code> file redirects); runs AST export sweep</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+            <tr>
+              <td><strong>🚀 PR Gate</strong></td>
+              <td><code>prCreator.ts</code></td>
+              <td><code>gate / postToolUse</code></td>
+              <td>Autonomous merging physically disabled (<code>auto-merge: disabled</code>); requires maintainer merge</td>
+              <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -613,80 +771,80 @@
 
     const stageMeta = [
       {
-        title: "Stage 1: Intake Triage",
+        title: "Intake Triage",
         badge: "READY",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Validates issue completeness, reproducibility, and acceptance criteria before engaging model planning.",
         stats: [
-          { label: "Active Hook", val: "preToolUse: ingress_check" },
-          { label: "Credits Burned", val: "1.24 AIU" },
-          { label: "Triage Cost", val: "Cheap fast check" }
+          { label: "Active Hook", val: "hook-intake-ingest.mjs" },
+          { label: "Trigger Point", val: "preToolUse: fetch_issue" },
+          { label: "Policy Enforced", val: "Fast-fail CLOSED issues in <2s (0 tokens)" }
         ]
       },
       {
-        title: "Stage 2: Architect Agent Plan",
+        title: "Architect Agent Plan",
         badge: "PLAN_READY",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Investigated root cause using read-scoped tools. Produced surgical modification plan with strict blast-radius bounding.",
         stats: [
           { label: "Active Hook", val: "makeScopedReadTool" },
-          { label: "Credits Burned", val: "6.71 AIU" },
-          { label: "Risk Tier", val: "Low" }
+          { label: "Trigger Point", val: "toolWrap: read_file" },
+          { label: "Policy Enforced", val: "Strict directory boundary isolation" }
         ]
       },
       {
-        title: "Stage 3: PM Scope Approval Gate",
+        title: "Scope Approval Gate",
         badge: "APPROVED",
         badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
         content: "Hard human-in-the-loop review barrier. Developer execution remained blocked until PM confirmed proposed boundaries in chat.",
         stats: [
-          { label: "Active Hook", val: "hook-verify-gate" },
-          { label: "Decision", val: "PASSED (approval.lock valid)" },
-          { label: "Tokens Used", val: "0 (Deterministic Gate)" }
+          { label: "Active Hook", val: "hook-verify-gate.mjs" },
+          { label: "Trigger Point", val: "preToolUse: agent" },
+          { label: "Policy Enforced", val: "Cryptographic approval.lock verification" }
         ]
       },
       {
-        title: "Stage 4: Developer Implementation",
+        title: "Developer Implementation",
         badge: "IMPLEMENTED",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Developer applied code fix strictly within approved boundaries ('src/scopeTool.ts, scripts/test-guardrails.ts'). Guardrail write barrier active.",
+        content: "Developer applied code fix strictly within approved boundaries. Guardrail write barrier and command sandbox active.",
         stats: [
-          { label: "Active Hook", val: "hook-enforce-scope" },
-          { label: "Write Barrier", val: "Hard Block (0 violations)" },
-          { label: "Credits Burned", val: "30.54 AIU" }
+          { label: "Active Hook 1", val: "hook-enforce-scope.mjs (Write Barrier)" },
+          { label: "Active Hook 2", val: "hook-sandbox-bash.mjs (Deny Push/BranchDel)" },
+          { label: "Write Barrier", val: "Hard Block on non-approved files" }
         ]
       },
       {
-        title: "Stage 5: QA Independent Verification",
+        title: "QA Independent Verification",
         badge: "PASS",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Fresh independent QA agent verified all 4 acceptance criteria and ran regression test suite in isolated sandbox.",
+        content: "Fresh independent QA agent verified all acceptance criteria and ran regression test suite in isolated sandbox.",
         stats: [
-          { label: "Active Hook", val: "hook-sandbox-bash" },
-          { label: "Verdict", val: "PASS (100% test pass)" },
-          { label: "Credits Burned", val: "20.31 AIU" }
+          { label: "Active Hook", val: "hook-sandbox-bash.mjs" },
+          { label: "Trigger Point", val: "preToolUse: bash (Sandbox)" },
+          { label: "Policy Enforced", val: "Allow test runner; block git mutations" }
         ]
       },
       {
-        title: "Stage 6: Reviewer Risk & Security Audit",
+        title: "Reviewer Security Audit",
         badge: "CLEAR",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Read-only security & diff inspection agent reviewed git changes for regressions, secrets, and policy compliance.",
         stats: [
-          { label: "Active Hook", val: "hook-sandbox-bash (Read-Only)" },
-          { label: "Audit Verdict", val: "CLEAR (Safe to merge)" },
-          { label: "Credits Burned", val: "3.97 AIU" }
+          { label: "Active Hook 1", val: "hook-sandbox-bash.mjs (Read-Only)" },
+          { label: "Active Hook 2", val: "ast-symbol-sweep.ts (API Audit)" },
+          { label: "Policy Enforced", val: "Deny redirects ('>'); verify exported symbols" }
         ]
       },
       {
-        title: "Stage 7: Human Pull Request Gate",
+        title: "Pull Request Gate",
         badge: "READY FOR MERGE",
         badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Pull Request #17 is officially OPEN on GitHub. Automated QA and Security Audit both passed. Human maintainer review required to merge.",
+        content: "Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed. Human maintainer review required to merge.",
         stats: [
-          { label: "Active Hook", val: "hook-verify-gate: PR review" },
-          { label: "PR Link", val: '<a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17" target="_blank" style="color:var(--blue-text); text-decoration:underline;">PR #17</a>' },
-          { label: "Merge Policy", val: "Human Approval Required" }
+          { label: "Active Guard", val: "prCreator.ts (auto-merge: disabled)" },
+          { label: "Trigger Point", val: "gate / postToolUse" },
+          { label: "Governance", val: "Human Approval Required on GitHub" }
         ]
       }
     ];
@@ -725,8 +883,10 @@
     function switchView(tab) {
       activeTab = tab;
       document.getElementById('tab-btn-details').className = 'tab-btn' + (tab === 'details' ? ' active' : '');
+      document.getElementById('tab-btn-matrix').className = 'tab-btn' + (tab === 'matrix' ? ' active' : '');
       document.getElementById('tab-btn-hooks').className = 'tab-btn' + (tab === 'hooks' ? ' active' : '');
       document.getElementById('view-details').style.display = tab === 'details' ? 'flex' : 'none';
+      document.getElementById('view-matrix').style.display = tab === 'matrix' ? 'flex' : 'none';
       document.getElementById('view-hooks').style.display = tab === 'hooks' ? 'flex' : 'none';
     }
 
@@ -964,6 +1124,22 @@
       } else {
         s6.className = 'stage-card pending' + (currentSelected === 6 ? ' selected' : '');
         m6.textContent = 'Queued';
+      }
+
+      // Update connector states between sequential stages
+      for (let i = 0; i < 6; i++) {
+        const arrow = document.getElementById('arrow-' + i);
+        if (!arrow) continue;
+        const nextStage = document.getElementById('stage-' + (i + 1));
+        if (!nextStage) continue;
+
+        if (nextStage.classList.contains('done') || nextStage.classList.contains('gate-approved')) {
+          arrow.className = 'stage-connector done';
+        } else if (nextStage.classList.contains('active')) {
+          arrow.className = 'stage-connector active';
+        } else {
+          arrow.className = 'stage-connector';
+        }
       }
 
       // Compute latest active stage
