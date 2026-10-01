@@ -1,0 +1,9 @@
+{
+  "stack": "typescript",
+  "tooling": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm run test:guardrails",
+    "testFileCommand": "npx tsx",
+    "lintCommand": "npm run check:plugin"
+  }
+}
