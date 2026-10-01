@@ -143,10 +143,10 @@ function loadState(rootDir = getRepoRoot()) {
     baseRef: null,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  saveState(defaultState, rootDir);
+  saveState2(defaultState, rootDir);
   return defaultState;
 }
-function saveState(state, rootDir = getRepoRoot()) {
+function saveState2(state, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
@@ -167,7 +167,7 @@ function saveState(state, rootDir = getRepoRoot()) {
   } catch {
   }
 }
-function loadApprovalLock(rootDir = getRepoRoot()) {
+function loadApprovalLock2(rootDir = getRepoRoot()) {
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
@@ -229,7 +229,7 @@ function revokeApprovalLock(status, rootDir = getRepoRoot()) {
     saveApprovalLock(lock, rootDir);
     const state = loadState(rootDir);
     state.humanApproval = false;
-    saveState(state, rootDir);
+    saveState2(state, rootDir);
   } catch {
   }
 }
@@ -1437,10 +1437,45 @@ function createPullRequest(options = {}) {
         baseBranch = "copilot-app-plugin-alignment";
       }
     }
-    const issueNum = state.issue?.number || 9;
-    const issueTitle = state.issue?.title || "Multi-path scope enforcer alignment";
+    let issueNum = 0;
+    const branchMatch = activeBranch.match(/(?:issue-?|#)(\d+)/i);
+    if (branchMatch) {
+      issueNum = parseInt(branchMatch[1], 10);
+    }
+    if (!issueNum) {
+      const lock = loadApprovalLock(rootDir);
+      if (lock?.issueNumber && lock.issueNumber > 0) {
+        issueNum = lock.issueNumber;
+      }
+    }
+    if (!issueNum && state.issue?.number && state.issue.number > 0) {
+      issueNum = state.issue.number;
+    }
+    if (!issueNum) {
+      issueNum = 11;
+    }
     const owner = state.issue?.owner || "vamsicherukuri";
     const repo = state.issue?.repo || "gated-fix-pipeline";
+    let issueTitle = state.issue?.title;
+    if (!issueTitle || state.issue?.number && state.issue.number !== issueNum || issueTitle === "Multi-path scope enforcer alignment") {
+      try {
+        const out = execFileSync2("gh", ["issue", "view", String(issueNum), "--repo", `${owner}/${repo}`, "--json", "title"], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        });
+        const parsed = JSON.parse(out);
+        if (parsed.title) issueTitle = parsed.title;
+      } catch {
+      }
+    }
+    if (!issueTitle) issueTitle = `Issue #${issueNum} resolution`;
+    if (!state.issue) {
+      state.issue = { owner, repo, number: issueNum, title: issueTitle };
+    } else {
+      state.issue.number = issueNum;
+      state.issue.title = issueTitle;
+    }
+    saveState(state, rootDir);
     try {
       execFileSync2("git", ["push", "-u", "origin", activeBranch], {
         cwd: rootDir,
@@ -1571,15 +1606,18 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   if (numFromName) return parseInt(numFromName[1], 10);
   const numFromCwd = (input.cwd || "").match(/issue-?(\d+)/i);
   if (numFromCwd) return parseInt(numFromCwd[1], 10);
+  const numFromPrompt = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
+  if (numFromPrompt) return parseInt(numFromPrompt[1], 10);
   if (lock?.issueNumber && lock.issueNumber > 0) {
     return lock.issueNumber;
   }
+  const branch = state?.activeBranch || "";
+  const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
+  if (branchNum) return parseInt(branchNum[1], 10);
   if (state?.issue?.number && state.issue.number > 0) {
     return state.issue.number;
   }
-  const numFromPrompt = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
-  if (numFromPrompt) return parseInt(numFromPrompt[1], 10);
-  return 9;
+  return 11;
 }
 async function main() {
   if (process.argv.includes("--meter")) {
@@ -1694,7 +1732,7 @@ async function main() {
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     ensureNodeModulesInWorktree(repoRoot2);
     const state2 = loadState(repoRoot2);
-    let lock2 = loadApprovalLock(repoRoot2);
+    let lock2 = loadApprovalLock2(repoRoot2);
     if (!lock2 || lock2.status !== "ACTIVE") {
       const prompt3 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
       const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt3.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt3.includes("Human Approval: Confirmed") || prompt3.includes("humanApprovalConfirmed: true") || prompt3.includes("/approve");
@@ -1760,7 +1798,7 @@ async function main() {
     if (lock2.currentAttempt > lock2.maxAttempts) {
       revokeApprovalLock("EXHAUSTED", repoRoot2);
       state2.phase = "ESCALATED";
-      saveState(state2, repoRoot2);
+      saveState2(state2, repoRoot2);
       appendAuditLog({
         sessionId: state2.sessionId,
         agent: "controller",
@@ -1809,12 +1847,17 @@ async function main() {
     state2.approvedScope = lock2.approvedScope;
     state2.implementationAttempt = lock2.currentAttempt;
     state2.activeBranch = branchName;
-    saveState(state2, repoRoot2);
+    if (!state2.issue) {
+      state2.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: resolvedIssue2 };
+    } else {
+      state2.issue.number = resolvedIssue2;
+    }
+    saveState2(state2, repoRoot2);
     const prompt2 = toolArgs.prompt || toolArgs.content || "";
     const extractedPlan = extractPlanMarkdown(prompt2);
     if (input.sessionId) {
       state2.sessionId = input.sessionId;
-      saveState(state2, repoRoot2);
+      saveState2(state2, repoRoot2);
     }
     syncWorkflowDashboard(repoRoot2, {
       owner: state2.issue?.owner || "vamsicherukuri",
@@ -2113,11 +2156,11 @@ ${stateObj.issue.body.trim()}`);
     const effectiveCwd2 = input.cwd || process.cwd();
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     const state2 = loadState(repoRoot2);
-    const lock2 = loadApprovalLock(repoRoot2);
+    const lock2 = loadApprovalLock2(repoRoot2);
     const resolvedIssue2 = resolveIssueNumber(input, toolArgs, state2, lock2);
     if (input.sessionId && (!state2.sessionId || state2.sessionId !== input.sessionId)) {
       state2.sessionId = input.sessionId;
-      saveState(state2, repoRoot2);
+      saveState2(state2, repoRoot2);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
@@ -2255,12 +2298,12 @@ ${stateObj.issue.body.trim()}`);
   const repoRoot = getRepoRoot(effectiveCwd);
   ensureNodeModulesInWorktree(repoRoot);
   const state = loadState(repoRoot);
-  const lock = loadApprovalLock(repoRoot);
+  const lock = loadApprovalLock2(repoRoot);
   const resolvedIssue = resolveIssueNumber(input, toolArgs, state, lock);
   const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
   if (input.sessionId && (!state.sessionId || state.sessionId !== input.sessionId)) {
     state.sessionId = input.sessionId;
-    saveState(state, repoRoot);
+    saveState2(state, repoRoot);
   }
   if (isAgentMatch(targetAgent, "gated-change-architect")) {
     const declaredScope = state.approvedScope || state.issue?.declaredScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";

@@ -34,16 +34,26 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
   const numFromCwd = (input.cwd || "").match(/issue-?(\d+)/i);
   if (numFromCwd) return parseInt(numFromCwd[1], 10);
 
-  if (lock?.issueNumber && lock.issueNumber > 0) {
-    return lock.issueNumber;
-  }
-  if (state?.issue?.number && state.issue.number > 0) {
-    return state.issue.number;
-  }
+  // 1. Explicit prompt mention (e.g. "Resolve issue #11" or "[HUMAN_SCOPE_GATE_APPROVED...]")
   const numFromPrompt = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
   if (numFromPrompt) return parseInt(numFromPrompt[1], 10);
 
-  return 9; // Target issue for active challenge
+  // 2. Active approval lock
+  if (lock?.issueNumber && lock.issueNumber > 0) {
+    return lock.issueNumber;
+  }
+
+  // 3. Active feature branch name
+  const branch = state?.activeBranch || "";
+  const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
+  if (branchNum) return parseInt(branchNum[1], 10);
+
+  // 4. Current state store
+  if (state?.issue?.number && state.issue.number > 0) {
+    return state.issue.number;
+  }
+
+  return 11; // Target issue for active challenge
 }
 
 async function main() {
@@ -323,6 +333,11 @@ async function main() {
     state.approvedScope = lock.approvedScope;
     state.implementationAttempt = lock.currentAttempt;
     state.activeBranch = branchName;
+    if (!state.issue) {
+      state.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: resolvedIssue };
+    } else {
+      state.issue.number = resolvedIssue;
+    }
     saveState(state, repoRoot);
 
     const prompt = toolArgs.prompt || toolArgs.content || "";

@@ -65,10 +65,52 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       }
     }
 
-    const issueNum = state.issue?.number || 9;
-    const issueTitle = state.issue?.title || "Multi-path scope enforcer alignment";
+    // Deterministically resolve issue number from:
+    // 1. Feature branch name (e.g. vamsicherukuri-issue-11-... or fix/issue-11)
+    // 2. Options custom override
+    // 3. Approval lock
+    // 4. State store
+    let issueNum = 0;
+    const branchMatch = activeBranch.match(/(?:issue-?|#)(\d+)/i);
+    if (branchMatch) {
+      issueNum = parseInt(branchMatch[1], 10);
+    }
+    if (!issueNum) {
+      const lock = loadApprovalLock(rootDir);
+      if (lock?.issueNumber && lock.issueNumber > 0) {
+        issueNum = lock.issueNumber;
+      }
+    }
+    if (!issueNum && state.issue?.number && state.issue.number > 0) {
+      issueNum = state.issue.number;
+    }
+    if (!issueNum) {
+      issueNum = 11;
+    }
+
     const owner = state.issue?.owner || "vamsicherukuri";
     const repo = state.issue?.repo || "gated-fix-pipeline";
+
+    let issueTitle = state.issue?.title;
+    if (!issueTitle || (state.issue?.number && state.issue.number !== issueNum) || issueTitle === "Multi-path scope enforcer alignment") {
+      try {
+        const out = execFileSync("gh", ["issue", "view", String(issueNum), "--repo", `${owner}/${repo}`, "--json", "title"], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        const parsed = JSON.parse(out);
+        if (parsed.title) issueTitle = parsed.title;
+      } catch {}
+    }
+    if (!issueTitle) issueTitle = `Issue #${issueNum} resolution`;
+
+    if (!state.issue) {
+      state.issue = { owner, repo, number: issueNum, title: issueTitle };
+    } else {
+      state.issue.number = issueNum;
+      state.issue.title = issueTitle;
+    }
+    saveState(state, rootDir);
 
     // 3. Push active feature branch to remote origin
     try {
