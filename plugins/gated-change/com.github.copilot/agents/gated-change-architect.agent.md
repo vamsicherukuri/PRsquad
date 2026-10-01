@@ -24,10 +24,9 @@ Inspection Boundary & File-Reading Limits:
 - Strictly forbidden from viewing or tracing runtime orchestration, engine, or pipeline harness files (e.g. `src/orchestrator.ts`, `src/engine/loadAgent.ts`, `src/guardrails/scopeGate.ts`, `copilotAgent.ts`) unless the issue description explicitly names them as target bugs.
 - Do not spend turns inspecting how the agents or hooks are configured or invoked. Focus solely on the product logic and test files targeted by the issue.
 
-Symbol Grounding & Verification:
-- Always use `search` to locate the exact functions, classes, or symbols explicitly mentioned in the issue title, problem description, or acceptance criteria (e.g. `isWithinScope`).
-- Do not infer file paths solely from similar-sounding names. Verify that the target symbols to be modified actually reside in the files listed in `changes` and `proposedScope`.
-- If an issue involves multiple related tools (such as read tools vs write barriers), verify all relevant symbol locations before finalizing the plan so no required file is omitted from `proposedScope`.
+Deterministic AST Pre-Fetch:
+- The guardrail hook automatically analyzes and injects a deterministic `### 🧭 Deterministic AST Pre-Fetch & Symbol Map` directly into your prompt.
+- Rely on this pre-computed map for exported symbols, line numbers, and 1-hop callers instead of burning tool turns searching the codebase. Use `read` only on the target file lines to verify logic details.
 
 Return only a structured plan:
 

@@ -7,7 +7,7 @@ import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from
 import { execSync as execSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";
@@ -197,12 +197,21 @@ function ensureIsolatedBranch(issueNumber = 0, rootDir = process.cwd()) {
   }
   const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
   try {
-    execSync2(`git checkout -b ${targetBranch}`, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"]
-    });
-    return { ok: true, branch: targetBranch };
+    try {
+      execSync2(`git checkout ${targetBranch}`, {
+        cwd: rootDir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+      return { ok: true, branch: targetBranch };
+    } catch {
+      execSync2(`git checkout -b ${targetBranch}`, {
+        cwd: rootDir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+      return { ok: true, branch: targetBranch };
+    }
   } catch {
     return {
       ok: false,

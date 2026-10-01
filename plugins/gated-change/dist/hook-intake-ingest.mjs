@@ -99,7 +99,7 @@ function formatIntakePayload(issueData, round = 0) {
 }
 
 // src/guardrails/stateStore.ts
-import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { existsSync as existsSync2, mkdirSync, readFileSync as readFileSync2, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
 import { resolve, relative, join as join2, isAbsolute, dirname, basename } from "node:path";
 import { execSync as execSync2 } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";

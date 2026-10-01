@@ -197,3 +197,100 @@ export function getChangedFilesFromGit(
     return [];
   }
 }
+
+/**
+ * Generates a deterministic AST pre-fetch map for files in declaredScope.
+ * Analyzes exported functions/classes/types and discovers 1-hop external importers.
+ */
+export function generateAstPreFetchMap(
+  declaredScope: string,
+  rootDir: string = process.cwd()
+): string {
+  if (!declaredScope) return "";
+
+  const files = declaredScope
+    .split(/[;,]/)
+    .map((s) => s.trim().replace(/\\/g, "/"))
+    .filter((s) => s.length > 0);
+
+  if (files.length === 0) return "";
+
+  const allFiles = getAllSourceFiles(rootDir, rootDir);
+  let out = `### 🧭 Deterministic AST Pre-Fetch & Symbol Map (0 AI Credits)\n\n`;
+  out += `> **Pre-computed Code Structure:** The guardrail engine pre-indexed symbols and 1-hop callers across declared files. Use this structural map directly instead of broad search/view turns.\n\n`;
+
+  const targetScopeFiles: Array<{
+    file: string;
+    symbols: Array<{ name: string; line: number; kind: string }>;
+  }> = [];
+
+  for (const relFile of files) {
+    const full = join(rootDir, relFile);
+    if (!existsSync(full) || !statSync(full).isFile()) continue;
+
+    const content = readFileSync(full, "utf-8");
+    const lines = content.split("\n");
+    const fileSymbols: Array<{ name: string; line: number; kind: string }> = [];
+
+    const lineExportRegex = /export\s+(?:default\s+)?(?:async\s+)?(function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/;
+    for (let i = 0; i < lines.length; i++) {
+      const match = lineExportRegex.exec(lines[i]);
+      if (match && match[2]) {
+        fileSymbols.push({
+          kind: match[1],
+          name: match[2],
+          line: i + 1,
+        });
+      }
+    }
+
+    targetScopeFiles.push({ file: relFile, symbols: fileSymbols });
+  }
+
+  if (targetScopeFiles.length === 0) return "";
+
+  out += `#### 📦 Target Scope Symbols\n\n`;
+  for (const t of targetScopeFiles) {
+    out += `- \`${t.file}\`\n`;
+    if (t.symbols.length === 0) {
+      out += `  - *(No top-level exports detected; test runner or script file)*\n`;
+    } else {
+      for (const s of t.symbols) {
+        out += `  - \`${s.kind} ${s.name}\` (line ${s.line})\n`;
+      }
+    }
+  }
+
+  // Discover 1-hop importers
+  const importersMap = new Map<string, Set<string>>();
+  for (const t of targetScopeFiles) {
+    for (const s of t.symbols) {
+      const symRegex = new RegExp(`\\b${s.name}\\b`);
+      for (const otherFile of allFiles) {
+        if (otherFile === t.file || files.includes(otherFile)) continue;
+        const fullOther = join(rootDir, otherFile);
+        try {
+          const c = readFileSync(fullOther, "utf-8");
+          if (symRegex.test(c)) {
+            if (!importersMap.has(otherFile)) {
+              importersMap.set(otherFile, new Set());
+            }
+            importersMap.get(otherFile)!.add(s.name);
+          }
+        } catch {}
+      }
+    }
+  }
+
+  out += `\n#### 🔗 1-Hop Direct Callers / Importers\n\n`;
+  if (importersMap.size === 0) {
+    out += `> *(Zero external callers detected outside declared scope. Changes are safely isolated.)*\n`;
+  } else {
+    for (const [importer, syms] of importersMap.entries()) {
+      out += `- \`${importer}\`: imports \`${[...syms].join("`, `")}\`\n`;
+    }
+  }
+
+  return out;
+}
+

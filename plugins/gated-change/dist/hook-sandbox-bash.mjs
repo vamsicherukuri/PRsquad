@@ -4,7 +4,7 @@
 import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
 
 // src/guardrails/stateStore.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
 import { execSync } from "node:child_process";
 var GATED_CHANGE_DIR = ".gated-change";

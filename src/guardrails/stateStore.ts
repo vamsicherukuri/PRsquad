@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
+import { platform } from "node:os";
 import { execSync } from "node:child_process";
 import type { WorkflowState, ApprovalLock, AuditLogEntry } from "./types.js";
 
@@ -314,3 +315,40 @@ export function isAgentMatch(targetAgent: string | undefined, expectedName: stri
     targetAgent.endsWith(`/${expectedName}`)
   );
 }
+
+/**
+ * Ensures node_modules is available in worktrees by creating a native symlink / directory junction
+ * to the parent repo's node_modules. 100% cross-platform (macOS/Linux dir symlink, Windows junction without admin rights).
+ */
+export function ensureNodeModulesInWorktree(rootDir: string = getRepoRoot()): boolean {
+  try {
+    const targetNodeModules = join(rootDir, "node_modules");
+    if (existsSync(targetNodeModules)) {
+      return true; // Already exists
+    }
+
+    const gitCommonDir = execSync("git rev-parse --git-common-dir", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+
+    if (!gitCommonDir) return false;
+    const parentRepo = resolve(rootDir, gitCommonDir, "..");
+    if (parentRepo.replace(/\\/g, "/").toLowerCase() === rootDir.replace(/\\/g, "/").toLowerCase()) {
+      return false; // Already in main repo
+    }
+
+    const sourceNodeModules = join(parentRepo, "node_modules");
+    if (!existsSync(sourceNodeModules)) {
+      return false; // Parent doesn't have node_modules either
+    }
+
+    const linkType = platform() === "win32" ? "junction" : "dir";
+    symlinkSync(sourceNodeModules, targetNodeModules, linkType);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
