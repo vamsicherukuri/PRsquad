@@ -322,12 +322,45 @@ export function appendAuditLog(
   appendFileSync(filePath, JSON.stringify(fullEntry) + "\n", "utf-8");
 }
 
+const AGENT_ALIASES: Record<string, string[]> = {
+  "prsquad-dev": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "gated-change-developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+
+  "prsquad-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "gated-change-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "qa": ["prsquad-qa", "gated-change-qa", "qa"],
+
+  "prsquad-review": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "prsquad-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "gated-change-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+
+  "prsquad-triage": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "gated-change-intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+
+  "prsquad-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "gated-change-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "architect": ["prsquad-architect", "gated-change-architect", "architect"],
+
+  "prsquad": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "prsquad-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "gated-change-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"]
+};
+
 /**
- * Matches an agent name accounting for Copilot namespace qualification
- * (e.g. "gated-change-developer" or "gated-change:gated-change-developer").
+ * Matches an agent name accounting for Copilot namespace qualification and PRSquad aliases
+ * (e.g. "prsquad-dev" matches "gated-change-developer", "prsquad:prsquad-dev", etc.).
  */
 export function isAgentMatch(targetAgent: string | undefined, expectedName: string): boolean {
   if (!targetAgent) return false;
+  const cleanTarget = targetAgent.includes(":") ? targetAgent.split(":").pop()! : (targetAgent.includes("/") ? targetAgent.split("/").pop()! : targetAgent);
+  
+  const aliases = AGENT_ALIASES[expectedName] || [expectedName];
+  if (aliases.includes(targetAgent) || aliases.includes(cleanTarget)) return true;
+
   return (
     targetAgent === expectedName ||
     targetAgent.endsWith(`:${expectedName}`) ||

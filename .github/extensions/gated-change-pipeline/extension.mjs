@@ -122,7 +122,7 @@ function getHtmlContent() {
 			} catch (_) {}
 		}
 	}
-	return "<h3>Gated Change Pipeline: Canvas interface loading...</h3>";
+	return "<h3>PRSquad: Canvas interface loading...</h3>";
 }
 
 async function startServer(instanceId, session) {
@@ -165,12 +165,12 @@ session = await joinSession({
 	canvases: [
 		createCanvas({
 			id: "gated-change-pipeline",
-			displayName: "Gated Change Pipeline",
-			description: "Visual 7-stage interactive pipeline for gated-change workflow.",
+			displayName: "PRSquad",
+			description: "Visual 7-stage interactive pipeline for PRSquad workflow.",
 			actions: [
 				{
 					name: "get_pipeline_status",
-					description: "Returns the current stage, active telemetry, and review status of the gated-change pipeline.",
+					description: "Returns the current stage, active telemetry, and review status of PRSquad.",
 					handler: async () => {
 						const dash = findDashboardJson();
 						return {
@@ -189,9 +189,9 @@ session = await joinSession({
 					servers.set(ctx.instanceId, entry);
 				}
 				return {
-					title: "Gated Change Pipeline",
+					title: "PRSquad",
 					url: entry.url,
-					statusText: "Deterministic Governance Active"
+					statusText: "PRSquad Governance Active"
 				};
 			},
 			onClose: async (ctx) => {

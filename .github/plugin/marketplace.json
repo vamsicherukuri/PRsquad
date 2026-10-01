@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "gated-change",
-      "description": "A governed issue-to-PR workflow with specialist agents and explicit human gates.",
+      "description": "PRSquad: A governed issue-to-PR workflow with specialist agents and explicit human gates.",
       "version": "0.1.49",
       "source": "./plugins/gated-change"
     }

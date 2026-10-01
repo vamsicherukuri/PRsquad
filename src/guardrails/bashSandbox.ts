@@ -33,20 +33,20 @@ export function validateCommandForAgent(
 ): BashValidationResult {
   const trimmed = command.trim();
 
-  // 1. Reviewer Agent: Strict Allowlist (supports qualified names)
-  if (isAgentMatch(agent, "gated-change-reviewer")) {
+  // 1. Code Review Agent: Strict Allowlist (supports qualified names)
+  if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
     // Disallow output redirection
     if (trimmed.includes(">") || trimmed.includes(">>")) {
       return {
         allowed: false,
-        reason: "POLICY_DENIAL: Reviewer agent is strictly read-only and cannot use file redirects ('>' or '>>').",
+        reason: "POLICY_DENIAL: Code Review agent is strictly read-only and cannot use file redirects ('>' or '>>').",
       };
     }
 
     if (!REVIEWER_ALLOWLIST_REGEX.test(trimmed)) {
       return {
         allowed: false,
-        reason: `POLICY_DENIAL: Reviewer agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`,
+        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`,
       };
     }
 
@@ -77,8 +77,8 @@ export function validateCommandForAgent(
     };
   }
 
-  // 4. QA Agent: Prevent mutating git repository state (supports qualified names)
-  if (isAgentMatch(agent, "gated-change-qa")) {
+  // 5. QA Agent: Prevent mutating git repository state (supports qualified names)
+  if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
@@ -88,8 +88,8 @@ export function validateCommandForAgent(
     return { allowed: true };
   }
 
-  // 5. Developer Agent: Block git push to remotes (supports qualified names)
-  if (isAgentMatch(agent, "gated-change-developer")) {
+  // 6. Developer Agent: Block git push to remotes (supports qualified names)
+  if (isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "gated-change-developer")) {
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {
         allowed: false,

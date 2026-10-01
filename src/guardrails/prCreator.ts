@@ -162,7 +162,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     const shortSha = headCommit.slice(0, 7);
 
     const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
-    const prBody = `## 🛡️ Gated Change Pull Request
+    const prBody = `## 🛡️ PRSquad Pull Request
 
 Closes #${issueNum}
 
@@ -176,7 +176,7 @@ ${issueTitle}
 
 ### 🔨 Implementation Summary
 - **Commit SHA**: \`${shortSha}\` (\`${headCommit}\`)
-- **Author**: Autonomous \`@gated-change-developer\` via native PowerShell
+- **Author**: Autonomous \`@prsquad-dev\` via native PowerShell
 - **Scope Compliance**: 100% strictly bounded to approved scope
 
 ### 🧪 QA Independent Verification
@@ -184,12 +184,12 @@ ${issueTitle}
 - **Evidence**: Verified clean via independent Red-Green test execution cycle
 - **All Assertions**: 100% passing
 
-### 🔍 Security & Quality Audit
-- **Reviewer Audit**: \`APPROVED\`
+### 🔍 Security & Code Review
+- **Code Review Verdict**: \`APPROVED\`
 - **Diff Inspection**: Verified read-only, 0 unexpected modifications, 0 security concerns
 
 ---
-> *Pull Request opened automatically by the **Gated Change Guardrails Engine** upon human **PR Approval Gate** confirmation.*  
+> *Pull Request opened automatically by **PRSquad** upon human **PR Gate** confirmation.*  
 > *Merging is strictly reserved for human maintainers on GitHub after PR review.*
 `;
 

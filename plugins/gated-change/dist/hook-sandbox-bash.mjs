@@ -126,8 +126,33 @@ function appendAuditLog(entry, rootDir = getRepoRoot()) {
   const filePath = join(rootDir, GATED_CHANGE_DIR, AUDIT_FILE);
   appendFileSync(filePath, JSON.stringify(fullEntry) + "\n", "utf-8");
 }
+var AGENT_ALIASES = {
+  "prsquad-dev": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "gated-change-developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "prsquad-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "gated-change-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "prsquad-review": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "prsquad-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "gated-change-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "prsquad-triage": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "gated-change-intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "prsquad-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "gated-change-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "prsquad": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "prsquad-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "gated-change-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"]
+};
 function isAgentMatch(targetAgent, expectedName) {
   if (!targetAgent) return false;
+  const cleanTarget = targetAgent.includes(":") ? targetAgent.split(":").pop() : targetAgent.includes("/") ? targetAgent.split("/").pop() : targetAgent;
+  const aliases = AGENT_ALIASES[expectedName] || [expectedName];
+  if (aliases.includes(targetAgent) || aliases.includes(cleanTarget)) return true;
   return targetAgent === expectedName || targetAgent.endsWith(`:${expectedName}`) || targetAgent.endsWith(`/${expectedName}`);
 }
 
@@ -139,17 +164,17 @@ var BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
 function validateCommandForAgent(command, agent = "unknown") {
   const trimmed = command.trim();
-  if (isAgentMatch(agent, "gated-change-reviewer")) {
+  if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
     if (trimmed.includes(">") || trimmed.includes(">>")) {
       return {
         allowed: false,
-        reason: "POLICY_DENIAL: Reviewer agent is strictly read-only and cannot use file redirects ('>' or '>>')."
+        reason: "POLICY_DENIAL: Code Review agent is strictly read-only and cannot use file redirects ('>' or '>>')."
       };
     }
     if (!REVIEWER_ALLOWLIST_REGEX.test(trimmed)) {
       return {
         allowed: false,
-        reason: `POLICY_DENIAL: Reviewer agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`
+        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`
       };
     }
     return { allowed: true };
@@ -172,7 +197,7 @@ function validateCommandForAgent(command, agent = "unknown") {
       reason: `POLICY_DENIAL: Command '${trimmed}' contains forbidden destructive or publishing operations.`
     };
   }
-  if (isAgentMatch(agent, "gated-change-qa")) {
+  if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
@@ -181,7 +206,7 @@ function validateCommandForAgent(command, agent = "unknown") {
     }
     return { allowed: true };
   }
-  if (isAgentMatch(agent, "gated-change-developer")) {
+  if (isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "gated-change-developer")) {
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {
         allowed: false,

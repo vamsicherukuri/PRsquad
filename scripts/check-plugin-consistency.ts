@@ -13,7 +13,7 @@ const AGENTS_DIR = join(ROOT, "plugins/gated-change/com.github.copilot/agents");
 const SKILL_FILE = join(ROOT, "plugins/gated-change/skills/gated-change/SKILL.md");
 const PLUGIN_JSON = join(ROOT, "plugins/gated-change/plugin.json");
 const MARKETPLACE_JSON = join(ROOT, ".github/plugin/marketplace.json");
-const CONTROLLER_NAME = "gated-change-controller";
+const CONTROLLER_NAME = "prsquad";
 
 interface CheckResult {
   ok: boolean;

@@ -110,10 +110,10 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
     stageIdx = 1;
   }
 
-  // Node 1: Intake
+  // Node 1: Triage
   const n1Text = stageIdx > 0
-    ? `1. Intake<br/>✅ ${(intakeCredits ?? 1.29).toFixed(2)} AIU`
-    : `1. Intake<br/>⏳ RUNNING`;
+    ? `1. Triage<br/>✅ ${(intakeCredits ?? 1.29).toFixed(2)} AIU`
+    : `1. Triage<br/>⏳ RUNNING`;
   const n1Class = stageIdx > 0 ? "done" : "active";
 
   // Node 2: Architect
@@ -151,23 +151,23 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
     : `5. QA Test<br/>⚪ QUEUED`;
   const n5Class = stageIdx > 4 ? "done" : isQaFail ? "failed" : stageIdx === 4 ? "active" : "queued";
 
-  // Node 6: Reviewer
+  // Node 6: Code Review
   const isRevConcerns = p.reviewer?.status === "CONCERNS";
   const n6Text = stageIdx > 5
-    ? `6. Reviewer<br/>✅ ${(reviewerCredits ?? 6.90).toFixed(2)} AIU`
+    ? `6. Code Review<br/>✅ ${(reviewerCredits ?? 6.90).toFixed(2)} AIU`
     : isRevConcerns
-    ? `6. Reviewer<br/>⚠️ CONCERNS`
+    ? `6. Code Review<br/>⚠️ CONCERNS`
     : stageIdx === 5
-    ? `6. Reviewer<br/>⏳ RUNNING`
-    : `6. Reviewer<br/>⚪ QUEUED`;
+    ? `6. Code Review<br/>⏳ RUNNING`
+    : `6. Code Review<br/>⚪ QUEUED`;
   const n6Class = stageIdx > 5 ? "done" : isRevConcerns ? "concerns" : stageIdx === 5 ? "active" : "queued";
 
-  // Node 7: PR Gate (Hexagon)
+  // Node 7: PR (Hexagon)
   const n7Text = stageIdx === 7
-    ? `7. PR Gate<br/>✅ PR OPEN`
+    ? `7. PR<br/>✅ PR OPEN`
     : stageIdx === 6
-    ? `7. PR Gate<br/>🚀 READY FOR PR`
-    : `7. PR Gate<br/>⚪ QUEUED`;
+    ? `7. PR<br/>🚀 READY FOR PR`
+    : `7. PR<br/>⚪ QUEUED`;
   const n7Class = stageIdx === 7 ? "prDone" : stageIdx === 6 ? "prReady" : "gatePending";
 
   let out = "```mermaid\n";
@@ -246,15 +246,15 @@ export function formatChatCreditMeterTable(data?: DashboardState | null): string
   out += `| Phase | Specialist / Actor | Status | Actual AI Credits |\n`;
   out += `|:---|:---|:---:|:---:|\n`;
   if (t.controllerCredits !== undefined && t.controllerCredits > 0) {
-    out += `| **0. Controller Orchestration** | \`@gated-change-controller\` | ⏳ \`IN_PROGRESS\` | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
+    out += `| **0. PRSquad Orchestrator** | \`@prsquad\` | ⏳ \`IN_PROGRESS\` | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
   }
-  out += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(intakeStatus)} | ${renderCredits(intakeCredits)} |\n`;
-  out += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(architectStatus)} | ${renderCredits(architectCredits)} |\n`;
+  out += `| **1. Issue Triage** | \`@prsquad-triage\` | ${getStatusBadge(intakeStatus)} | ${renderCredits(intakeCredits)} |\n`;
+  out += `| **2. Architecture Plan** | \`@prsquad-architect\` | ${getStatusBadge(architectStatus)} | ${renderCredits(architectCredits)} |\n`;
   out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
-  out += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(devStatus)} | ${renderCredits(devCredits)} |\n`;
-  out += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(qaStatus)} | ${renderCredits(qaCredits)} |\n`;
-  out += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(reviewerStatus)} | ${renderCredits(reviewerCredits)} |\n`;
-  out += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
+  out += `| **4. Implementation** | \`@prsquad-dev\` | ${getStatusBadge(devStatus)} | ${renderCredits(devCredits)} |\n`;
+  out += `| **5. QA Verification** | \`@prsquad-qa\` | ${getStatusBadge(qaStatus)} | ${renderCredits(qaCredits)} |\n`;
+  out += `| **6. Security & Code Review** | \`@prsquad-review\` | ${getStatusBadge(reviewerStatus)} | ${renderCredits(reviewerCredits)} |\n`;
+  out += `| **7. Pull Request** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
 
   return out;
 }
@@ -402,7 +402,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     md += `> **Pipeline Status:** ✅ **All automated checks passed** · Pull Request open awaiting human review  \n`;
     md += `> **Resource Consumption:** **${totalCredits}** · ${turnsCount} turns · ${cacheHit} prompt cache hit rate  \n\n`;
   } else {
-    md += `## 🛡️ Gated Fix Pipeline — Issue #${data.issueNumber}\n\n`;
+    md += `## 🛡️ PRSquad — Issue #${data.issueNumber}\n\n`;
     md += `> **Issue:** #${data.issueNumber}${data.issueTitle ? ` — ${data.issueTitle}` : ""}  \n`;
     md += `> **Target Branch:** \`${currentBranch}\`  \n`;
     md += `> **Pipeline Status:** ⏳ Active execution in progress  \n`;
@@ -422,15 +422,15 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   if (t?.controllerCredits !== undefined && t.controllerCredits > 0) {
     const controllerBadge = isPrReady ? "✅ `COMPLETED`" : "🤖 `ACTIVE`";
-    md += `| **0. Controller Orchestration** | ${controllerBadge} | Supervised routing and phase gating | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
+    md += `| **0. PRSquad Orchestrator** | ${controllerBadge} | Multi-agent coordination and human gatekeeper | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
   }
-  md += `| **1. Intake Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |\n`;
+  md += `| **1. Issue Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |\n`;
   md += `| **2. Architecture Plan** | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Root cause identified & surgical scope proposed"} | ${renderCredits(p.architect?.credits)} |\n`;
   md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval signed in chat"} | **0.00 AIU** *(Deterministic)* |\n`;
   md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |\n`;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |\n`;
-  md += `| **6. Security Audit** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
-  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created · Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
+  md += `| **6. Security & Code Review** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
+  md += `| **7. Pull Request** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created · Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
   md += `| **Total** | 🏁 **${isPrReady ? "PR OPEN · AWAITING REVIEW" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |\n\n`;
 
   md += `---\n\n`;

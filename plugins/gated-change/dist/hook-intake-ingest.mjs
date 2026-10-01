@@ -237,8 +237,33 @@ function appendAuditLog(entry, rootDir = getRepoRoot()) {
   const filePath = join2(rootDir, GATED_CHANGE_DIR, AUDIT_FILE);
   appendFileSync(filePath, JSON.stringify(fullEntry) + "\n", "utf-8");
 }
+var AGENT_ALIASES = {
+  "prsquad-dev": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "gated-change-developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "developer": ["prsquad-dev", "prsquad-developer", "gated-change-developer", "developer"],
+  "prsquad-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "gated-change-qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "qa": ["prsquad-qa", "gated-change-qa", "qa"],
+  "prsquad-review": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "prsquad-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "gated-change-reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "reviewer": ["prsquad-review", "prsquad-reviewer", "gated-change-reviewer", "reviewer"],
+  "prsquad-triage": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "gated-change-intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "intake": ["prsquad-triage", "prsquad-intake", "gated-change-intake", "intake", "triage"],
+  "prsquad-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "gated-change-architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "architect": ["prsquad-architect", "gated-change-architect", "architect"],
+  "prsquad": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "prsquad-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "gated-change-controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"],
+  "controller": ["prsquad", "prsquad-controller", "prsquad-orchestrator", "gated-change-controller", "controller"]
+};
 function isAgentMatch(targetAgent, expectedName) {
   if (!targetAgent) return false;
+  const cleanTarget = targetAgent.includes(":") ? targetAgent.split(":").pop() : targetAgent.includes("/") ? targetAgent.split("/").pop() : targetAgent;
+  const aliases = AGENT_ALIASES[expectedName] || [expectedName];
+  if (aliases.includes(targetAgent) || aliases.includes(cleanTarget)) return true;
   return targetAgent === expectedName || targetAgent.endsWith(`:${expectedName}`) || targetAgent.endsWith(`/${expectedName}`);
 }
 
@@ -404,7 +429,7 @@ function renderDashboardMarkdown(data) {
 
 `;
   } else {
-    md += `## \u{1F6E1}\uFE0F Gated Fix Pipeline \u2014 Issue #${data.issueNumber}
+    md += `## \u{1F6E1}\uFE0F PRSquad \u2014 Issue #${data.issueNumber}
 
 `;
     md += `> **Issue:** #${data.issueNumber}${data.issueTitle ? ` \u2014 ${data.issueTitle}` : ""}  
@@ -429,10 +454,10 @@ function renderDashboardMarkdown(data) {
   const devSummary = p.developer?.summary && !p.developer?.summary.toLowerCase().includes("implementing changes") ? p.developer.summary : isDevDone ? "Code changes implemented within approved scope" : "Implementing changes bounded to approved scope";
   if (t?.controllerCredits !== void 0 && t.controllerCredits > 0) {
     const controllerBadge = isPrReady ? "\u2705 `COMPLETED`" : "\u{1F916} `ACTIVE`";
-    md += `| **0. Controller Orchestration** | ${controllerBadge} | Supervised routing and phase gating | **${t.controllerCredits.toFixed(2)} AIU** |
+    md += `| **0. PRSquad Orchestrator** | ${controllerBadge} | Multi-agent coordination and human gatekeeper | **${t.controllerCredits.toFixed(2)} AIU** |
 `;
   }
-  md += `| **1. Intake Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |
+  md += `| **1. Issue Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |
 `;
   md += `| **2. Architecture Plan** | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Root cause identified & surgical scope proposed"} | ${renderCredits(p.architect?.credits)} |
 `;
@@ -442,9 +467,9 @@ function renderDashboardMarkdown(data) {
 `;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |
 `;
-  md += `| **6. Security Audit** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags \xB7 In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |
+  md += `| **6. Security & Code Review** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags \xB7 In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |
 `;
-  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created \xB7 Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |
+  md += `| **7. Pull Request** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created \xB7 Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |
 `;
   md += `| **Total** | \u{1F3C1} **${isPrReady ? "PR OPEN \xB7 AWAITING REVIEW" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |
 

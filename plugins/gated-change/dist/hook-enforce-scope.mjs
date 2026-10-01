@@ -328,7 +328,7 @@ async function main() {
       );
       appendAuditLog({
         sessionId: state.sessionId,
-        agent: input.agent || "gated-change-developer",
+        agent: input.agent || "prsquad-dev",
         tool: "edit",
         action: "write_blocked_out_of_scope",
         decision: "deny",
@@ -350,7 +350,7 @@ async function main() {
     }
     appendAuditLog({
       sessionId: state.sessionId,
-      agent: input.agent || "gated-change-developer",
+      agent: input.agent || "prsquad-dev",
       tool: "edit",
       action: "write_allowed_in_scope",
       decision: "allow",
