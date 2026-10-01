@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -241,6 +242,47 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   } catch (err: any) {
     assert(false, `Hook crashed instead of clean exit: ${err.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Scoped Read Tool — Multi-path Declared Scope Tests (Issue #11)
+// ---------------------------------------------------------------------------
+console.log("\nSuite 3b: Scoped Read Tool — isWithinScope Multi-path Matching");
+{
+  // Semicolon-delimited multi-path declared scope: a listed file must be readable.
+  const semiDeclared = "src/scopeTool.ts; scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", semiDeclared, REPO_ROOT),
+    "Permits read of first entry in semicolon-delimited multi-path declared scope"
+  );
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", semiDeclared, REPO_ROOT),
+    "Permits read of second entry in semicolon-delimited multi-path declared scope"
+  );
+
+  // Comma-delimited equivalent must also match.
+  const commaDeclared = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", commaDeclared, REPO_ROOT),
+    "Permits read of first entry in comma-delimited multi-path declared scope"
+  );
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", commaDeclared, REPO_ROOT),
+    "Permits read of second entry in comma-delimited multi-path declared scope"
+  );
+
+  // A path nested under one of several declared entries must also match.
+  const nestedDeclared = "src/guardrails; scripts";
+  assert(
+    isWithinScope("src/guardrails/scopeEnforcer.ts", nestedDeclared, REPO_ROOT),
+    "Permits read of path nested under one entry of a multi-path declared scope"
+  );
+
+  // A path outside all declared entries must still be strictly blocked.
+  assert(
+    !isWithinScope("src/other.ts", semiDeclared, REPO_ROOT),
+    "Blocks read of path outside all entries in a multi-path declared scope"
+  );
 }
 
 // ---------------------------------------------------------------------------
