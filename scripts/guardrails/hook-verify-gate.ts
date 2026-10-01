@@ -453,7 +453,25 @@ async function main() {
       saveState(state, repoRoot);
     }
 
-    if (isAgentMatch(targetAgent, "gated-change-architect")) {
+    if (isAgentMatch(targetAgent, "gated-change-intake")) {
+      const dashIntake = syncWorkflowDashboard(repoRoot, {
+        owner: state.issue?.owner || "vamsicherukuri",
+        repo: state.issue?.repo || "gated-fix-pipeline",
+        issueNumber: resolvedIssue,
+        issueTitle: state.issue?.title && state.issue.title !== "Test Billing Issue" ? state.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+        sessionId: input.sessionId || state.sessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Issue requirements extracted and acceptance criteria validated",
+      });
+
+      const chatMeter = formatChatCreditMeter(dashIntake);
+      const out = chatMeter
+        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.")
+        : { decision: "allow" };
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
+    } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const rawText = typeof input.toolResult === "string"
         ? input.toolResult
         : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);

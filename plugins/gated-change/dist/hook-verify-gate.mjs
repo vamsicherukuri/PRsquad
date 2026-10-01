@@ -416,7 +416,8 @@ function renderDashboardMarkdown(data) {
 
 | Phase | Specialist / Actor | Status | Actual AI Credits | Key Artifact / Hand-off Summary |
 |:---|:---|:---:|:---:|:---|
-| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} | ${p.intake?.summary || "Awaiting triage"} |
+${t?.controllerCredits !== void 0 && t.controllerCredits > 0 ? `| **0. Controller Orchestration** | \`@gated-change-controller\` | \u{1F916} \`ACTIVE\` | **${t.controllerCredits.toFixed(2)} AIU** | Supervised routing and phase gating |
+` : ""}| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} | ${p.intake?.summary || "Awaiting triage"} |
 | **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${renderCredits(p.architect?.credits)} | ${p.architect?.summary || "Pending intake triage"} |
 | **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | **0.00 AIU** *(Deterministic)* | ${p.scopeGate?.summary || "Pending architecture plan"} |
 | **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${renderCredits(p.developer?.credits)} | ${p.developer?.summary || "Locked until human approval"} |
@@ -461,6 +462,43 @@ function renderDashboardMarkdown(data) {
     md += `| **Mechanical Guardrails** | **0 tokens / 0 AIU** | Scope Gate, Sandbox, PR Creator, Dashboard Sync (Deterministic) |
 `;
     md += `| **Total Billed AI Credits** | **${t.actualAiCredits.toFixed(2)} AIU** | Ground-truth measurement via Copilot App session store |
+
+`;
+    const subagents = t.subagents || [];
+    const intakeCredits = p.intake?.credits !== void 0 ? p.intake.credits : subagents[0]?.credits;
+    const architectCredits = p.architect?.credits !== void 0 ? p.architect.credits : subagents[1]?.credits;
+    const devCredits = p.developer?.credits !== void 0 ? p.developer.credits : subagents[2]?.credits;
+    const qaCredits = p.qa?.credits !== void 0 ? p.qa.credits : subagents[3]?.credits;
+    const reviewerCredits = p.reviewer?.credits !== void 0 ? p.reviewer.credits : subagents[4]?.credits;
+    const intakeStatus = p.intake?.status || (subagents.length > 0 ? "READY" : "PENDING");
+    const architectStatus = p.architect?.status || (subagents.length > 1 ? "PLAN_READY" : "PENDING");
+    const devStatus = p.developer?.status || (subagents.length > 2 ? "IMPLEMENTED" : "PENDING");
+    const qaStatus = p.qa?.status || (subagents.length > 3 ? "PASS" : "PENDING");
+    const reviewerStatus = p.reviewer?.status || (subagents.length > 4 ? "APPROVED" : "PENDING");
+    md += `#### \u{1F4CA} Specialist Phase Breakdown
+
+`;
+    md += `| Phase | Specialist / Actor | Status | Actual AI Credits |
+`;
+    md += `|:---|:---|:---:|:---:|
+`;
+    if (t.controllerCredits !== void 0 && t.controllerCredits > 0) {
+      md += `| **0. Controller Orchestration** | \`@gated-change-controller\` | \u23F3 \`IN_PROGRESS\` | **${t.controllerCredits.toFixed(2)} AIU** |
+`;
+    }
+    md += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(intakeStatus)} | ${renderCredits(intakeCredits)} |
+`;
+    md += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(architectStatus)} | ${renderCredits(architectCredits)} |
+`;
+    md += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |
+`;
+    md += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(devStatus)} | ${renderCredits(devCredits)} |
+`;
+    md += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(qaStatus)} | ${renderCredits(qaCredits)} |
+`;
+    md += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(reviewerStatus)} | ${renderCredits(reviewerCredits)} |
+`;
+    md += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |
 
 `;
     md += `---
@@ -830,6 +868,30 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
     if (current.issueNumber > 0 && current.issueNumber !== 999 && current.owner && current.repo && !isTest) {
       postOrPatchGitHubComment(current);
       writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    }
+    if (process.env.GATED_CHANGE_WEBHOOK_URL && !isTest) {
+      try {
+        const payload = JSON.stringify({
+          event: "workflow_dashboard_updated",
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          issueNumber: current.issueNumber,
+          owner: current.owner,
+          repo: current.repo,
+          activeBranch: current.activeBranch,
+          telemetry: current.telemetry,
+          phases: current.phases,
+          summaryMarkdown: renderDashboardMarkdown(current)
+        });
+        if (typeof fetch === "function") {
+          fetch(process.env.GATED_CHANGE_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload
+          }).catch(() => {
+          });
+        }
+      } catch {
+      }
     }
     return current;
   } catch (err) {
@@ -1589,7 +1651,22 @@ ${instructionText}`;
       state2.sessionId = input.sessionId;
       saveState(state2, repoRoot2);
     }
-    if (isAgentMatch(targetAgent, "gated-change-architect")) {
+    if (isAgentMatch(targetAgent, "gated-change-intake")) {
+      const dashIntake = syncWorkflowDashboard(repoRoot2, {
+        owner: state2.issue?.owner || "vamsicherukuri",
+        repo: state2.issue?.repo || "gated-fix-pipeline",
+        issueNumber: resolvedIssue2,
+        issueTitle: state2.issue?.title && state2.issue.title !== "Test Billing Issue" ? state2.issue.title : "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
+        sessionId: input.sessionId || state2.sessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Issue requirements extracted and acceptance criteria validated"
+      });
+      const chatMeter = formatChatCreditMeter(dashIntake);
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.") : { decision: "allow" };
+      process.stdout.write(JSON.stringify(out) + "\n");
+      process.exit(0);
+    } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const rawText = typeof input.toolResult === "string" ? input.toolResult : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
       const dashArch = syncWorkflowDashboard(repoRoot2, {

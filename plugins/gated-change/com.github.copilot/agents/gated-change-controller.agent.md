@@ -77,9 +77,8 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Done when: Architect has returned `PLAN_READY` (presented at the Scope Approval Gate) or `BLOCKED` (reported to the human and stopped).
 
 3. **Scope Approval Gate**
-   - Execute the live credit meter command via powershell to fetch the exact ground-truth telemetry table:
-     `node "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs" --meter`
-   - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, plain-language summary, and the returned `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table. This shows the human approver the exact ground-truth AI credits burned so far (Intake + Architecture) before approving implementation.
+   - Include the live `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table automatically provided in your turn context by the guardrail hook. (Do not run a separate powershell --meter turn; the hook injects the live ground-truth table directly upon specialist completion).
+   - Present the plan with root cause, ADD/MODIFY/DELETE file list, proposed scope, blast radius, risk tier, validation plan, plain-language summary, and the `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table. This shows the human approver the exact ground-truth AI credits burned so far (Intake + Architecture) before approving implementation.
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
@@ -95,7 +94,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Pass the approved plan, original acceptance criteria, risk tier, approved scope, and implementation-attempt number. Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.
-   - When Developer completes, include the updated live `⚡ Actual AI Credit & Token Consumption` meter status in your handoff message to the human before delegating to QA.
+   - When Developer completes, include the updated live `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook in your handoff message before delegating to QA. (Do not execute a separate powershell turn.)
    - Route Developer status:
       - `IMPLEMENTED`: require `scopeAmendmentRequest: null`, a captured `baseRef`, `headRef` (commit SHA, branch, or `"WORKTREE"`), and complete changed/untracked file lists; then invoke QA.
       - `BLOCKED`: pause and report `blocker`. Do not invoke QA. Consume an implementation attempt only when `blocker.partialWorkExists` is true.
@@ -112,7 +111,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - QA reads the actual diff, independently executes Developer's regression tests and relevant existing checks, validates the original acceptance criteria, and re-checks final-diff scope compliance.
    - QA never writes source code.
    - Require QA to return its complete structured result: verdict, scope compliance, criterion-level evidence, test results, failure classifications, blocking findings, and notes.
-   - When QA validation completes, include the updated live `⚡ Actual AI Credit & Token Consumption` meter status in your handoff message before delegating to Reviewer.
+   - When QA validation completes, include the updated live `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook in your handoff message before delegating to Reviewer. (Do not execute a separate powershell turn.)
    - Route QA verdict:
       - `PASS`: require scope compliance `PASS` and every acceptance criterion `PASS`; then invoke Reviewer. Pre-existing or resolved-flaky flags may accompany a pass.
       - `FAIL`: only for scope-compliance failure or repeatable `GENUINE_FIX_CAUSED` failure; return to Developer and consume one implementation attempt.
@@ -129,7 +128,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 7. **PR Approval Gate**
    - Summarize implementation, QA evidence, Reviewer flags, residual risks, and scope/audit information.
-   - Present the final, comprehensive `⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your context, giving the maintainer full visibility into total Copilot AI Units (AIU), prompt cache savings, and per-specialist token breakdown.
+   - Present the final, comprehensive `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook, giving the maintainer full visibility into total Copilot AI Units (AIU), prompt cache savings, and per-specialist token breakdown. (Do not execute a separate powershell turn.)
    - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Reviewer findings, and residual risks).
    - Present the package to the human at the **PR Approval Gate** and conclude with this exact instruction:
      "To open the official Pull Request on GitHub: type `/create-pr` or reply with explicit approval (e.g. 'Approved, open PR', 'Create PR'). Merging is strictly reserved for human maintainers on GitHub after PR review."
@@ -140,13 +139,14 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 ## In-chat live AI credit meter
 
-At the Scope Approval Gate and every major phase handoff, execute the deterministic telemetry command via powershell to fetch the ground-truth table:
-`node "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs" --meter`
-Always render the returned `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response:
+At the Scope Approval Gate and every major phase handoff, the guardrail hook automatically injects the live ground-truth telemetry table directly into your turn context upon specialist completion.
+Always render the injected `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response:
 - **Scope Approval Gate**: Display the live credit table alongside the plan.
 - **Developer Completion**: Display the updated credit table showing Developer implementation usage before running QA.
 - **QA Verification Complete**: Display the updated credit table showing QA validation usage before running Reviewer.
 - **PR Approval Gate**: Display the final comprehensive credit and token breakdown table before requesting PR confirmation.
+
+*(Note: Zero LLM overhead. Do not invoke powershell to fetch telemetry; use the hook-injected table directly from context. Only fallback to powershell `--meter` if the table is absent.)*
 
 ## Bounded-loop rules
 
