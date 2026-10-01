@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -258,6 +259,60 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   } catch (err: any) {
     assert(false, `Hook crashed instead of clean exit: ${err.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Scoped Read Tool — Multi-Path Declared Scope Tests (Issue #11)
+// ---------------------------------------------------------------------------
+console.log("\nSuite 3b: Guardrail 2 — Scoped Read Tool (isWithinScope) Multi-Path Matching");
+{
+  const readRoot = REPO_ROOT;
+
+  // Comma-separated multi-path scope permits a file matching the first entry
+  const commaScope = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", commaScope, readRoot),
+    "isWithinScope permits first entry in comma-separated multi-path scope"
+  );
+
+  // Semicolon-separated multi-path scope permits a file matching the second entry (exact issue case)
+  const semiScope = "src/scopeTool.ts; scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", semiScope, readRoot),
+    "isWithinScope permits second entry in semicolon-separated multi-path scope"
+  );
+
+  // A path outside all declared entries is still blocked
+  assert(
+    !isWithinScope("src/other.ts", semiScope, readRoot),
+    "isWithinScope blocks a path outside all declared multi-path entries"
+  );
+
+  // Sibling-prefix false positives remain denied
+  assert(
+    !isWithinScope("src/scopeTool2.ts", "src/scopeTool.ts", readRoot),
+    "isWithinScope denies sibling-prefix path 'src/scopeTool2.ts' against scope 'src/scopeTool.ts'"
+  );
+
+  // Empty/whitespace/delimiter-only declared scope strictly denies
+  assert(
+    !isWithinScope("src/scopeTool.ts", "", readRoot),
+    "isWithinScope strictly denies on empty declared scope"
+  );
+  assert(
+    !isWithinScope("src/scopeTool.ts", "   ", readRoot),
+    "isWithinScope strictly denies on whitespace-only declared scope"
+  );
+  assert(
+    !isWithinScope("src/scopeTool.ts", ";,;", readRoot),
+    "isWithinScope strictly denies on delimiter-only declared scope"
+  );
+
+  // Preserve current behavior for single-path scopes (no regression)
+  assert(
+    isWithinScope("src/scopeTool.ts", "src/scopeTool.ts", readRoot),
+    "isWithinScope still permits exact match for single-path scope (no regression)"
+  );
 }
 
 // ---------------------------------------------------------------------------
