@@ -28,7 +28,8 @@ Responsibilities:
 - Before the first edit of an implementation attempt, capture `baseRef` with `git rev-parse HEAD` using your shell tool (`powershell` on Windows, `bash` on macOS/Linux).
 - Implement the approved fix.
 - Write/update the regression tests required to prove the acceptance criteria.
-- Run the narrowest relevant existing validation commands while implementing (e.g. `npx -y tsx scripts/test-guardrails.ts` or `npm test`). In isolated worktrees where local `node_modules` may not be installed, use `npx -y tsx` to execute tests.
+- The isolated development workspace and all project dependencies are already pre-initialized by the pipeline environment. Do NOT run package discovery, dependency installation, or environment setup commands (e.g. package manager installs or registry lookups). Proceed immediately to reading in-scope files and implementing the fix.
+- Run the narrowest relevant existing validation commands while implementing (e.g. test runner commands specified in the plan).
 - Stage and commit your changes on the active feature branch (`git commit -m "fix: ..."`) before reporting `IMPLEMENTED`.
 - Never checkout, switch to, or commit to `main` or `master`. Never run `git push`.
 - Preserve repository conventions and avoid unrelated refactors.

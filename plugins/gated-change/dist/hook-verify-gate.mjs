@@ -2070,6 +2070,10 @@ ${details.testSummary}`);
       mdParts.push(`#### \u{1F4D0} Approved Architecture Plan
 ${archPlan.trim()}`);
     }
+    if (stateObj?.issue?.body) {
+      mdParts.push(`#### \u{1F4CB} Verified Issue Acceptance Criteria & Specification
+${stateObj.issue.body.trim()}`);
+    }
     return {
       details,
       markdown: mdParts.join("\n\n")
@@ -2174,8 +2178,12 @@ ${archPlan.trim()}`);
         summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
         details: devDetails
       });
-      const chatMeter = formatChatCreditMeter(dashDev);
-      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running QA.") : { decision: "allow" };
+      const devAiCredits = dashDev?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
+      const out = buildEnrichedPostToolOutput(
+        input,
+        devAiCredits,
+        "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification."
+      );
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
@@ -2191,8 +2199,12 @@ ${archPlan.trim()}`);
         summary: "Independent QA verification passed all acceptance criteria",
         details: qaDetails
       });
-      const chatMeter = formatChatCreditMeter(dashQA);
-      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: QA verification complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message before running Reviewer.") : { decision: "allow" };
+      const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
+      const out = buildEnrichedPostToolOutput(
+        input,
+        qaAiCredits,
+        "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit."
+      );
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {

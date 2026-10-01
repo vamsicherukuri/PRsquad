@@ -21,6 +21,7 @@ export interface WorkflowState {
     repo: string;
     number: number;
     title?: string;
+    body?: string;
   };
   phase: WorkflowPhase;
   intakeRound: number;

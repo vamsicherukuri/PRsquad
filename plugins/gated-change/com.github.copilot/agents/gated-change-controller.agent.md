@@ -140,11 +140,10 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 ## In-chat live AI credit meter
 
 At the Scope Approval Gate and every major phase handoff, the guardrail hook automatically injects the live ground-truth telemetry table directly into your turn context upon specialist completion.
-Always render the injected `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response:
-- **Scope Approval Gate**: Display the live credit table alongside the plan.
-- **Developer Completion**: Display the updated credit table showing Developer implementation usage before running QA.
-- **QA Verification Complete**: Display the updated credit table showing QA validation usage before running Reviewer.
-- **PR Approval Gate**: Display the final comprehensive credit and token breakdown table before requesting PR confirmation.
+Always render the injected `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response at the two Human Approval Gates:
+- **Scope Approval Gate (Gate 1)**: Display the comprehensive credit table alongside the plan so the human approver sees exact usage before implementation.
+- **PR Approval Gate (Gate 2)**: Display the final comprehensive credit and token breakdown table before requesting PR confirmation.
+- **Intermediate Specialist Handoffs (Developer & QA)**: Keep handoffs direct and concise. Display the compact live credit indicator provided by the hook; full detailed tables are reserved for the Human Approval Gates to prevent chat history token bloat.
 
 *(Note: Zero LLM overhead. Do not invoke powershell to fetch telemetry; use the hook-injected table directly from context. Only fallback to powershell `--meter` if the table is absent.)*
 

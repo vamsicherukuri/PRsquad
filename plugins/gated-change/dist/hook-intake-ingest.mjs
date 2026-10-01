@@ -31,7 +31,13 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
       body: parsed.body ?? "",
       author: parsed.author?.login ?? "unknown",
       labels: (parsed.labels ?? []).map((l) => l.name ?? l),
-      comments: (parsed.comments ?? []).map((c) => ({
+      comments: (parsed.comments ?? []).filter((c) => {
+        const body = c.body || "";
+        if (body.includes("<!-- gated-change:workflow-dashboard -->")) return false;
+        if (body.includes("Gated Change Workflow Dashboard")) return false;
+        if (c.author?.login?.includes("[bot]")) return false;
+        return true;
+      }).map((c) => ({
         author: c.author?.login ?? "unknown",
         body: c.body ?? "",
         createdAt: c.createdAt ?? ""
@@ -76,6 +82,7 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
   }
 }
 function formatIntakePayload(issueData, round = 0) {
+  const relevantComments = round > 0 ? issueData.comments || [] : [];
   return JSON.stringify(
     {
       source: "DETERMINISTIC_HOOK_INGESTION",
@@ -88,7 +95,7 @@ function formatIntakePayload(issueData, round = 0) {
         body: issueData.body,
         author: issueData.author,
         labels: issueData.labels,
-        comments: issueData.comments,
+        comments: relevantComments,
         state: issueData.state
       },
       instructions: "Evaluate this pre-fetched issue against the Definition of Ready (Reproduction/Expected vs Actual, Acceptance Criteria, Declared Scope). Output your structured triage verdict."
@@ -1042,7 +1049,7 @@ async function main() {
         process.exit(0);
       }
       const payload = formatIntakePayload(issueData, state.intakeRound);
-      state.issue = { owner, repo, number: issueData.number, title: issueData.title };
+      state.issue = { owner, repo, number: issueData.number, title: issueData.title, body: issueData.body };
       state.phase = "INTAKE";
       if (input.sessionId) {
         state.sessionId = input.sessionId;

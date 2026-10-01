@@ -124,7 +124,7 @@ async function main() {
       const payload = formatIntakePayload(issueData, state.intakeRound);
 
       // Update state
-      state.issue = { owner, repo, number: issueData.number, title: issueData.title };
+      state.issue = { owner, repo, number: issueData.number, title: issueData.title, body: issueData.body };
       state.phase = "INTAKE";
       if (input.sessionId) {
         state.sessionId = input.sessionId;

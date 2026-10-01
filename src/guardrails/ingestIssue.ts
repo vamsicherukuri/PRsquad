@@ -32,11 +32,19 @@ export function fetchIssueDeterministic(
       body: parsed.body ?? "",
       author: parsed.author?.login ?? "unknown",
       labels: (parsed.labels ?? []).map((l: any) => l.name ?? l),
-      comments: (parsed.comments ?? []).map((c: any) => ({
-        author: c.author?.login ?? "unknown",
-        body: c.body ?? "",
-        createdAt: c.createdAt ?? "",
-      })),
+      comments: (parsed.comments ?? [])
+        .filter((c: any) => {
+          const body = c.body || "";
+          if (body.includes("<!-- gated-change:workflow-dashboard -->")) return false;
+          if (body.includes("Gated Change Workflow Dashboard")) return false;
+          if (c.author?.login?.includes("[bot]")) return false;
+          return true;
+        })
+        .map((c: any) => ({
+          author: c.author?.login ?? "unknown",
+          body: c.body ?? "",
+          createdAt: c.createdAt ?? "",
+        })),
       state: (parsed.state ?? "OPEN").toUpperCase(),
     };
   } catch {
@@ -85,6 +93,10 @@ export function fetchIssueDeterministic(
  * Builds the pre-formatted structured prompt payload for the Intake agent.
  */
 export function formatIntakePayload(issueData: FetchedIssueData, round: number = 0): string {
+  // On initial triage (round 0), the issue description and title are the authoritative specification.
+  // Comments are only passed during clarification rounds (round > 0) to prevent historical prompt noise.
+  const relevantComments = round > 0 ? (issueData.comments || []) : [];
+
   return JSON.stringify(
     {
       source: "DETERMINISTIC_HOOK_INGESTION",
@@ -97,7 +109,7 @@ export function formatIntakePayload(issueData: FetchedIssueData, round: number =
         body: issueData.body,
         author: issueData.author,
         labels: issueData.labels,
-        comments: issueData.comments,
+        comments: relevantComments,
         state: issueData.state,
       },
       instructions:

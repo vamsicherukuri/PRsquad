@@ -589,6 +589,9 @@ async function main() {
     if (archPlan) {
       mdParts.push(`#### 📐 Approved Architecture Plan\n${archPlan.trim()}`);
     }
+    if (stateObj?.issue?.body) {
+      mdParts.push(`#### 📋 Verified Issue Acceptance Criteria & Specification\n${stateObj.issue.body.trim()}`);
+    }
 
     return {
       details,
@@ -718,10 +721,14 @@ async function main() {
         details: devDetails,
       });
 
-      const chatMeter = formatChatCreditMeter(dashDev);
-      const out = chatMeter
-        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live ⚡ AI Credit Meter status in your phase handoff message before running QA.")
-        : { decision: "allow" };
+      const devAiCredits = dashDev?.telemetry?.actualAiCredits !== undefined
+        ? `> ⚡ Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
+        : "";
+      const out = buildEnrichedPostToolOutput(
+        input,
+        devAiCredits,
+        "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification."
+      );
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
@@ -739,10 +746,14 @@ async function main() {
         details: qaDetails,
       });
 
-      const chatMeter = formatChatCreditMeter(dashQA);
-      const out = chatMeter
-        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: QA verification complete. Include this live ⚡ AI Credit Meter status in your phase handoff message before running Reviewer.")
-        : { decision: "allow" };
+      const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== undefined
+        ? `> ⚡ Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
+        : "";
+      const out = buildEnrichedPostToolOutput(
+        input,
+        qaAiCredits,
+        "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit."
+      );
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
