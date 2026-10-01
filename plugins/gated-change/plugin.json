@@ -7,11 +7,13 @@
     "name": "Vamsi Cherukuri"
   },
   "repository": "https://github.com/vamsicherukuri/gated-fix-pipeline",
+  "extensions": "extensions",
   "keywords": [
     "github-copilot-app",
     "governance",
     "human-in-the-loop",
     "multi-agent",
-    "software-delivery"
+    "software-delivery",
+    "canvas"
   ]
 }

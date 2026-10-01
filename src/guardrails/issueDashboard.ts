@@ -195,7 +195,13 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
 }
 
 export function formatChatCreditMeter(data?: DashboardState | null): string {
-  return renderPipelineMermaid(data);
+  if (!data) return "";
+  const t = data.telemetry;
+  const credits = t?.actualAiCredits !== undefined && t.actualAiCredits > 0
+    ? `${t.actualAiCredits.toFixed(2)} AIU`
+    : "0.00 AIU";
+  const branch = data.activeBranch || "fix/issue-11";
+  return `> ⚡ **Live AI Credit Burn:** **${credits}** · **Branch:** \`${branch}\` · *(Visual Pipeline: [Canvas Panel](http://localhost:54321))*\n`;
 }
 
 export function formatChatCreditMeterTable(data?: DashboardState | null): string {

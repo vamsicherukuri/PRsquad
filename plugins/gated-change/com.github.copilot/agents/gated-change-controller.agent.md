@@ -122,14 +122,12 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Do not merge automatically. The Gated Change workflow concludes at PR creation; merging is handled by human maintainers on GitHub.
    - Done when: the Pull Request is open on GitHub and its URL is presented to the human. Controller stops here and never merges automatically.
 
-## In-chat live visual workflow & AI credit meter
+## In-chat live AI credit meter & visual canvas
 
-At every major phase handoff and human gate, the guardrail hook automatically injects the live visual pipeline diagram (Mermaid) directly into your turn context upon specialist completion.
-Always render the injected visual pipeline diagram into your user-facing response across all phases:
-- Display the clean, horizontal Mermaid pipeline graph showing the live state of all 7 stages and cumulative AI credits per stage.
-- Do not output verbose markdown tracker tables or raw JSON blocks into chat; the pipeline diagram provides the complete, compact visual progress state.
+At every major phase handoff and human gate, the guardrail hook automatically injects the compact credit indicator directly into your turn context upon specialist completion.
+Display the clean, compact credit indicator provided by the hook. The live 7-stage visual pipeline is rendered separately in the dedicated Canvas panel (`🔲 Canvas > Gated Change Pipeline`), keeping chat history clean and conversational without repetitive diagrams, markdown tables, or raw JSON state dumps.
 
-*(Note: Zero LLM overhead. Computed 100% deterministically by the guardrail hook. Do not invoke shell to fetch telemetry; use the hook-injected diagram directly from context.)*
+*(Note: Zero LLM overhead. Computed 100% deterministically by the guardrail hook. Do not invoke shell to fetch telemetry; use the hook-injected indicator directly from context.)*
 
 ## Bounded-loop rules
 
