@@ -276,6 +276,12 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
       }
     }
     const row = db.prepare(`
+      WITH deduplicated_events AS (
+        SELECT *
+        FROM assistant_usage_events
+        WHERE session_id = ? AND id >= ?
+        GROUP BY created_at, duration_ms, input_tokens, output_tokens
+      )
       SELECT 
         model,
         COUNT(*) as turns,
@@ -288,19 +294,30 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
         ROUND(COALESCE(SUM(duration_ms), 0) / 1000.0, 1) as duration_seconds,
         MIN(id) as first_event_id,
         MAX(id) as latest_event_id
-      FROM assistant_usage_events
-      WHERE session_id = ? AND id >= ?
+      FROM deduplicated_events
     `).get(effectiveSessionId, startEventId);
     if (!row || !row.turns || row.turns === 0) return null;
     const controllerRow = db.prepare(`
+      WITH deduplicated_events AS (
+        SELECT *
+        FROM assistant_usage_events
+        WHERE session_id = ? AND id >= ?
+        GROUP BY created_at, duration_ms, input_tokens, output_tokens
+      )
       SELECT COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
-      FROM assistant_usage_events
-      WHERE session_id = ? AND id >= ? AND agent_id IS NULL
+      FROM deduplicated_events
+      WHERE agent_id IS NULL
     `).get(effectiveSessionId, startEventId);
     const subagentRows = db.prepare(`
+      WITH deduplicated_events AS (
+        SELECT *
+        FROM assistant_usage_events
+        WHERE session_id = ? AND id >= ?
+        GROUP BY created_at, duration_ms, input_tokens, output_tokens
+      )
       SELECT agent_id, MIN(id) as first_id, COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
-      FROM assistant_usage_events
-      WHERE session_id = ? AND id >= ? AND agent_id IS NOT NULL
+      FROM deduplicated_events
+      WHERE agent_id IS NOT NULL
       GROUP BY agent_id
       ORDER BY first_id ASC
     `).all(effectiveSessionId, startEventId);

@@ -231,7 +231,7 @@ function isEditAllowed(filePath, approvedScope, rootDir = process.cwd(), issueNu
       };
     }
   }
-  if (!approvedScope) {
+  if (!approvedScope || approvedScope.trim() === "") {
     return {
       allowed: false,
       reason: "POLICY_DENIAL: No approved scope found. Code edits are blocked until the Human Scope Gate approves the plan.",
@@ -248,15 +248,21 @@ function isEditAllowed(filePath, approvedScope, rootDir = process.cwd(), issueNu
   }
   const scopeEntries = approvedScope.split(/[;,]/).map(
     (entry) => entry.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "")
-  ).filter((entry) => entry.length > 0 || approvedScope.trim() === "");
-  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
-  const isMatch = effectiveEntries.some(
-    (cleanScope) => cleanScope === "" || normalized === cleanScope || normalized.startsWith(cleanScope + "/")
+  ).filter((entry) => entry.length > 0);
+  if (scopeEntries.length === 0) {
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL: Approved scope '${approvedScope}' contains no valid directory or file entries. Code edits are blocked.`,
+      normalizedPath: normalized
+    };
+  }
+  const isMatch = scopeEntries.some(
+    (cleanScope) => normalized === cleanScope || normalized.startsWith(cleanScope + "/")
   );
   if (!isMatch) {
     return {
       allowed: false,
-      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${effectiveEntries.join("/' or '")}/'.`,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${scopeEntries.join("/' or '")}/'.`,
       normalizedPath: normalized
     };
   }

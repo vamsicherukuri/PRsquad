@@ -92,7 +92,7 @@ export function isEditAllowed(
   }
 
   // 2. Check if a human-approved scope exists
-  if (!approvedScope) {
+  if (!approvedScope || approvedScope.trim() === "") {
     return {
       allowed: false,
       reason: "POLICY_DENIAL: No approved scope found. Code edits are blocked until the Human Scope Gate approves the plan.",
@@ -120,14 +120,19 @@ export function isEditAllowed(
         .replace(/^\/+/, "")
         .replace(/\/+$/, "")
     )
-    .filter((entry) => entry.length > 0 || approvedScope.trim() === "");
+    .filter((entry) => entry.length > 0);
 
-  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
+  if (scopeEntries.length === 0) {
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL: Approved scope '${approvedScope}' contains no valid directory or file entries. Code edits are blocked.`,
+      normalizedPath: normalized,
+    };
+  }
 
   // 5. Prefix containment against candidate entries
-  const isMatch = effectiveEntries.some(
+  const isMatch = scopeEntries.some(
     (cleanScope) =>
-      cleanScope === "" ||
       normalized === cleanScope ||
       normalized.startsWith(cleanScope + "/")
   );
@@ -135,7 +140,7 @@ export function isEditAllowed(
   if (!isMatch) {
     return {
       allowed: false,
-      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${effectiveEntries.join("/' or '")}/'.`,
+      reason: `SCOPE_VIOLATION: Path '${normalized}' is outside the approved scope prefix '${scopeEntries.join("/' or '")}/'.`,
       normalizedPath: normalized,
     };
   }

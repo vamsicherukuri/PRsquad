@@ -107,7 +107,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 5. **QA**
    - Delegate to `gated-change-qa` only after Developer returns a valid `IMPLEMENTED` handoff.
-   - Pass the complete Developer handoff, approved Architect plan, original acceptance criteria from Intake, approved scope, Architect risk/blast-radius data, and final diff reference.
+   - Use a concise delegation prompt (e.g. `@gated-change-qa Verify implementation for issue #<issueNumber> on branch <branch>`). The guardrail hook automatically injects the full Developer handoff, approved plan, acceptance criteria, and pre-executed test suite into QA's context with 0 token overhead. Do not repeat verbatim plan or code essays.
    - QA reads the actual diff, independently executes Developer's regression tests and relevant existing checks, validates the original acceptance criteria, and re-checks final-diff scope compliance.
    - QA never writes source code.
    - Require QA to return its complete structured result: verdict, scope compliance, criterion-level evidence, test results, failure classifications, blocking findings, and notes.
@@ -121,7 +121,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 6. **Reviewer**
    - Delegate to `gated-change-reviewer` only after QA returns a valid `PASS`.
-   - Pass the approved Architect plan, original acceptance criteria, complete final Developer handoff, approved scope, final diff reference, complete QA result/evidence, Architect risk/blast-radius data, and any deterministic cross-package hits available.
+   - Use a concise delegation prompt (e.g. `@gated-change-reviewer Perform read-only security diff audit for issue #<issueNumber> on branch <branch>`). The guardrail hook automatically injects the unified diff, AST symbol sweep, approved scope, Developer handoff, and QA verification evidence directly into Reviewer's context. Do not copy-paste raw logs or diffs.
    - Reviewer reads and reviews the actual final diff. Reviewer is read-only, does not re-run QA tests, does not fix code, and does not autonomously consume retry budget.
    - Route both `CLEAR` and `CONCERNS` to the PR Approval Gate. `CONCERNS` are informational flags and never trigger an automatic retry.
    - Done when: Reviewer has returned `CLEAR` or `CONCERNS`, both routed to the PR Approval Gate.

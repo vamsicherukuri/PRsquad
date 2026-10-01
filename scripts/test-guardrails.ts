@@ -217,6 +217,23 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   const semi1 = isEditAllowed("src/guardrails/scopeEnforcer.ts", semiScope);
   assert(semi1.allowed, "Permits edit to candidate in multi-path scope (semicolon-separated)");
 
+  // Boundary edge cases: empty string, whitespace, and delimiter-only scopes must strictly deny edits
+  const emptyScope = isEditAllowed("src/services/billing/invoice.ts", "");
+  assert(!emptyScope.allowed, "Empty scope strictly denies edits");
+
+  const whitespaceScope = isEditAllowed("src/services/billing/invoice.ts", "   ");
+  assert(!whitespaceScope.allowed, "Whitespace-only scope strictly denies edits");
+
+  const delimiterScope = isEditAllowed("src/services/billing/invoice.ts", ";,;");
+  assert(!delimiterScope.allowed, "Delimiter-only scope strictly denies edits");
+
+  const paddedDelimiterScope = isEditAllowed("src/services/billing/invoice.ts", "  ;  ,  ;  ");
+  assert(!paddedDelimiterScope.allowed, "Padded delimiter-only scope strictly denies edits");
+
+  // Sibling prefix containment: 'src/services/billing' must NOT match 'src/services/billing_other.ts'
+  const siblingCheck = isEditAllowed("src/services/billing_other.ts", "src/services/billing");
+  assert(!siblingCheck.allowed, "Sibling prefix (billing_other) strictly denied for scope 'billing'");
+
   // Path normalization for worktree absolute paths
   const fakeWorktreeRoot = "C:/virtual/worktrees/issue-9";
   const fakeFile = "C:/virtual/worktrees/issue-9/src/guardrails/scopeEnforcer.ts";
