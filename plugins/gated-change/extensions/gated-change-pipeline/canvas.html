@@ -669,8 +669,8 @@
     
     <!-- Track 1 Header -->
     <div class="rail-header-row">
-      <span class="rail-title">Agent Execution Track (@prsquad)</span>
-      <span class="rail-title" style="color:var(--blue-text);">Autonomous Specialists</span>
+      <span class="rail-title">Agent Execution Track (@prsquad) <span id="controller-credits-badge" style="display:none; margin-left:8px; font-weight:normal; font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(88,166,255,0.12); color:var(--blue-text); border:1px solid rgba(88,166,255,0.3);">🎮 Orchestrator: 0.00 AIU</span></span>
+      <span class="rail-title" style="color:var(--blue-text);">Autonomous Specialists <span id="specialists-credits-badge" style="display:none; margin-left:6px; font-weight:normal; font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(63,185,80,0.12); color:var(--green-text); border:1px solid rgba(63,185,80,0.3);">⚡ 0.00 AIU</span></span>
     </div>
 
     <!-- Track 1: Agent Pipeline -->
@@ -1190,10 +1190,26 @@
         document.getElementById('issue-tag').textContent = 'Issue #' + data.issueNumber;
       }
       if (data.telemetry) {
-        document.getElementById('total-credits').textContent = '⚡ ' + (data.telemetry.actualAiCredits || 0).toFixed(2) + ' AIU';
+        const total = (data.telemetry.actualAiCredits || 0);
+        document.getElementById('total-credits').textContent = '⚡ ' + total.toFixed(2) + ' AIU';
         document.getElementById('turns-metric').textContent = (data.telemetry.turns || 0) + ' turns';
         if (data.telemetry.durationSeconds) {
           document.getElementById('duration-metric').textContent = Math.round(data.telemetry.durationSeconds) + 's';
+        }
+
+        const ctrlCredits = data.telemetry.controllerCredits || 0;
+        const specCredits = Math.max(0, total - ctrlCredits);
+
+        const ctrlBadge = document.getElementById('controller-credits-badge');
+        if (ctrlBadge && ctrlCredits > 0) {
+          ctrlBadge.style.display = 'inline-block';
+          ctrlBadge.textContent = '🎮 Orchestrator: ' + ctrlCredits.toFixed(2) + ' AIU';
+        }
+
+        const specBadge = document.getElementById('specialists-credits-badge');
+        if (specBadge && specCredits > 0) {
+          specBadge.style.display = 'inline-block';
+          specBadge.textContent = '⚡ Specialists: ' + specCredits.toFixed(2) + ' AIU';
         }
       }
 
