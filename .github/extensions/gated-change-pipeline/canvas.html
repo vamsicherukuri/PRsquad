@@ -1084,12 +1084,20 @@
       }
     }
 
+    let lastRenderedAuditHash = '';
+
     function renderHookList(events) {
       const container = document.getElementById('hook-events-container');
       if (!events || events.length === 0) {
+        if (lastRenderedAuditHash === 'empty') return;
+        lastRenderedAuditHash = 'empty';
         container.innerHTML = '<div style="font-size:11px; color:var(--text-muted); padding:8px;">No hook events recorded yet.</div>';
         return;
       }
+
+      const auditHash = events.length + '-' + (events[0]?.timestamp || '');
+      if (auditHash === lastRenderedAuditHash) return; // Skip DOM rebuild if data unchanged
+      lastRenderedAuditHash = auditHash;
 
       document.getElementById('hook-count-badge').textContent = events.length;
 
@@ -1130,7 +1138,16 @@
       }).join('');
     }
 
+    let isPolling = false;
+    let pollIntervalMs = 1200;
+    let pollTimer = null;
+
     async function poll() {
+      // Best Practice: Page Visibility API
+      // If the canvas is backgrounded or tab hidden, pause polling to save 100% CPU
+      if (document.hidden || isPolling) return;
+      isPolling = true;
+
       try {
         const [dashRes, auditRes] = await Promise.all([
           fetch('/api/dashboard'),
@@ -1146,8 +1163,26 @@
           cachedAudit = audit;
           renderHookList(audit);
         }
-      } catch (_) {}
+      } catch (_) {
+      } finally {
+        isPolling = false;
+      }
     }
+
+    function scheduleNextPoll() {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(async () => {
+        await poll();
+        scheduleNextPoll();
+      }, pollIntervalMs);
+    }
+
+    // Wake up immediately when canvas tab becomes visible
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        poll();
+      }
+    });
 
     function updateDashboard(data) {
       if (!data) return;
@@ -1291,9 +1326,11 @@
           document.getElementById('pr-banner-link').href = prUrl;
           document.getElementById('pr-banner-link').textContent = 'View Pull Request #' + prNum + ' on GitHub';
         }
+        pollIntervalMs = 6000; // Backoff to 6s when pipeline has reached terminal state
       } else {
         s6.className = 'stage-card pending' + (currentSelected === 6 ? ' selected' : '');
         m6.textContent = 'Queued';
+        pollIntervalMs = 1500;
       }
 
       // Update dual-rail connector states, hook cards, and tether lines
@@ -1358,8 +1395,7 @@
     }
 
     renderDetail(currentSelected);
-    setInterval(poll, 1200);
-    poll();
+    poll().then(() => scheduleNextPoll());
   </script>
 </body>
 </html>
