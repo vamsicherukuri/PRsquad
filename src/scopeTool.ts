@@ -21,11 +21,15 @@ export function isWithinScope(path: string, declaredScope: string, root: string)
     .map((entry) => entry.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, ""))
     .filter((entry) => entry.length > 0);
 
-  const effectiveEntries = scopeEntries.length > 0 ? scopeEntries : [""];
+  // An empty or whitespace-only declaredScope (zero valid non-empty entries after splitting) has
+  // no declared scope at all and must DENY every read - it must never be treated as a wildcard
+  // "match everything" entry. Only genuine non-empty entries participate in matching below.
+  if (scopeEntries.length === 0) {
+    return false;
+  }
 
-  return effectiveEntries.some(
+  return scopeEntries.some(
     (normalizedScope) =>
-      normalizedScope === "" ||
       rel === normalizedScope ||
       rel.startsWith(`${normalizedScope}/`)
   );

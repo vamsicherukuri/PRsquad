@@ -252,6 +252,18 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
     "isWithinScope blocks read of file outside all declared multi-path entries"
   );
 
+  // Regression (attempt 2 fix): an empty or whitespace-only declaredScope must normalize to zero
+  // valid entries and therefore DENY every read - it must never fall back to a wildcard
+  // "match everything" entry. A prior attempt introduced exactly that full scope-bypass bug.
+  assert(
+    !isWithinScope("src/secret.ts", "", readRoot),
+    "isWithinScope denies all reads when declaredScope is an empty string"
+  );
+  assert(
+    !isWithinScope("src/secret.ts", "   ", readRoot),
+    "isWithinScope denies all reads when declaredScope is whitespace-only"
+  );
+
   // Path normalization for worktree absolute paths
   const fakeWorktreeRoot = "C:/virtual/worktrees/issue-9";
   const fakeFile = "C:/virtual/worktrees/issue-9/src/guardrails/scopeEnforcer.ts";
