@@ -145,58 +145,68 @@
       border-color: #2ea043;
     }
 
-    /* 7-Stage Pipeline Flow with Directional Connectors */
-    .pipeline-flow {
+    /* Dual-Rail Pipeline Flow (Option A - Lean & Simple) */
+    .pipeline-dual-rail {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 3px;
       width: 100%;
       margin-bottom: 12px;
       overflow-x: auto;
-      padding: 4px 2px;
+      padding: 2px 2px 6px 2px;
       scrollbar-width: thin;
       scrollbar-color: var(--border) transparent;
     }
 
-    .pipeline-flow::-webkit-scrollbar {
+    .pipeline-dual-rail::-webkit-scrollbar {
       height: 4px;
     }
-    .pipeline-flow::-webkit-scrollbar-thumb {
+    .pipeline-dual-rail::-webkit-scrollbar-thumb {
       background: var(--border);
       border-radius: 4px;
     }
 
+    .rail-track {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 620px;
+      width: 100%;
+    }
+
+    .rail-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-width: 620px;
+      padding: 0 4px 1px 4px;
+    }
+
+    .rail-title {
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+    }
+
+    /* Top Rail: Stage Cards (Lean, Simple, No Icons) */
     .stage-card {
       flex: 1 1 0;
-      min-width: 78px;
+      min-width: 76px;
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 6px 7px;
-      min-height: 64px;
+      border-radius: 6px;
+      padding: 4px 6px;
+      min-height: 42px;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: center;
+      gap: 2px;
       cursor: pointer;
       transition: all 0.15s ease-in-out;
       position: relative;
-    }
-
-    .stage-connector {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--border);
-      flex-shrink: 0;
-      padding: 0 1px;
-      transition: all 0.2s ease;
-    }
-    .stage-connector.done {
-      color: var(--green-text);
-    }
-    .stage-connector.active {
-      color: var(--blue-text);
-      filter: drop-shadow(0 0 4px var(--blue-border));
     }
 
     .stage-card:hover {
@@ -209,38 +219,6 @@
       border-color: var(--blue-border);
     }
 
-    .stage-card-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 10px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-weight: 700;
-      color: var(--text-muted);
-    }
-
-    .role-icon {
-      font-size: 11px;
-    }
-
-    .hook-tag {
-      font-size: 8.5px;
-      padding: 1px 4px;
-      border-radius: 4px;
-      font-family: ui-monospace, monospace;
-      font-weight: 600;
-      background: var(--purple-bg);
-      color: var(--purple-text);
-      border: 1px solid var(--purple-border);
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 72px;
-    }
-
     .stage-name {
       font-size: 11px;
       font-weight: 600;
@@ -248,13 +226,32 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin: 3px 0;
+      line-height: 1.2;
     }
 
     .stage-metric {
-      font-size: 10px;
+      font-size: 9.5px;
       font-family: ui-monospace, SFMono-Regular, monospace;
       color: var(--text-muted);
+      line-height: 1.2;
+    }
+
+    /* Directional Arrow Connectors */
+    .stage-connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--border);
+      flex-shrink: 0;
+      width: 12px;
+      transition: all 0.2s ease;
+    }
+    .stage-connector.done {
+      color: var(--green-text);
+    }
+    .stage-connector.active {
+      color: var(--blue-text);
+      filter: drop-shadow(0 0 3px var(--blue-border));
     }
 
     /* State styles */
@@ -290,6 +287,130 @@
     }
     .stage-card.error .stage-name { color: var(--red-text); }
     .stage-card.error .stage-metric { color: var(--red-text); font-weight: 600; }
+
+    /* Middle Tether Bridge Track */
+    .tether-track {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      min-width: 620px;
+      width: 100%;
+      height: 8px;
+    }
+
+    .tether-col {
+      flex: 1 1 0;
+      min-width: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+
+    .tether-line {
+      width: 1px;
+      height: 100%;
+      background: var(--border-muted);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .tether-col.done .tether-line {
+      background: var(--green-border);
+    }
+
+    .tether-col.active .tether-line {
+      background: var(--blue-border);
+      box-shadow: 0 0 3px var(--blue-border);
+    }
+
+    .tether-spacer {
+      width: 12px;
+      flex-shrink: 0;
+    }
+
+    /* Bottom Rail: Hook Cards (Deterministic Guardrail Layer) */
+    .hook-card {
+      flex: 1 1 0;
+      min-width: 76px;
+      background: rgba(163, 113, 247, 0.06);
+      border: 1px solid rgba(163, 113, 247, 0.22);
+      border-radius: 6px;
+      padding: 4px 6px;
+      min-height: 38px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .hook-card:hover {
+      background: rgba(163, 113, 247, 0.12);
+      border-color: var(--purple-border);
+    }
+
+    .hook-card.selected {
+      box-shadow: 0 0 0 2px var(--purple-border);
+      border-color: var(--purple-text);
+      background: rgba(163, 113, 247, 0.14);
+    }
+
+    .hook-card.done {
+      border-color: rgba(163, 113, 247, 0.4);
+      background: rgba(163, 113, 247, 0.08);
+    }
+
+    .hook-card.gate-approved {
+      border-color: var(--amber-border);
+      background: rgba(210, 153, 34, 0.08);
+    }
+
+    .hook-card.active {
+      border-color: var(--blue-border);
+      background: var(--blue-bg);
+    }
+
+    .hook-card.pending {
+      opacity: 0.65;
+    }
+
+    .hook-name {
+      font-size: 9.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      color: var(--purple-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .hook-desc {
+      font-size: 8.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.2;
+    }
+
+    .hook-connector {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(163, 113, 247, 0.25);
+      flex-shrink: 0;
+      width: 12px;
+      transition: all 0.2s ease;
+    }
+    .hook-connector.done {
+      color: var(--purple-text);
+    }
+    .hook-connector.active {
+      color: var(--blue-text);
+    }
 
     @keyframes pulse-glow {
       0%, 100% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.2); }
@@ -519,101 +640,176 @@
     </div>
   </div>
 
-  <!-- 7 Stage Cards with Flow Connectors & Hook Badges -->
-  <div class="pipeline-flow" id="pipeline-nodes">
-    <!-- Intake -->
-    <div class="stage-card done" id="stage-0" onclick="selectStage(0)">
-      <div class="stage-card-top">
-        <span class="role-icon">📥</span>
-        <span class="hook-tag" title="hook-intake-ingest: Fast-reject closed/invalid issues">🛡️ Ingest</span>
+  <!-- Dual-Rail Pipeline: Option A (Lean, Simple, No Specialist Icons) -->
+  <div class="pipeline-dual-rail" id="pipeline-nodes">
+    
+    <!-- Track 1 Header -->
+    <div class="rail-header-row">
+      <span class="rail-title">Agent Execution Track</span>
+      <span class="rail-title" style="color:var(--blue-text);">LLM Reasoning</span>
+    </div>
+
+    <!-- Track 1: Agent Pipeline -->
+    <div class="rail-track" id="agent-track">
+      <!-- Intake -->
+      <div class="stage-card done" id="stage-0" onclick="selectStage(0)" title="Intake Triage">
+        <div class="stage-name">Intake</div>
+        <div class="stage-metric" id="metric-0">1.31 AIU</div>
       </div>
-      <div class="stage-name">Intake</div>
-      <div class="stage-metric" id="metric-0">1.31 AIU</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-0">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- Architect -->
-    <div class="stage-card done" id="stage-1" onclick="selectStage(1)">
-      <div class="stage-card-top">
-        <span class="role-icon">📐</span>
-        <span class="hook-tag" title="makeScopedReadTool: Read-boundary isolation">🛡️ ReadScope</span>
+      <div class="stage-connector done" id="arrow-0">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
-      <div class="stage-name">Architect</div>
-      <div class="stage-metric" id="metric-1">6.63 AIU</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-1">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- Scope Gate -->
-    <div class="stage-card gate-approved" id="stage-2" onclick="selectStage(2)">
-      <div class="stage-card-top">
-        <span class="role-icon">🔒</span>
-        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);" title="hook-verify-gate: Cryptographic approval.lock verification">🛡️ VerifyGate</span>
+      <!-- Architect -->
+      <div class="stage-card done" id="stage-1" onclick="selectStage(1)" title="Architect Plan">
+        <div class="stage-name">Architect</div>
+        <div class="stage-metric" id="metric-1">6.63 AIU</div>
       </div>
-      <div class="stage-name">Scope Gate</div>
-      <div class="stage-metric" id="metric-2">APPROVED</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-2">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- Developer -->
-    <div class="stage-card done" id="stage-3" onclick="selectStage(3)">
-      <div class="stage-card-top">
-        <span class="role-icon">🔨</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-enforce-scope: Write-barrier containment & smart nudge">🛡️ EnforceScope</span>
+      <div class="stage-connector done" id="arrow-1">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
-      <div class="stage-name">Developer</div>
-      <div class="stage-metric" id="metric-3">19.46 AIU</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-3">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- QA -->
-    <div class="stage-card done" id="stage-4" onclick="selectStage(4)">
-      <div class="stage-card-top">
-        <span class="role-icon">🧪</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-sandbox-bash: Test runner isolation">🛡️ Sandbox</span>
+      <!-- Scope Gate -->
+      <div class="stage-card gate-approved" id="stage-2" onclick="selectStage(2)" title="Scope Approval Gate">
+        <div class="stage-name">Scope Gate</div>
+        <div class="stage-metric" id="metric-2">APPROVED</div>
       </div>
-      <div class="stage-name">QA Test</div>
-      <div class="stage-metric" id="metric-4">7.60 AIU</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-4">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- Reviewer -->
-    <div class="stage-card done" id="stage-5" onclick="selectStage(5)">
-      <div class="stage-card-top">
-        <span class="role-icon">🔍</span>
-        <span class="hook-tag" style="background:var(--green-bg); color:var(--green-text); border-color:var(--green-border);" title="hook-sandbox-bash: Read-only inspection & AST sweep">🛡️ ReadOnly</span>
+      <div class="stage-connector done" id="arrow-2">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
-      <div class="stage-name">Reviewer</div>
-      <div class="stage-metric" id="metric-5">8.80 AIU</div>
-    </div>
 
-    <div class="stage-connector done" id="arrow-5">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-    </div>
-
-    <!-- PR Gate -->
-    <div class="stage-card gate-approved selected" id="stage-6" onclick="selectStage(6)">
-      <div class="stage-card-top">
-        <span class="role-icon">🚀</span>
-        <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);" title="prCreator: Bounded PR creation with disabled auto-merge">🛡️ PRBarrier</span>
+      <!-- Developer -->
+      <div class="stage-card done" id="stage-3" onclick="selectStage(3)" title="Developer Implementation">
+        <div class="stage-name">Developer</div>
+        <div class="stage-metric" id="metric-3">88.54 AIU</div>
       </div>
-      <div class="stage-name">PR Gate</div>
-      <div class="stage-metric" id="metric-6">PR Ready</div>
+
+      <div class="stage-connector done" id="arrow-3">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- QA -->
+      <div class="stage-card done" id="stage-4" onclick="selectStage(4)" title="QA Verification">
+        <div class="stage-name">QA Test</div>
+        <div class="stage-metric" id="metric-4">22.64 AIU</div>
+      </div>
+
+      <div class="stage-connector done" id="arrow-4">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Reviewer -->
+      <div class="stage-card done" id="stage-5" onclick="selectStage(5)" title="Security Reviewer">
+        <div class="stage-name">Reviewer</div>
+        <div class="stage-metric" id="metric-5">8.80 AIU</div>
+      </div>
+
+      <div class="stage-connector done" id="arrow-5">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- PR Gate -->
+      <div class="stage-card gate-approved selected" id="stage-6" onclick="selectStage(6)" title="Pull Request Gate">
+        <div class="stage-name">PR Gate</div>
+        <div class="stage-metric" id="metric-6">PR Ready</div>
+      </div>
     </div>
+
+    <!-- Middle Tether Bridges -->
+    <div class="tether-track">
+      <div class="tether-col done" id="tether-0"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done" id="tether-1"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done" id="tether-2"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done" id="tether-3"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done" id="tether-4"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done" id="tether-5"><span class="tether-line"></span></div>
+      <div class="tether-spacer"></div>
+      <div class="tether-col done active" id="tether-6"><span class="tether-line"></span></div>
+    </div>
+
+    <!-- Track 2 Header -->
+    <div class="rail-header-row">
+      <span class="rail-title" style="color:var(--purple-text);">Deterministic Hook Track</span>
+      <span class="rail-title" style="color:var(--green-text);">0.00 AIU Governance</span>
+    </div>
+
+    <!-- Track 2: Deterministic Hooks -->
+    <div class="rail-track" id="hook-track">
+      <!-- Hook 0 -->
+      <div class="hook-card done" id="hook-card-0" onclick="selectStage(0)" title="hook-intake-ingest: Fast-reject closed/invalid issues">
+        <div class="hook-name">hook-intake</div>
+        <div class="hook-desc">Fast-Reject</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-0">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 1 -->
+      <div class="hook-card done" id="hook-card-1" onclick="selectStage(1)" title="makeScopedReadTool: Read-boundary isolation">
+        <div class="hook-name">scopedRead</div>
+        <div class="hook-desc">Read Boundary</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-1">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 2 -->
+      <div class="hook-card done" id="hook-card-2" onclick="selectStage(2)" title="hook-verify-gate: Cryptographic approval.lock verification">
+        <div class="hook-name">verify-gate</div>
+        <div class="hook-desc">SHA256 Lock</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-2">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 3 -->
+      <div class="hook-card done" id="hook-card-3" onclick="selectStage(3)" title="hook-enforce-scope: Write-barrier containment & smart nudge">
+        <div class="hook-name">enforce-scope</div>
+        <div class="hook-desc">Write Barrier</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-3">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 4 -->
+      <div class="hook-card done" id="hook-card-4" onclick="selectStage(4)" title="hook-sandbox-bash: Test runner isolation">
+        <div class="hook-name">sandbox-bash</div>
+        <div class="hook-desc">Cmd Sandbox</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-4">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 5 -->
+      <div class="hook-card done" id="hook-card-5" onclick="selectStage(5)" title="ast-symbol-sweep: Read-only inspection & AST sweep">
+        <div class="hook-name">ast-sweep</div>
+        <div class="hook-desc">Symbol Audit</div>
+      </div>
+
+      <div class="hook-connector done" id="hook-arrow-5">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+
+      <!-- Hook 6 -->
+      <div class="hook-card done selected" id="hook-card-6" onclick="selectStage(6)" title="prCreator: Bounded PR creation with disabled auto-merge">
+        <div class="hook-name">prCreator</div>
+        <div class="hook-desc">Human Gate</div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Section Tabs: Stage Details vs Hook Architecture vs Live Guardrail Hook Feed -->
@@ -647,10 +843,10 @@
 
       <div class="pr-banner-box" id="pr-banner" style="display:none;">
         <div style="font-size:11.5px; color:var(--green-text); font-weight:600;">
-          🚀 PR is open and passing all checks!
+          PR is open and passing all checks
         </div>
         <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/23" target="_blank" id="pr-banner-link" class="pr-link-badge">
-          🔗 View Pull Request on GitHub
+          View Pull Request on GitHub
         </a>
       </div>
 
@@ -696,49 +892,49 @@
           </thead>
           <tbody>
             <tr>
-              <td><strong>📥 Intake</strong></td>
+              <td><strong>Intake</strong></td>
               <td><code>hook-intake-ingest.mjs</code></td>
               <td><code>preToolUse: fetch</code></td>
               <td>Fast-rejects <code>CLOSED</code> / duplicate issues in &lt;2s with 0 tokens</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>📐 Architect</strong></td>
+              <td><strong>Architect</strong></td>
               <td><code>makeScopedReadTool</code></td>
               <td><code>toolWrap: read</code></td>
               <td>Strict path containment; prevents whole-repository scanning</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>🔒 Scope Gate</strong></td>
+              <td><strong>Scope Gate</strong></td>
               <td><code>hook-verify-gate.mjs</code></td>
               <td><code>preToolUse: agent</code></td>
               <td>Blocks developer execution until cryptographic <code>approval.lock</code> is signed</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>🔨 Developer</strong></td>
+              <td><strong>Developer</strong></td>
               <td><code>hook-enforce-scope.mjs</code><br><code>hook-sandbox-bash.mjs</code></td>
               <td><code>preToolUse: edit</code><br><code>preToolUse: bash</code></td>
               <td><strong>Write Barrier</strong>: Hard blocks edits outside scope with smart nudge<br><strong>Sandbox</strong>: Blocks <code>git push origin main</code> &amp; branch deletion</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>🧪 QA Test</strong></td>
+              <td><strong>QA Test</strong></td>
               <td><code>hook-sandbox-bash.mjs</code></td>
               <td><code>preToolUse: bash</code></td>
               <td>Allows test commands (<code>npm test</code>, <code>tsx</code>); strictly denies push, commit, or file tampering</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>🔍 Reviewer</strong></td>
+              <td><strong>Reviewer</strong></td>
               <td><code>hook-sandbox-bash.mjs</code><br><code>ast-symbol-sweep.ts</code></td>
               <td><code>preToolUse: bash</code><br><code>ast-analysis</code></td>
               <td>Restricted to read-only git diff/status (blocks <code>&gt;</code> file redirects); runs AST export sweep</td>
               <td><span style="color:var(--green-text); font-weight:600;">0.00 AIU</span></td>
             </tr>
             <tr>
-              <td><strong>🚀 PR Gate</strong></td>
+              <td><strong>PR Gate</strong></td>
               <td><code>prCreator.ts</code></td>
               <td><code>gate / postToolUse</code></td>
               <td>Autonomous merging physically disabled (<code>auto-merge: disabled</code>); requires maintainer merge</td>
@@ -853,10 +1049,20 @@
       if (manual) userHasManuallySelected = true;
       currentSelected = index;
       for (let i = 0; i < 7; i++) {
-        const el = document.getElementById('stage-' + i);
-        if (el) {
-          if (i === index) el.classList.add('selected');
-          else el.classList.remove('selected');
+        const stageEl = document.getElementById('stage-' + i);
+        if (stageEl) {
+          if (i === index) stageEl.classList.add('selected');
+          else stageEl.classList.remove('selected');
+        }
+        const hookEl = document.getElementById('hook-card-' + i);
+        if (hookEl) {
+          if (i === index) hookEl.classList.add('selected');
+          else hookEl.classList.remove('selected');
+        }
+        const tetherEl = document.getElementById('tether-' + i);
+        if (tetherEl) {
+          if (i === index) tetherEl.classList.add('active');
+          else tetherEl.classList.remove('active');
         }
       }
       renderDetail(index);
@@ -1126,19 +1332,46 @@
         m6.textContent = 'Queued';
       }
 
-      // Update connector states between sequential stages
+      // Update dual-rail connector states, hook cards, and tether lines
+      for (let i = 0; i < 7; i++) {
+        const stageEl = document.getElementById('stage-' + i);
+        const hookEl = document.getElementById('hook-card-' + i);
+        const tether = document.getElementById('tether-' + i);
+
+        const isDone = stageEl && (stageEl.classList.contains('done') || stageEl.classList.contains('gate-approved'));
+        const isActive = stageEl && stageEl.classList.contains('active');
+
+        if (hookEl) {
+          if (isDone) hookEl.className = 'hook-card done' + (currentSelected === i ? ' selected' : '');
+          else if (isActive) hookEl.className = 'hook-card active' + (currentSelected === i ? ' selected' : '');
+          else hookEl.className = 'hook-card pending' + (currentSelected === i ? ' selected' : '');
+        }
+
+        if (tether) {
+          if (isActive || currentSelected === i) tether.className = 'tether-col active';
+          else if (isDone) tether.className = 'tether-col done';
+          else tether.className = 'tether-col';
+        }
+      }
+
       for (let i = 0; i < 6; i++) {
         const arrow = document.getElementById('arrow-' + i);
-        if (!arrow) continue;
+        const hookArrow = document.getElementById('hook-arrow-' + i);
         const nextStage = document.getElementById('stage-' + (i + 1));
-        if (!nextStage) continue;
 
-        if (nextStage.classList.contains('done') || nextStage.classList.contains('gate-approved')) {
-          arrow.className = 'stage-connector done';
-        } else if (nextStage.classList.contains('active')) {
-          arrow.className = 'stage-connector active';
-        } else {
-          arrow.className = 'stage-connector';
+        const isDone = nextStage && (nextStage.classList.contains('done') || nextStage.classList.contains('gate-approved'));
+        const isActive = nextStage && nextStage.classList.contains('active');
+
+        if (arrow) {
+          if (isDone) arrow.className = 'stage-connector done';
+          else if (isActive) arrow.className = 'stage-connector active';
+          else arrow.className = 'stage-connector';
+        }
+
+        if (hookArrow) {
+          if (isDone) hookArrow.className = 'hook-connector done';
+          else if (isActive) hookArrow.className = 'hook-connector active';
+          else hookArrow.className = 'hook-connector';
         }
       }
 
