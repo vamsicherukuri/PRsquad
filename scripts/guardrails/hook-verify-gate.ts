@@ -21,7 +21,28 @@ import {
 } from "../../src/guardrails/issueDashboard.js";
 import { generateAstPreFetchMap, runSymbolSweep } from "../../src/guardrails/symbolSweep.js";
 import { createPullRequest } from "../../src/guardrails/prCreator.js";
+import { packageRepoIntelligence } from "../../src/guardrails/repoSkillResolver.js";
+import { detectRepoStack } from "../../src/guardrails/toolingBridge.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
+
+function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, approvedScope?: string): string {
+  const intel = packageRepoIntelligence(repoRoot, targetAgent, approvedScope);
+  const sections: string[] = [];
+
+  if (intel.skillsFull.length > 0) {
+    sections.push(`### 💡 Specialized Repository Skills\n${intel.skillsFull.join("\n\n")}`);
+  }
+
+  if (intel.skillsIndexed.length > 0) {
+    sections.push(`### 📚 Additional Available Repository Skills\n${intel.skillsIndexed.join("\n")}\n*(Use read tool on skill path if needed)*`);
+  }
+
+  if (intel.slicedInstructions) {
+    sections.push(`### 📋 Relevant Repository Instructions\n${intel.slicedInstructions}`);
+  }
+
+  return sections.join("\n\n");
+}
 
 function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: any): number {
   if (toolArgs.issueNumber && Number(toolArgs.issueNumber) > 0) {
@@ -401,12 +422,15 @@ async function main() {
       activeBranch: branchName,
     };
 
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, lock.approvedScope);
+
     const addCtx =
       `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
       `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
       `ACTIVE_FEATURE_BRANCH: "${branchName}"\n` +
       "Developer write actions are strictly bounded to this prefix and branch." +
-      (chatMeter ? `\n\n${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Include this ⚡ AI Credit Meter status in your implementation handoff summary.` : "");
+      (chatMeter ? `\n\n${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Include this ⚡ AI Credit Meter status in your implementation handoff summary.` : "") +
+      (repoIntel ? `\n\n${repoIntel}` : "");
 
     const output = {
       decision: "allow",
@@ -855,8 +879,10 @@ async function main() {
       prompt: enrichedPrompt,
     };
 
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, declaredScope);
     let addCtx = "";
     if (astMap) addCtx += `${astMap}\n\n`;
+    if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
       addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Intake complete. Surface this live ⚡ AI Credit Meter status in your handoff message to the user before generating the architectural plan.`;
     }
@@ -939,9 +965,14 @@ async function main() {
       prompt: enrichedPrompt,
     };
 
+    const tooling = detectRepoStack(repoRoot);
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, state.approvedScope);
+
     let addCtx = "";
     if (testReport) addCtx += `${testReport}\n\n`;
     if (devHandoff.markdown) addCtx += `${devHandoff.markdown}\n\n`;
+    if (tooling.testCommand) addCtx += `### 🛠️ Configured Test Command\nExecute for verification: \`${tooling.testCommand}\`\n\n`;
+    if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
       addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live ⚡ AI Credit Meter status in your phase handoff message to the user before running QA.`;
     }
@@ -1027,9 +1058,12 @@ async function main() {
       prompt: enrichedPrompt,
     };
 
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, state.approvedScope);
+
     let addCtx = "";
     if (diffReport) addCtx += `${diffReport}\n\n`;
     if (qaHandoff.markdown) addCtx += `${qaHandoff.markdown}\n\n`;
+    if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
       addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: QA verification complete and passed. Include this live ⚡ AI Credit Meter status in your phase handoff message to the user before running Reviewer.`;
     }

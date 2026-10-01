@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync5, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
-import { join as join5 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { execSync as execSync4 } from "node:child_process";
 
@@ -1467,7 +1467,380 @@ ${issueTitle}
   }
 }
 
+// src/guardrails/repoSkillResolver.ts
+import { existsSync as existsSync5, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
+import { join as join5, relative as relative2 } from "node:path";
+function parseFrontmatter(raw) {
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    return { data: {}, content: raw };
+  }
+  const yamlText = match[1];
+  const content = match[2];
+  const data = {};
+  for (const line of yamlText.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0) {
+      const key = trimmed.slice(0, colonIdx).trim();
+      let val = trimmed.slice(colonIdx + 1).trim();
+      if (val.startsWith("[") && val.endsWith("]")) {
+        data[key] = val.slice(1, -1).split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+      } else {
+        data[key] = val.replace(/^["']|["']$/g, "");
+      }
+    }
+  }
+  return { data, content };
+}
+var MAX_INSTRUCTION_TOKENS = 1e3;
+var MAX_SKILL_TOKENS_FULL_INJECTION = 1500;
+var ROLE_HEADING_KEYWORDS = {
+  "prsquad-architect": [
+    "architect",
+    "architecture",
+    "design",
+    "structure",
+    "pattern",
+    "patterns",
+    "database",
+    "domain",
+    "boundary",
+    "boundaries",
+    "api",
+    "schema",
+    "module",
+    "modules",
+    "system",
+    "components"
+  ],
+  "prsquad-dev": [
+    "code",
+    "coding",
+    "style",
+    "naming",
+    "convention",
+    "conventions",
+    "framework",
+    "typescript",
+    "javascript",
+    "java",
+    "python",
+    "go",
+    "rust",
+    "lint",
+    "format",
+    "formatting",
+    "impl",
+    "implementation",
+    "dependency"
+  ],
+  "prsquad-qa": [
+    "test",
+    "tests",
+    "testing",
+    "qa",
+    "coverage",
+    "fixture",
+    "fixtures",
+    "mock",
+    "mocks",
+    "e2e",
+    "unit",
+    "integration",
+    "assert",
+    "regression",
+    "vitest",
+    "jest",
+    "pytest",
+    "junit"
+  ],
+  "prsquad-review": [
+    "security",
+    "review",
+    "audit",
+    "vulnerability",
+    "vulnerabilities",
+    "owasp",
+    "secret",
+    "secrets",
+    "license",
+    "checklist",
+    "safety",
+    "threat",
+    "compliance"
+  ]
+};
+function sliceCopilotInstructions(repoRoot, targetAgent) {
+  if (isAgentMatch(targetAgent, "prsquad") || isAgentMatch(targetAgent, "prsquad-triage")) {
+    return null;
+  }
+  const instructionPath = join5(repoRoot, ".github", "copilot-instructions.md");
+  if (!existsSync5(instructionPath)) {
+    return null;
+  }
+  try {
+    const raw = readFileSync4(instructionPath, "utf-8");
+    if (!raw.trim()) return null;
+    let matchedRoleKey = "prsquad-dev";
+    if (isAgentMatch(targetAgent, "prsquad-architect")) matchedRoleKey = "prsquad-architect";
+    else if (isAgentMatch(targetAgent, "prsquad-qa")) matchedRoleKey = "prsquad-qa";
+    else if (isAgentMatch(targetAgent, "prsquad-review")) matchedRoleKey = "prsquad-review";
+    const relevantKeywords = ROLE_HEADING_KEYWORDS[matchedRoleKey] || [];
+    const sections = [];
+    const lines = raw.split("\n");
+    let currentTitle = "General";
+    let currentBody = [];
+    for (const line of lines) {
+      if (/^#{1,3}\s+(.+)$/.test(line)) {
+        if (currentBody.length > 0) {
+          sections.push({ title: currentTitle, body: currentBody.join("\n") });
+        }
+        currentTitle = line.replace(/^#{1,3}\s+/, "").trim();
+        currentBody = [line];
+      } else {
+        currentBody.push(line);
+      }
+    }
+    if (currentBody.length > 0) {
+      sections.push({ title: currentTitle, body: currentBody.join("\n") });
+    }
+    const matchedSections = [];
+    for (const sec of sections) {
+      const lowerTitle = sec.title.toLowerCase();
+      const isRelevant = relevantKeywords.some((kw) => lowerTitle.includes(kw));
+      if (isRelevant) {
+        matchedSections.push(sec.body);
+      }
+    }
+    if (matchedSections.length === 0) {
+      return null;
+    }
+    const combined = matchedSections.join("\n\n");
+    const approxTokens = Math.ceil(combined.length / 4);
+    const TRUNCATION_NOTICE = "\n\n*[Note: Remaining sections truncated to protect context budget. Consult .github/copilot-instructions.md for full guidance.]*";
+    const totalCharBudget = MAX_INSTRUCTION_TOKENS * 4;
+    if (combined.length > totalCharBudget) {
+      const sliceLimit = Math.max(0, totalCharBudget - TRUNCATION_NOTICE.length);
+      return combined.slice(0, sliceLimit) + TRUNCATION_NOTICE;
+    }
+    return combined;
+  } catch {
+    return null;
+  }
+}
+function scanSkillFiles(dir) {
+  if (!existsSync5(dir)) return [];
+  const results = [];
+  try {
+    const entries = readdirSync2(dir);
+    for (const entry of entries) {
+      const fullPath = join5(dir, entry);
+      const stat = statSync2(fullPath);
+      if (stat.isDirectory()) {
+        results.push(...scanSkillFiles(fullPath));
+      } else if (entry.endsWith(".md")) {
+        results.push(fullPath);
+      }
+    }
+  } catch {
+  }
+  return results;
+}
+function resolveRepoSkills(repoRoot, targetAgent, approvedScope) {
+  if (isAgentMatch(targetAgent, "prsquad") || isAgentMatch(targetAgent, "prsquad-triage")) {
+    return [];
+  }
+  const candidateDirs = [];
+  if (approvedScope && approvedScope !== "NONE" && approvedScope.trim()) {
+    const scopeDir = join5(repoRoot, approvedScope.replace(/[\/\\]$/, ""));
+    candidateDirs.push({ path: join5(scopeDir, ".prsquad", "skills"), isProximity: true });
+  }
+  candidateDirs.push({ path: join5(repoRoot, ".prsquad", "skills"), isProximity: false });
+  candidateDirs.push({ path: join5(repoRoot, ".github", "skills"), isProximity: false });
+  const resolved = [];
+  const seenPaths = /* @__PURE__ */ new Set();
+  for (const { path: dir, isProximity } of candidateDirs) {
+    const files = scanSkillFiles(dir);
+    for (const file of files) {
+      if (seenPaths.has(file)) continue;
+      seenPaths.add(file);
+      try {
+        const raw = readFileSync4(file, "utf-8");
+        const { data, content } = parseFrontmatter(raw);
+        const targets = Array.isArray(data.targets) ? data.targets : [data.targets || "prsquad-dev", "prsquad-architect"];
+        const roleMatches = targets.some((t) => isAgentMatch(targetAgent, t));
+        if (!roleMatches) continue;
+        resolved.push({
+          name: data.name || file.replace(/^.*[\\\/]/, "").replace(/\.md$/, ""),
+          description: data.description || "Repository specialized skill",
+          filePath: file,
+          relativePath: relative2(repoRoot, file).replace(/\\/g, "/"),
+          targets,
+          content: content.trim(),
+          isProximityMatch: isProximity
+        });
+      } catch {
+      }
+    }
+  }
+  return resolved;
+}
+function packageRepoIntelligence(repoRoot, targetAgent, approvedScope) {
+  const skills = resolveRepoSkills(repoRoot, targetAgent, approvedScope);
+  const slicedInstructions = sliceCopilotInstructions(repoRoot, targetAgent);
+  const skillsFull = [];
+  const skillsIndexed = [];
+  let skillTokens = 0;
+  skills.sort((a, b) => (b.isProximityMatch ? 1 : 0) - (a.isProximityMatch ? 1 : 0));
+  for (const skill of skills) {
+    const estTokens = Math.ceil(skill.content.length / 4);
+    if (skillTokens + estTokens <= MAX_SKILL_TOKENS_FULL_INJECTION && (skill.isProximityMatch || skillsFull.length === 0)) {
+      skillsFull.push(`#### \u{1F4A1} Skill: ${skill.name} (${skill.relativePath})
+${skill.content}`);
+      skillTokens += estTokens;
+    } else {
+      skillsIndexed.push(`- **[${skill.name}]** (\`${skill.relativePath}\`): ${skill.description}`);
+    }
+  }
+  const instructionTokens = slicedInstructions ? Math.ceil(slicedInstructions.length / 4) : 0;
+  return {
+    skillsFull,
+    skillsIndexed,
+    slicedInstructions,
+    totalTokensApprox: skillTokens + instructionTokens
+  };
+}
+
+// src/guardrails/toolingBridge.ts
+import { existsSync as existsSync6, readFileSync as readFileSync5 } from "node:fs";
+import { join as join6 } from "node:path";
+function detectRepoStack(rootDir = getRepoRoot()) {
+  const explicitPaths = [
+    join6(rootDir, ".prsquad", "config.json"),
+    join6(rootDir, ".prsquad.json")
+  ];
+  for (const configPath of explicitPaths) {
+    if (existsSync6(configPath)) {
+      try {
+        const raw = readFileSync5(configPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed.tooling && parsed.tooling.testCommand) {
+          return {
+            stack: parsed.stack || "custom",
+            testCommand: parsed.tooling.testCommand,
+            testFileCommand: parsed.tooling.testFileCommand,
+            buildCommand: parsed.tooling.buildCommand,
+            lintCommand: parsed.tooling.lintCommand,
+            isExplicitConfig: true
+          };
+        }
+      } catch {
+      }
+    }
+  }
+  if (existsSync6(join6(rootDir, "pom.xml"))) {
+    return {
+      stack: "maven",
+      testCommand: "mvn test",
+      testFileCommand: "mvn test -Dtest=${file}",
+      buildCommand: "mvn compile -DskipTests",
+      lintCommand: "mvn spotbugs:check",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "build.gradle")) || existsSync6(join6(rootDir, "build.gradle.kts"))) {
+    const gradleCmd = existsSync6(join6(rootDir, "gradlew")) ? "./gradlew" : "gradle";
+    return {
+      stack: "gradle",
+      testCommand: `${gradleCmd} test`,
+      testFileCommand: `${gradleCmd} test --tests ${"${file}"}`,
+      buildCommand: `${gradleCmd} assemble`,
+      lintCommand: `${gradleCmd} check`,
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "package.json"))) {
+    let runner = "npm test";
+    if (existsSync6(join6(rootDir, "pnpm-lock.yaml"))) {
+      runner = "pnpm test";
+    } else if (existsSync6(join6(rootDir, "yarn.lock"))) {
+      runner = "yarn test";
+    }
+    return {
+      stack: "npm",
+      testCommand: runner,
+      testFileCommand: `${runner} -- \${file}`,
+      buildCommand: "npm run build",
+      lintCommand: "npm run lint",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "pytest.ini")) || existsSync6(join6(rootDir, "pyproject.toml")) || existsSync6(join6(rootDir, "requirements.txt"))) {
+    return {
+      stack: "pytest",
+      testCommand: "pytest",
+      testFileCommand: "pytest ${file}",
+      lintCommand: "flake8 .",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "Cargo.toml"))) {
+    return {
+      stack: "cargo",
+      testCommand: "cargo test",
+      testFileCommand: "cargo test --test ${file}",
+      buildCommand: "cargo build",
+      lintCommand: "cargo clippy",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "go.mod"))) {
+    return {
+      stack: "go",
+      testCommand: "go test ./...",
+      testFileCommand: "go test -v ${file}",
+      buildCommand: "go build ./...",
+      lintCommand: "golangci-lint run",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync6(join6(rootDir, "*.sln")) || existsSync6(join6(rootDir, "*.csproj"))) {
+    return {
+      stack: "dotnet",
+      testCommand: "dotnet test",
+      testFileCommand: "dotnet test --filter ${file}",
+      buildCommand: "dotnet build",
+      isExplicitConfig: false
+    };
+  }
+  return {
+    stack: "unknown",
+    testCommand: "npm test",
+    isExplicitConfig: false
+  };
+}
+
 // scripts/guardrails/hook-verify-gate.ts
+function formatRepoIntelligenceForPrompt(repoRoot, targetAgent, approvedScope) {
+  const intel = packageRepoIntelligence(repoRoot, targetAgent, approvedScope);
+  const sections = [];
+  if (intel.skillsFull.length > 0) {
+    sections.push(`### \u{1F4A1} Specialized Repository Skills
+${intel.skillsFull.join("\n\n")}`);
+  }
+  if (intel.skillsIndexed.length > 0) {
+    sections.push(`### \u{1F4DA} Additional Available Repository Skills
+${intel.skillsIndexed.join("\n")}
+*(Use read tool on skill path if needed)*`);
+  }
+  if (intel.slicedInstructions) {
+    sections.push(`### \u{1F4CB} Relevant Repository Instructions
+${intel.slicedInstructions}`);
+  }
+  return sections.join("\n\n");
+}
 function resolveIssueNumber(input, toolArgs, state, lock) {
   if (toolArgs.issueNumber && Number(toolArgs.issueNumber) > 0) {
     return Number(toolArgs.issueNumber);
@@ -1499,26 +1872,26 @@ async function main() {
     if (!state2?.sessionId) {
       const home = homedir2();
       const candidates = [
-        join5(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join5(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
-        join5(home, "factory/sample repos/gated-fix-pipeline")
+        join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join7(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
       let bestMtime = 0;
       let bestRepo = repoRoot2;
       for (const parent of candidates) {
-        if (existsSync5(parent)) {
+        if (existsSync7(parent)) {
           try {
-            const entries = readdirSync2(parent, { withFileTypes: true });
-            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join5(parent, d.name));
+            const entries = readdirSync3(parent, { withFileTypes: true });
+            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join7(parent, d.name));
             dirs.push(parent);
             for (const d of dirs) {
-              const stateFile = join5(d, ".gated-change", "state.json");
-              if (existsSync5(stateFile)) {
+              const stateFile = join7(d, ".gated-change", "state.json");
+              if (existsSync7(stateFile)) {
                 try {
-                  const stat = statSync2(stateFile);
+                  const stat = statSync3(stateFile);
                   if (stat.mtimeMs > bestMtime) {
-                    const parsed = JSON.parse(readFileSync4(stateFile, "utf-8"));
+                    const parsed = JSON.parse(readFileSync6(stateFile, "utf-8"));
                     if (parsed) {
                       bestMtime = stat.mtimeMs;
                       bestState = parsed;
@@ -1539,10 +1912,10 @@ async function main() {
       }
     }
     let phases = {};
-    const dashFile = join5(repoRoot2, ".gated-change", "dashboard.json");
-    if (existsSync5(dashFile)) {
+    const dashFile = join7(repoRoot2, ".gated-change", "dashboard.json");
+    if (existsSync7(dashFile)) {
       try {
-        const parsed = JSON.parse(readFileSync4(dashFile, "utf-8"));
+        const parsed = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (parsed.phases) phases = parsed.phases;
       } catch {
       }
@@ -1576,7 +1949,7 @@ async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync4(0, "utf-8");
+      rawInput = readFileSync6(0, "utf-8");
     } catch {
     }
   }
@@ -1775,6 +2148,7 @@ ${prompt2}`;
       prompt: enrichedPrompt,
       activeBranch: branchName
     };
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot2, targetAgent, lock2.approvedScope);
     const addCtx = `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
 APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
 ACTIVE_FEATURE_BRANCH: "${branchName}"
@@ -1782,7 +2156,9 @@ Developer write actions are strictly bounded to this prefix and branch.` + (chat
 
 ${chatMeter}
 
-[INSTRUCTION FOR CONTROLLER]: Include this \u26A1 AI Credit Meter status in your implementation handoff summary.` : "");
+[INSTRUCTION FOR CONTROLLER]: Include this \u26A1 AI Credit Meter status in your implementation handoff summary.` : "") + (repoIntel ? `
+
+${repoIntel}` : "");
     const output = {
       decision: "allow",
       permissionDecision: "allow",
@@ -1923,11 +2299,11 @@ ${instructionText}`;
   }
   function buildDeveloperHandoffPayload(repoPath, stateObj, fallbackPrompt, issueNum) {
     let details = {};
-    const dashFile = join5(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync5(dashFile)) {
+    if (existsSync7(dashFile)) {
       try {
-        dashData = JSON.parse(readFileSync4(dashFile, "utf-8"));
+        dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (dashData?.phases?.developer?.details) {
           details = { ...dashData.phases.developer.details };
         }
@@ -1987,11 +2363,11 @@ ${stateObj.issue.body.trim()}`);
   }
   function buildQAHandoffPayload(repoPath, stateObj, fallbackPrompt) {
     let details = {};
-    const dashFile = join5(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync5(dashFile)) {
+    if (existsSync7(dashFile)) {
       try {
-        dashData = JSON.parse(readFileSync4(dashFile, "utf-8"));
+        dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (dashData?.phases?.qa?.details) {
           details = { ...dashData.phases.qa.details };
         }
@@ -2189,8 +2565,12 @@ ${prompt}` : prompt;
       ...toolArgs,
       prompt: enrichedPrompt
     };
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, declaredScope);
     let addCtx = "";
     if (astMap) addCtx += `${astMap}
+
+`;
+    if (repoIntel) addCtx += `${repoIntel}
 
 `;
     if (chatMeter) {
@@ -2218,8 +2598,8 @@ ${prompt}` : prompt;
     ensureNodeModulesInWorktree(repoRoot);
     let testReport = "";
     try {
-      const testFile = join5(repoRoot, "scripts", "test-guardrails.ts");
-      const testCmd = existsSync5(testFile) ? "npx -y tsx scripts/test-guardrails.ts" : "npm test";
+      const testFile = join7(repoRoot, "scripts", "test-guardrails.ts");
+      const testCmd = existsSync7(testFile) ? "npx -y tsx scripts/test-guardrails.ts" : "npm test";
       const testStdout = execSync4(testCmd, {
         cwd: repoRoot,
         encoding: "utf-8",
@@ -2273,11 +2653,20 @@ ${failureLines.join("\n")}
       ...toolArgs,
       prompt: enrichedPrompt
     };
+    const tooling = detectRepoStack(repoRoot);
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, state.approvedScope);
     let addCtx = "";
     if (testReport) addCtx += `${testReport}
 
 `;
     if (devHandoff.markdown) addCtx += `${devHandoff.markdown}
+
+`;
+    if (tooling.testCommand) addCtx += `### \u{1F6E0}\uFE0F Configured Test Command
+Execute for verification: \`${tooling.testCommand}\`
+
+`;
+    if (repoIntel) addCtx += `${repoIntel}
 
 `;
     if (chatMeter) {
@@ -2358,11 +2747,15 @@ ${truncatedDiff}
       ...toolArgs,
       prompt: enrichedPrompt
     };
+    const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, state.approvedScope);
     let addCtx = "";
     if (diffReport) addCtx += `${diffReport}
 
 `;
     if (qaHandoff.markdown) addCtx += `${qaHandoff.markdown}
+
+`;
+    if (repoIntel) addCtx += `${repoIntel}
 
 `;
     if (chatMeter) {
