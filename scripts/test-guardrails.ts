@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -258,6 +259,44 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   } catch (err: any) {
     assert(false, `Hook crashed instead of clean exit: ${err.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Read-Scope Barrier (isWithinScope) — Multi-path Matching
+// ---------------------------------------------------------------------------
+console.log("\nSuite 3b: Guardrail 2 — Read-Scope Barrier (isWithinScope) Multi-path Matching");
+{
+  const readRoot = process.cwd();
+
+  // Issue #11 exact repro: multi-path declaredScope separated by semicolon must match both entries.
+  const repro = isWithinScope("src/scopeTool.ts", "src/scopeTool.ts; scripts/test-guardrails.ts", readRoot);
+  assert(repro, "isWithinScope matches first candidate in semicolon-separated multi-path scope (issue #11 repro)");
+
+  const reproSecond = isWithinScope("scripts/test-guardrails.ts", "src/scopeTool.ts; scripts/test-guardrails.ts", readRoot);
+  assert(reproSecond, "isWithinScope matches second candidate in semicolon-separated multi-path scope");
+
+  // Comma-separated variant
+  const commaScope = "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+  const comma1 = isWithinScope("src/guardrails/scopeEnforcer.ts", commaScope, readRoot);
+  assert(comma1, "isWithinScope matches first candidate in comma-separated multi-path scope");
+  const comma2 = isWithinScope("scripts/test-guardrails.ts", commaScope, readRoot);
+  assert(comma2, "isWithinScope matches second candidate in comma-separated multi-path scope");
+
+  // Path outside all declared entries must still be blocked
+  const outside = isWithinScope("src/other.ts", commaScope, readRoot);
+  assert(!outside, "isWithinScope blocks path outside all candidates in multi-path scope");
+
+  // Sibling-prefix containment must hold specifically for isWithinScope (not naive substring match)
+  const siblingBlocked = isWithinScope("src/services/billing_other.ts", "src/services/billing", readRoot);
+  assert(!siblingBlocked, "isWithinScope strictly denies sibling-prefix path ('billing_other' vs 'billing')");
+
+  const siblingAllowed = isWithinScope("src/services/billing/invoice.ts", "src/services/billing", readRoot);
+  assert(siblingAllowed, "isWithinScope permits genuinely nested path under single-entry scope");
+
+  // Boundary edge cases carried over from isEditAllowed: empty/whitespace/delimiter-only scope denies
+  assert(!isWithinScope("src/scopeTool.ts", "", readRoot), "isWithinScope denies on empty declaredScope");
+  assert(!isWithinScope("src/scopeTool.ts", "   ", readRoot), "isWithinScope denies on whitespace-only declaredScope");
+  assert(!isWithinScope("src/scopeTool.ts", ";,;", readRoot), "isWithinScope denies on delimiter-only declaredScope");
 }
 
 // ---------------------------------------------------------------------------
