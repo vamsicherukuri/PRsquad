@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -258,6 +259,76 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
   } catch (err: any) {
     assert(false, `Hook crashed instead of clean exit: ${err.message}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Scoped Read Tool — isWithinScope Multi-Path Matching (Issue #11)
+// ---------------------------------------------------------------------------
+console.log("\nSuite 3b: Guardrail 2b — Scoped Read Tool Multi-Path Matching (isWithinScope)");
+{
+  const ROOT = REPO_ROOT;
+
+  // Criterion 1 & 2: semicolon-separated declaredScope matches any declared entry
+  const semiScope = "src/services/billing; src/services/invoicing";
+  assert(
+    isWithinScope("src/services/billing/invoice.ts", semiScope, ROOT),
+    "isWithinScope: permits path nested under first entry of semicolon-separated declaredScope"
+  );
+  assert(
+    isWithinScope("src/services/invoicing/report.ts", semiScope, ROOT),
+    "isWithinScope: permits path nested under second entry of semicolon-separated declaredScope"
+  );
+
+  // Criterion 1 & 2: comma-separated declaredScope matches any declared entry
+  const commaScope = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  assert(
+    isWithinScope("src/scopeTool.ts", commaScope, ROOT),
+    "isWithinScope: permits exact-match path for first entry of comma-separated declaredScope"
+  );
+  assert(
+    isWithinScope("scripts/test-guardrails.ts", commaScope, ROOT),
+    "isWithinScope: permits exact-match path for second entry of comma-separated declaredScope"
+  );
+
+  // Criterion 3: paths outside all declared entries remain blocked
+  assert(
+    !isWithinScope("src/other.ts", commaScope, ROOT),
+    "isWithinScope: blocks path outside all entries of a multi-path declaration"
+  );
+  assert(
+    !isWithinScope("src/services/other/file.ts", semiScope, ROOT),
+    "isWithinScope: blocks path outside all entries of semicolon-separated declaration"
+  );
+
+  // Criterion 3: sibling-prefix false positives rejected (strict containment, not loose prefix match)
+  assert(
+    !isWithinScope("src/services/billing_other.ts", semiScope, ROOT),
+    "isWithinScope: rejects sibling-prefix false positive (billing_other vs billing) in multi-path scope"
+  );
+  assert(
+    !isWithinScope("src/services/billing_other.ts", "src/services/billing", ROOT),
+    "isWithinScope: rejects sibling-prefix false positive (billing_other vs billing) in single-path scope"
+  );
+
+  // Criterion 3: empty/whitespace/delimiter-only declaredScope strictly denies
+  assert(
+    !isWithinScope("src/services/billing/invoice.ts", "", ROOT),
+    "isWithinScope: empty declaredScope strictly denies"
+  );
+  assert(
+    !isWithinScope("src/services/billing/invoice.ts", "   ", ROOT),
+    "isWithinScope: whitespace-only declaredScope strictly denies"
+  );
+  assert(
+    !isWithinScope("src/services/billing/invoice.ts", ";,;", ROOT),
+    "isWithinScope: delimiter-only declaredScope strictly denies"
+  );
+
+  // Normalization: backslash-separated path in a declaredScope entry is still matched
+  assert(
+    isWithinScope("src/services/billing/invoice.ts", "src\\services\\billing", ROOT),
+    "isWithinScope: normalizes backslashes in declaredScope entries before matching"
+  );
 }
 
 // ---------------------------------------------------------------------------

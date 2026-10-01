@@ -11,8 +11,28 @@ import { defineTool, type Tool } from "@github/copilot-sdk";
  */
 export function isWithinScope(path: string, declaredScope: string, root: string): boolean {
   const rel = isAbsolute(path) ? relative(root, path) : path;
-  const normalizedScope = declaredScope.replace(/^\/+/, "").replace(/\/+$/, "");
-  return rel === normalizedScope || rel.startsWith(`${normalizedScope}/`);
+
+  // Split multi-path declaredScope on ';' and ',' into individual candidate entries, consistent
+  // with the normalization in src/guardrails/scopeEnforcer.ts: trim, convert backslashes to
+  // forward slashes, strip leading/trailing slashes, and filter out empty entries.
+  const scopeEntries = declaredScope
+    .split(/[;,]/)
+    .map((entry) =>
+      entry
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "")
+        .replace(/\/+$/, "")
+    )
+    .filter((entry) => entry.length > 0);
+
+  if (scopeEntries.length === 0) {
+    return false;
+  }
+
+  return scopeEntries.some(
+    (normalizedScope) => rel === normalizedScope || rel.startsWith(`${normalizedScope}/`)
+  );
 }
 
 export function makeScopedReadTool(declaredScope: string, root: string): Tool<{ path: string }> {
