@@ -24,6 +24,25 @@ function findDashboardJson() {
 	return null;
 }
 
+function findAuditJsonl() {
+	const candidates = [
+		resolve(process.cwd(), ".gated-change", "audit.jsonl"),
+		resolve(process.cwd(), "..", ".gated-change", "audit.jsonl"),
+		resolve("C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline/vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8/.gated-change/audit.jsonl"),
+		resolve("C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline/.gated-change/audit.jsonl"),
+		resolve("C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/.gated-change/audit.jsonl")
+	];
+	for (const p of candidates) {
+		if (existsSync(p)) {
+			try {
+				const lines = readFileSync(p, "utf-8").trim().split("\n").filter(Boolean);
+				return lines.slice(-30).map(l => JSON.parse(l)).reverse();
+			} catch (_) {}
+		}
+	}
+	return [];
+}
+
 function renderHtml() {
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -40,7 +59,7 @@ function renderHtml() {
       --text: #f0f6fc;
       --text-muted: #8b949e;
       --green-bg: rgba(46, 160, 67, 0.12);
-      --green-border: rgba(56, 139, 253, 0.4);
+      --green-border: rgba(46, 160, 67, 0.4);
       --green-text: #3fb950;
       --blue-bg: rgba(56, 139, 253, 0.15);
       --blue-border: #1f6feb;
@@ -48,6 +67,9 @@ function renderHtml() {
       --amber-bg: rgba(210, 153, 34, 0.15);
       --amber-border: #9e5b00;
       --amber-text: #f0883e;
+      --purple-bg: rgba(163, 113, 247, 0.15);
+      --purple-border: rgba(163, 113, 247, 0.4);
+      --purple-text: #d2a8ff;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,7 +83,7 @@ function renderHtml() {
       height: 100vh;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       overflow-y: auto;
     }
 
@@ -69,7 +91,7 @@ function renderHtml() {
       container-type: inline-size;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       flex: 1;
     }
 
@@ -78,7 +100,7 @@ function renderHtml() {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 10px 14px;
+      padding: 8px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -148,23 +170,19 @@ function renderHtml() {
       background: rgba(56, 139, 253, 0.15);
       border: 1px solid rgba(56, 139, 253, 0.4);
       color: var(--blue-text);
-      padding: 3px 8px;
+      padding: 2px 7px;
       border-radius: 6px;
       font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 4px;
     }
 
     /* 7-Stage Pipeline Grid */
     .pipeline-grid {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
-      gap: 8px;
+      gap: 6px;
       width: 100%;
     }
 
-    /* Container query responsiveness for narrow/reduced side panels */
     @container (max-width: 680px) {
       .pipeline-grid {
         grid-template-columns: repeat(4, 1fr);
@@ -181,8 +199,8 @@ function renderHtml() {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 8px 10px;
-      min-height: 72px;
+      padding: 7px 9px;
+      min-height: 68px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -194,7 +212,6 @@ function renderHtml() {
     .stage-card:hover {
       background: var(--card-bg-hover);
       border-color: var(--text-muted);
-      transform: translateY(-1px);
     }
 
     .stage-card.selected {
@@ -210,6 +227,20 @@ function renderHtml() {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-weight: 700;
       color: var(--text-muted);
+    }
+
+    .hook-tag {
+      font-size: 9px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-weight: 600;
+      background: var(--purple-bg);
+      color: var(--purple-text);
+      border: 1px solid var(--purple-border);
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
     }
 
     .stage-name {
@@ -232,10 +263,10 @@ function renderHtml() {
       text-overflow: ellipsis;
     }
 
-    /* Status Varients */
+    /* Status Variants */
     .stage-card.done {
       background: var(--green-bg);
-      border-color: rgba(46, 160, 67, 0.4);
+      border-color: var(--green-border);
     }
     .stage-card.done .stage-card-top {
       color: var(--green-text);
@@ -255,22 +286,10 @@ function renderHtml() {
       font-weight: 600;
     }
 
-    .stage-card.gate-active {
-      background: rgba(210, 153, 34, 0.25);
-      border-color: #f0883e;
-      box-shadow: 0 0 10px rgba(210, 153, 34, 0.3);
-      animation: pulse 1.8s infinite;
-    }
-    .stage-card.gate-active .stage-card-top,
-    .stage-card.gate-active .stage-metric {
-      color: #ffc680;
-      font-weight: 700;
-    }
-
     .stage-card.active {
       background: var(--blue-bg);
       border-color: var(--blue-border);
-      box-shadow: 0 0 12px rgba(56, 139, 253, 0.25);
+      box-shadow: 0 0 10px rgba(56, 139, 253, 0.25);
       animation: pulse 1.8s infinite;
     }
     .stage-card.active .stage-card-top,
@@ -288,12 +307,52 @@ function renderHtml() {
       50% { opacity: 0.85; }
     }
 
-    /* Active Details Card */
-    .details-box {
+    /* Tabs Bar for Details / Hooks */
+    .section-tabs {
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      transition: all 0.2s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--border-muted);
+    }
+
+    .tab-btn.active {
+      color: var(--text);
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 14px;
+    }
+
+    .badge-count {
+      background: var(--purple-bg);
+      color: var(--purple-text);
+      border: 1px solid var(--purple-border);
+      padding: 0 5px;
+      border-radius: 10px;
+      font-size: 10px;
+    }
+
+    /* Details Panel */
+    .content-area {
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -301,58 +360,104 @@ function renderHtml() {
       overflow-y: auto;
     }
 
-    .details-header {
+    .panel-box {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Live Hook Stream View */
+    .hook-event-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .hook-event-item {
+      background: rgba(110, 118, 129, 0.08);
+      border: 1px solid var(--border-muted);
+      border-radius: 6px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hook-decision-icon {
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .hook-decision-icon.allow { color: var(--green-text); }
+    .hook-decision-icon.deny { color: #f85149; }
+
+    .hook-event-body {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .hook-event-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid var(--border-muted);
-      padding-bottom: 8px;
+      gap: 6px;
+      margin-bottom: 2px;
     }
 
-    .details-title {
-      font-size: 11px;
+    .hook-name {
       font-family: ui-monospace, SFMono-Regular, monospace;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
       font-weight: 600;
+      color: var(--purple-text);
+      font-size: 10.5px;
     }
 
-    .details-badge {
-      font-size: 11px;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-weight: 600;
+    .hook-time {
       font-family: ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--text-muted);
     }
 
-    .details-content {
-      font-size: 12px;
-      line-height: 1.5;
-      color: #c9d1d9;
-    }
-
-    .details-content code {
+    .hook-action-desc {
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-size: 11px;
-      background: rgba(110, 118, 129, 0.2);
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: var(--blue-text);
+      color: #c9d1d9;
+      word-break: break-all;
     }
 
+    .hook-action-desc code {
+      color: var(--blue-text);
+      background: rgba(110, 118, 129, 0.2);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    /* Details Content */
     .details-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 8px;
-      margin-top: 6px;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 6px;
+      margin-top: 4px;
     }
 
     .stat-pill {
       background: rgba(110, 118, 129, 0.1);
       border: 1px solid var(--border-muted);
       border-radius: 6px;
-      padding: 6px 10px;
+      padding: 6px 8px;
     }
 
     .stat-label {
@@ -364,7 +469,7 @@ function renderHtml() {
     }
 
     .stat-val {
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       color: var(--text);
       font-family: ui-monospace, monospace;
@@ -392,13 +497,13 @@ function renderHtml() {
       </div>
     </div>
 
-    <!-- 7 Stage Cards -->
+    <!-- 7 Stage Cards with Guardrail Hook Indicators -->
     <div class="pipeline-grid" id="pipeline-nodes">
       <!-- 1. Intake -->
       <div class="stage-card done" id="stage-0" onclick="selectStage(0)">
         <div class="stage-card-top">
           <span>1</span>
-          <span id="icon-0">✓</span>
+          <span class="hook-tag">🛡️ Ingress</span>
         </div>
         <div class="stage-name">Intake</div>
         <div class="stage-metric" id="metric-0">1.24 AIU</div>
@@ -408,7 +513,7 @@ function renderHtml() {
       <div class="stage-card done" id="stage-1" onclick="selectStage(1)">
         <div class="stage-card-top">
           <span>2</span>
-          <span id="icon-1">✓</span>
+          <span class="hook-tag">🛡️ ReadScope</span>
         </div>
         <div class="stage-name">Architect</div>
         <div class="stage-metric" id="metric-1">6.71 AIU</div>
@@ -418,17 +523,17 @@ function renderHtml() {
       <div class="stage-card gate-approved" id="stage-2" onclick="selectStage(2)">
         <div class="stage-card-top">
           <span>3</span>
-          <span id="icon-2">🔒 APPROVED</span>
+          <span class="hook-tag" style="background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber-border);">🛡️ VerifyGate</span>
         </div>
         <div class="stage-name">Scope Gate</div>
-        <div class="stage-metric" id="metric-2">0.00 AIU</div>
+        <div class="stage-metric" id="metric-2">APPROVED</div>
       </div>
 
       <!-- 4. Developer -->
       <div class="stage-card active selected" id="stage-3" onclick="selectStage(3)">
         <div class="stage-card-top">
           <span>4</span>
-          <span id="icon-3">● RUNNING</span>
+          <span class="hook-tag" style="background:var(--blue-bg); color:var(--blue-text); border-color:var(--blue-border);">🛡️ EnforceScope</span>
         </div>
         <div class="stage-name">Developer</div>
         <div class="stage-metric" id="metric-3">Active...</div>
@@ -438,7 +543,7 @@ function renderHtml() {
       <div class="stage-card pending" id="stage-4" onclick="selectStage(4)">
         <div class="stage-card-top">
           <span>5</span>
-          <span id="icon-4">○</span>
+          <span class="hook-tag">🛡️ Sandbox</span>
         </div>
         <div class="stage-name">QA Test</div>
         <div class="stage-metric" id="metric-4">Queued</div>
@@ -448,7 +553,7 @@ function renderHtml() {
       <div class="stage-card pending" id="stage-5" onclick="selectStage(5)">
         <div class="stage-card-top">
           <span>6</span>
-          <span id="icon-5">○</span>
+          <span class="hook-tag">🛡️ ReadOnly</span>
         </div>
         <div class="stage-name">Reviewer</div>
         <div class="stage-metric" id="metric-5">Queued</div>
@@ -458,51 +563,82 @@ function renderHtml() {
       <div class="stage-card pending" id="stage-6" onclick="selectStage(6)">
         <div class="stage-card-top">
           <span>7</span>
-          <span id="icon-6">🔒</span>
+          <span class="hook-tag">🛡️ PRGate</span>
         </div>
         <div class="stage-name">PR Gate</div>
         <div class="stage-metric" id="metric-6">Queued</div>
       </div>
     </div>
 
-    <!-- Active Stage Details Card -->
-    <div class="details-box">
-      <div class="details-header">
-        <span class="details-title" id="detail-title">Stage 4: Developer Agent Execution</span>
-        <span class="details-badge" id="detail-badge" style="background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);">ACTIVE</span>
-      </div>
-      <div class="details-content" id="detail-content">
-        Developer is executing targeted edits on feature branch <code>fix/issue-11-scoped-read</code> within approved scope boundaries. Write-barrier guardrails active.
-      </div>
-      <div class="details-grid" id="detail-stats">
-        <div class="stat-pill">
-          <div class="stat-label">Approved Scope</div>
-          <div class="stat-val" style="font-size:11px;">src/scopeTool.ts, scripts/test-guardrails.ts</div>
+    <!-- Section Tabs: Stage Details vs Live Guardrail Hook Feed -->
+    <div class="section-tabs">
+      <button class="tab-btn active" id="tab-btn-details" onclick="switchView('details')">
+        Stage Details
+      </button>
+      <button class="tab-btn" id="tab-btn-hooks" onclick="switchView('hooks')">
+        🛡️ Live Guardrail Hooks <span class="badge-count" id="hook-count-badge">0</span>
+      </button>
+    </div>
+
+    <!-- Content Area -->
+    <div class="content-area">
+      <!-- View 1: Stage Details -->
+      <div class="panel-box" id="view-details">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--text-muted); font-weight:600;" id="detail-title">
+            Stage 4: Developer Agent Execution
+          </span>
+          <span id="detail-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; font-family:ui-monospace; background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);">
+            ACTIVE
+          </span>
         </div>
-        <div class="stat-pill">
-          <div class="stat-label">Execution Environment</div>
-          <div class="stat-val">Isolated Git Worktree</div>
+        <div style="font-size:12px; line-height:1.5; color:#c9d1d9;" id="detail-content">
+          Developer is applying fixes strictly within approved boundaries in an isolated git worktree. Guardrail write barrier active.
         </div>
-        <div class="stat-pill">
-          <div class="stat-label">Retry Budget</div>
-          <div class="stat-val">Attempt 1 of 3</div>
+        <div class="details-grid" id="detail-stats">
+          <div class="stat-pill">
+            <div class="stat-label">Active Guardrail Hook</div>
+            <div class="stat-val" style="color:var(--purple-text);">hook-enforce-scope</div>
+          </div>
+          <div class="stat-pill">
+            <div class="stat-label">Approved Scope</div>
+            <div class="stat-val" style="font-size:11px;">src/scopeTool.ts, scripts/test-guardrails.ts</div>
+          </div>
+          <div class="stat-pill">
+            <div class="stat-label">Retry Loop Budget</div>
+            <div class="stat-val">Attempt 1 of 3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View 2: Live Hook Events Stream -->
+      <div class="panel-box" id="view-hooks" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--purple-text); font-weight:600;">
+            🛡️ Deterministic Hook Invocations (audit.jsonl)
+          </span>
+          <span style="font-size:10.5px; color:var(--text-muted); font-family:ui-monospace;">Zero-bypass runtime barriers</span>
+        </div>
+        <div class="hook-event-list" id="hook-events-container">
+          <!-- Populated dynamically from /api/audit -->
         </div>
       </div>
     </div>
   </div>
 
   <script>
-    let globalData = null;
-    let currentSelected = 3; // Developer
+    let currentSelected = 3;
+    let activeTab = 'details';
+    let cachedAudit = [];
 
-    const stageDetails = [
+    const stageMeta = [
       {
         title: "Stage 1: Intake Triage",
         badge: "READY",
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Validates issue completeness, reproducibility, and acceptance criteria before engaging model planning.",
         stats: [
-          { label: "Status", val: "READY" },
+          { label: "Active Hook", val: "preToolUse: ingress_check" },
           { label: "Credits Burned", val: "1.24 AIU" },
           { label: "Triage Cost", val: "Cheap fast check" }
         ]
@@ -513,19 +649,19 @@ function renderHtml() {
         badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
         content: "Investigated root cause using read-scoped tools. Produced surgical modification plan with strict blast-radius bounding.",
         stats: [
-          { label: "Risk Tier", val: "Low" },
+          { label: "Active Hook", val: "makeScopedReadTool" },
           { label: "Credits Burned", val: "6.71 AIU" },
-          { label: "Proposed Files", val: "2 files" }
+          { label: "Risk Tier", val: "Low" }
         ]
       },
       {
         title: "Stage 3: PM Scope Approval Gate",
         badge: "APPROVED",
         badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Hard human-in-the-loop review barrier. Developer agent execution remained blocked until PM confirmed proposed boundaries in chat.",
+        content: "Hard human-in-the-loop review barrier. Developer execution remained blocked until PM confirmed proposed boundaries in chat.",
         stats: [
-          { label: "Gate Approver", val: "Human in Chat" },
-          { label: "Approved Scope", val: "src/scopeTool.ts, scripts/test-guardrails.ts" },
+          { label: "Active Hook", val: "hook-verify-gate" },
+          { label: "Decision", val: "PASSED (approval.lock valid)" },
           { label: "Tokens Used", val: "0 (Deterministic Gate)" }
         ]
       },
@@ -533,9 +669,9 @@ function renderHtml() {
         title: "Stage 4: Developer Implementation",
         badge: "RUNNING",
         badgeStyle: "background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);",
-        content: "Developer agent is applying targeted fixes strictly within approved boundaries in an isolated worktree branch.",
+        content: "Developer is applying fixes strictly within approved boundaries in an isolated git worktree. Guardrail write barrier active.",
         stats: [
-          { label: "Approved Scope", val: "src/scopeTool.ts, scripts/test-guardrails.ts" },
+          { label: "Active Hook", val: "hook-enforce-scope" },
           { label: "Write Barrier", val: "Active (Hard Block)" },
           { label: "Attempt", val: "1 of 3 (Bounded)" }
         ]
@@ -546,9 +682,9 @@ function renderHtml() {
         badgeStyle: "background:#21262d; color:#8b949e; border:1px solid #30363d;",
         content: "Fresh independent QA agent runs automated test suites and regression scenarios. Will reject if any test fails.",
         stats: [
-          { label: "Pass Criteria", val: "100% test pass" },
-          { label: "Max Retries", val: "3 loops before escalation" },
-          { label: "Sandbox", val: "Test execution allowed, Git Push blocked" }
+          { label: "Active Hook", val: "hook-sandbox-bash" },
+          { label: "Sandbox Policy", val: "Tests allowed, Git Push blocked" },
+          { label: "Max Retries", val: "3 loops before escalation" }
         ]
       },
       {
@@ -557,7 +693,7 @@ function renderHtml() {
         badgeStyle: "background:#21262d; color:#8b949e; border:1px solid #30363d;",
         content: "Read-only security & diff inspection agent reviews git changes for regressions, secrets, and policy compliance.",
         stats: [
-          { label: "Mode", val: "Read-Only (No Edits)" },
+          { label: "Active Hook", val: "hook-sandbox-bash (Read-Only)" },
           { label: "Scope Verification", val: "Diff within declared boundary" },
           { label: "AST Checks", val: "Symbol reference integrity" }
         ]
@@ -568,9 +704,9 @@ function renderHtml() {
         badgeStyle: "background:#21262d; color:#8b949e; border:1px solid #30363d;",
         content: "Final human-in-the-loop review. Draft PR generated with evidence package and AI credit receipt. Requires human merge approval.",
         stats: [
+          { label: "Active Hook", val: "hook-verify-gate: PR review" },
           { label: "Merge Policy", val: "Human Approval Required" },
-          { label: "PR Type", val: "Branch: fix/issue-11-scoped-read" },
-          { label: "Audit Trail", val: "Complete evidence attached" }
+          { label: "Audit Trail", val: "Tamper-evident audit.jsonl" }
         ]
       }
     ];
@@ -588,7 +724,7 @@ function renderHtml() {
     }
 
     function renderDetail(index) {
-      const d = stageDetails[index];
+      const d = stageMeta[index];
       if (!d) return;
       document.getElementById('detail-title').textContent = d.title;
       const bEl = document.getElementById('detail-badge');
@@ -605,18 +741,89 @@ function renderHtml() {
       \`).join('');
     }
 
+    function switchView(tab) {
+      activeTab = tab;
+      document.getElementById('tab-btn-details').className = 'tab-btn' + (tab === 'details' ? ' active' : '');
+      document.getElementById('tab-btn-hooks').className = 'tab-btn' + (tab === 'hooks' ? ' active' : '');
+      document.getElementById('view-details').style.display = tab === 'details' ? 'flex' : 'none';
+      document.getElementById('view-hooks').style.display = tab === 'hooks' ? 'flex' : 'none';
+    }
+
+    function formatTime(iso) {
+      try {
+        const d = new Date(iso);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function renderHookList(events) {
+      const container = document.getElementById('hook-events-container');
+      if (!events || events.length === 0) {
+        container.innerHTML = '<div style="font-size:11px; color:var(--text-muted); padding:8px;">No hook events recorded yet.</div>';
+        return;
+      }
+
+      document.getElementById('hook-count-badge').textContent = events.length;
+
+      container.innerHTML = events.slice(0, 15).map(e => {
+        const isAllow = e.decision === 'allow';
+        const icon = isAllow ? '✓' : '⛔';
+        const iconClass = isAllow ? 'allow' : 'deny';
+        
+        let desc = e.action || '';
+        if (e.action === 'write_allowed_in_scope') {
+          desc = \`Allowed edit to <code>\${e.details?.path || ''}</code>\`;
+        } else if (e.action === 'command_allowed') {
+          const cmd = String(e.details?.command || '').split(';').pop().trim();
+          desc = \`Permitted command: <code>\${cmd.slice(0, 55)}\${cmd.length > 55 ? '...' : ''}</code>\`;
+        } else if (e.action === 'human_scope_gate_auto_signed_from_chat') {
+          desc = \`Verified PM Scope Approval lock: <code>\${e.details?.approvedScope || ''}</code>\`;
+        } else if (e.action === 'scope_violation_blocked') {
+          desc = \`Blocked unauthorized edit to <code>\${e.details?.path || ''}</code> (Smart nudge sent)\`;
+        } else if (e.action === 'disallowed_command_blocked') {
+          desc = \`Blocked dangerous command: <code>\${e.details?.command || ''}</code>\`;
+        }
+
+        const hookName = e.tool === 'edit' ? 'hook-enforce-scope' 
+          : (e.tool === 'agent' ? 'hook-verify-gate' : 'hook-sandbox-bash');
+
+        return \`
+          <div class="hook-event-item">
+            <span class="hook-decision-icon \${iconClass}">\${icon}</span>
+            <div class="hook-event-body">
+              <div class="hook-event-top">
+                <span class="hook-name">\${hookName}</span>
+                <span class="hook-time">\${formatTime(e.timestamp)}</span>
+              </div>
+              <div class="hook-action-desc">\${desc}</div>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
     async function poll() {
       try {
-        const res = await fetch('/api/dashboard');
-        if (res.ok) {
-          const data = await res.json();
-          globalData = data;
-          updateUI(data);
+        const [dashRes, auditRes] = await Promise.all([
+          fetch('/api/dashboard'),
+          fetch('/api/audit')
+        ]);
+
+        if (dashRes.ok) {
+          const dash = await dashRes.json();
+          updateDashboard(dash);
+        }
+        if (auditRes.ok) {
+          const audit = await auditRes.json();
+          cachedAudit = audit;
+          renderHookList(audit);
         }
       } catch (_) {}
     }
 
-    function updateUI(data) {
+    function updateDashboard(data) {
       if (!data) return;
       if (data.issueNumber) {
         document.getElementById('issue-tag').textContent = 'Issue #' + data.issueNumber;
@@ -659,6 +866,12 @@ async function startServer(instanceId, session) {
 			const data = findDashboardJson();
 			res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
 			res.end(JSON.stringify(data || {}));
+			return;
+		}
+		if (req.url === "/api/audit" || req.url === "/audit.json") {
+			const data = findAuditJsonl();
+			res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+			res.end(JSON.stringify(data || []));
 			return;
 		}
 		res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
