@@ -21,7 +21,7 @@ Inspection Boundary & File-Reading Limits:
   1. The declared scope files and their immediate test files.
   2. Exactly one hop of direct callers/importers/usages of symbols or files you propose to change.
 - Do not recursively crawl the repository.
-- Strictly forbidden from viewing or tracing runtime orchestration, engine, or pipeline harness files (e.g. `src/orchestrator.ts`, `src/engine/loadAgent.ts`, `src/guardrails/scopeGate.ts`, `copilotAgent.ts`) unless the issue description explicitly names them as target bugs.
+- Strictly forbidden from viewing or tracing pipeline harness, workflow engine, plugin configuration, or agent definition files unless the issue description explicitly names them as target bugs.
 - Do not spend turns inspecting how the agents or hooks are configured or invoked. Focus solely on the product logic and test files targeted by the issue.
 
 Deterministic AST Pre-Fetch:

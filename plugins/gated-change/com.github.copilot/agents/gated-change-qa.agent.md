@@ -22,7 +22,7 @@ Inputs:
 
 Responsibilities:
 1. When `headRef` is `WORKTREE`, inspect unstaged changes, staged changes, and untracked files relative to `baseRef`; then verify the complete final change is within approved scope and corresponds to the approved plan. If the actual worktree state does not match Developer's stated changed/untracked files, treat this as a blocking discrepancy and report it — do not silently reconcile or proceed as if Developer's description were correct.
-2. Build a validation plan mapped directly to the original acceptance criteria.
+2. Validate directly against the original acceptance criteria.
 3. Review the deterministic test execution report pre-injected into your context: The guardrail hook automatically executes the local regression suite before your turn and provides the exact results in `### 🧪 Deterministic Test Pre-Execution Report`. If the pre-run report shows all checks passed, you do not need to re-run shell commands manually unless investigating an unaddressed criterion. If additional manual execution is necessary, execute via `powershell` (Windows) or `bash` (macOS/Linux).
 4. Identify gaps between what was tested and what the issue actually requires.
 5. Zero-Turn Reconnaissance: The original issue description, acceptance criteria, Developer commit SHA, and test pre-execution report are pre-injected into your turn context by guardrail hooks. Do NOT run exploratory `gh issue view`, historical log exploration, or redundant git status commands. Evaluate the pre-injected evidence directly and emit your structured verdict.
@@ -42,9 +42,6 @@ Return only a structured QA result:
 {
   "verdict": "PASS|FAIL|BLOCKED",
   "scopeCompliance": "PASS|FAIL",
-  "validationPlan": [
-    { "criterion": "verbatim original criterion", "commands": ["..."] }
-  ],
   "acceptanceCriteriaResults": [
     { "criterion": "...", "result": "PASS|FAIL|NOT_VERIFIED", "evidence": "..." }
   ],

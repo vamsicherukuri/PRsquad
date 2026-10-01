@@ -30,9 +30,7 @@ Return only this structured result. The schema is a format contract, not sample 
     "owner": "",
     "repo": "",
     "number": 0,
-    "title": "",
-    "body": "",
-    "comments": []
+    "title": ""
   },
   "problem": null,
   "acceptanceCriteria": [],

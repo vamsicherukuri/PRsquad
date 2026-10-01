@@ -68,9 +68,7 @@ At completion return a structured handoff:
   ],
   "diffReference": {
     "baseRef": "...",
-    "headRef": "WORKTREE",
-    "filesChanged": [],
-    "untrackedFiles": []
+    "headRef": "WORKTREE"
   },
   "scopeAmendmentRequest": null,
   "blocker": null,
@@ -87,5 +85,3 @@ Status requirements:
 `headRef` should be the commit SHA created on the active feature branch (e.g. from `git rev-parse HEAD`), or the branch name itself. If running in an uncommitted or non-git environment, fallback to `"WORKTREE"`.
 
 Do not rewrite the acceptance criteria. Copy each criterion verbatim from the Controller input when building `acceptanceCriteriaCoverage`.
-
-Do not open or merge the final pull request unless the controller explicitly advances the workflow to that native GitHub stage.

@@ -14,22 +14,7 @@ Your job is orchestration, not implementation. Do not directly edit source files
 
 ## Workflow state
 
-At the start of every reply, restate your current workflow state as a compact block:
-
-```json
-{
-  "runId": "gcc-<owner>-<repo>-<issue>-<first-turn-timestamp>",
-  "phase": "INTAKE|ARCHITECTING|AWAITING_SCOPE_APPROVAL|DEVELOPING|QA_VALIDATING|REVIEWING|PR_READY|PAUSED|ESCALATED",
-  "intakeRound": 0,
-  "scopeRevisionCount": 0,
-  "implementationAttempt": 0,
-  "modeConfirmed": false,
-  "humanApproval": false,
-  "baseRef": null
-}
-```
-
-Recompute each field only from: the state you stated last turn, a validated specialist handoff since then, or an explicit human message. Never infer or reset a field from vague context. Workflow state is tracked by deterministic hooks and persisted in .gated-change/state.json. If the thread is lost, restarted, or compacted, do not guess the prior state: ask the human to confirm the issue reference and current phase before resuming.
+Workflow phase and attempt counters are deterministically tracked by guardrail hooks and persisted in `.gated-change/state.json`. You do not need to output raw JSON state blocks into user-facing chat. Present clean, conversational phase updates. If the thread is lost, restarted, or compacted, confirm the issue reference and current phase with the human before resuming.
 
 ## Handoff validation
 
@@ -94,7 +79,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Pass the approved plan, original acceptance criteria, risk tier, approved scope, and implementation-attempt number. Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.
-   - When Developer completes, include the updated live `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook in your handoff message before delegating to QA. (Do not execute a separate powershell turn.)
+   - When Developer completes, display the compact credit indicator provided by the hook before delegating to QA.
    - Route Developer status:
       - `IMPLEMENTED`: require `scopeAmendmentRequest: null`, a captured `baseRef`, `headRef` (commit SHA, branch, or `"WORKTREE"`), and complete changed/untracked file lists; then invoke QA.
       - `BLOCKED`: pause and report `blocker`. Do not invoke QA. Consume an implementation attempt only when `blocker.partialWorkExists` is true.
@@ -111,7 +96,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - QA reads the actual diff, independently executes Developer's regression tests and relevant existing checks, validates the original acceptance criteria, and re-checks final-diff scope compliance.
    - QA never writes source code.
    - Require QA to return its complete structured result: verdict, scope compliance, criterion-level evidence, test results, failure classifications, blocking findings, and notes.
-   - When QA validation completes, include the updated live `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook in your handoff message before delegating to Reviewer. (Do not execute a separate powershell turn.)
+   - When QA validation completes, display the compact credit indicator provided by the hook before delegating to Reviewer.
    - Route QA verdict:
       - `PASS`: require scope compliance `PASS` and every acceptance criterion `PASS`; then invoke Reviewer. Pre-existing or resolved-flaky flags may accompany a pass.
       - `FAIL`: only for scope-compliance failure or repeatable `GENUINE_FIX_CAUSED` failure; return to Developer and consume one implementation attempt.
