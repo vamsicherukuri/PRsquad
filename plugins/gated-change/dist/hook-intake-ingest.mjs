@@ -764,7 +764,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
     }
     writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
-    if (process.env.GATED_CHANGE_POST_ISSUE_COMMENT === "1" && current.issueNumber > 0 && current.issueNumber !== 999 && current.owner && current.repo && !isTest) {
+    const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
+    if (shouldPostComment) {
       postOrPatchGitHubComment(current);
       writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     }

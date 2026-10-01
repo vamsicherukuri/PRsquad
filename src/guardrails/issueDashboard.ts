@@ -713,8 +713,16 @@ export function syncWorkflowDashboard(
       process.env.GATED_CHANGE_TEST === "1" ||
       process.env.npm_lifecycle_event?.startsWith("test");
 
-    // Push update to GitHub issue comment only if explicitly opted-in via env var
-    if (process.env.GATED_CHANGE_POST_ISSUE_COMMENT === "1" && current.issueNumber > 0 && current.issueNumber !== 999 && current.owner && current.repo && !isTest) {
+    // Push update to GitHub issue comment unless suppressed during automated test runs
+    const shouldPostComment =
+      !isTest &&
+      current.issueNumber > 0 &&
+      current.issueNumber !== 999 &&
+      Boolean(current.owner) &&
+      Boolean(current.repo) &&
+      process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
+
+    if (shouldPostComment) {
       postOrPatchGitHubComment(current);
       writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     }

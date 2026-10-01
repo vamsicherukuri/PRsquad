@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCanvas, joinSession } from "@github/copilot-sdk/extension";
@@ -9,14 +9,32 @@ const __dirname = dirname(__filename);
 
 const servers = new Map();
 
+function getLatestWorktreeDir() {
+	const base = resolve("C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline");
+	if (existsSync(base)) {
+		try {
+			const entries = readdirSync(base, { withFileTypes: true })
+				.filter(d => d.isDirectory() && d.name.startsWith("vamsicherukuri-issue-"))
+				.map(d => ({
+					path: join(base, d.name),
+					time: statSync(join(base, d.name)).mtimeMs
+				}))
+				.sort((a, b) => b.time - a.time);
+			if (entries.length > 0) return entries[0].path;
+		} catch (_) {}
+	}
+	return null;
+}
+
 function findDashboardJson() {
+	const latestWorktree = getLatestWorktreeDir();
 	const candidates = [
-		resolve("C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline/vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8/.gated-change/dashboard.json"),
+		latestWorktree ? join(latestWorktree, ".gated-change", "dashboard.json") : null,
 		resolve(process.cwd(), ".gated-change", "dashboard.json"),
 		resolve(process.cwd(), "..", ".gated-change", "dashboard.json"),
 		resolve("C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline/.gated-change/dashboard.json"),
 		resolve("C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/.gated-change/dashboard.json")
-	];
+	].filter(Boolean);
 	for (const p of candidates) {
 		if (existsSync(p)) {
 			try {
@@ -28,13 +46,14 @@ function findDashboardJson() {
 }
 
 function findAuditJsonl() {
+	const latestWorktree = getLatestWorktreeDir();
 	const candidates = [
-		resolve("C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline/vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8/.gated-change/audit.jsonl"),
+		latestWorktree ? join(latestWorktree, ".gated-change", "audit.jsonl") : null,
 		resolve(process.cwd(), ".gated-change", "audit.jsonl"),
 		resolve(process.cwd(), "..", ".gated-change", "audit.jsonl"),
 		resolve("C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline/.gated-change/audit.jsonl"),
 		resolve("C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/.gated-change/audit.jsonl")
-	];
+	].filter(Boolean);
 	for (const p of candidates) {
 		if (existsSync(p)) {
 			try {
