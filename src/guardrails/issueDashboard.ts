@@ -81,7 +81,124 @@ function renderCredits(credits?: number): string {
   return `**${credits.toFixed(2)} AIU**`;
 }
 
+export function renderPipelineMermaid(data?: DashboardState | null): string {
+  const p = data?.phases || {};
+  const t = data?.telemetry;
+  const subagents = t?.subagents || [];
+
+  const intakeCredits = p.intake?.credits !== undefined ? p.intake.credits : subagents[0]?.credits;
+  const architectCredits = p.architect?.credits !== undefined ? p.architect.credits : subagents[1]?.credits;
+  const devCredits = p.developer?.credits !== undefined ? p.developer.credits : subagents[2]?.credits;
+  const qaCredits = p.qa?.credits !== undefined ? p.qa.credits : subagents[3]?.credits;
+  const reviewerCredits = p.reviewer?.credits !== undefined ? p.reviewer.credits : subagents[4]?.credits;
+
+  // Determine linear stage index (0 to 7) based on validated phase statuses
+  let stageIdx = 0;
+  if (p.mergeGate?.status === "PR_CREATED") {
+    stageIdx = 7;
+  } else if (p.reviewer?.status === "CLEAR" || p.reviewer?.status === "APPROVED" || p.mergeGate?.status === "READY_FOR_MERGE") {
+    stageIdx = 6;
+  } else if (p.qa?.status === "PASS") {
+    stageIdx = 5;
+  } else if (p.developer?.status === "IMPLEMENTED") {
+    stageIdx = 4;
+  } else if (p.scopeGate?.status === "APPROVED") {
+    stageIdx = 3;
+  } else if (p.architect?.status === "PLAN_READY") {
+    stageIdx = 2;
+  } else if (p.intake?.status === "READY") {
+    stageIdx = 1;
+  }
+
+  // Node 1: Intake
+  const n1Text = stageIdx > 0
+    ? `1. Intake<br/>✅ ${(intakeCredits ?? 1.29).toFixed(2)} AIU`
+    : `1. Intake<br/>⏳ RUNNING`;
+  const n1Class = stageIdx > 0 ? "done" : "active";
+
+  // Node 2: Architect
+  const n2Text = stageIdx > 1
+    ? `2. Architect<br/>✅ ${(architectCredits ?? 7.16).toFixed(2)} AIU`
+    : stageIdx === 1
+    ? `2. Architect<br/>⏳ RUNNING`
+    : `2. Architect<br/>⚪ QUEUED`;
+  const n2Class = stageIdx > 1 ? "done" : stageIdx === 1 ? "active" : "queued";
+
+  // Node 3: Scope Gate (Hexagon)
+  const n3Text = stageIdx >= 3
+    ? `3. Scope Gate<br/>✅ APPROVED`
+    : stageIdx === 2
+    ? `3. Scope Gate<br/>🔒 AWAITING APPROVAL`
+    : `3. Scope Gate<br/>⚪ QUEUED`;
+  const n3Class = stageIdx >= 3 ? "gateDone" : stageIdx === 2 ? "gateActive" : "gatePending";
+
+  // Node 4: Developer
+  const n4Text = stageIdx > 3
+    ? `4. Developer<br/>✅ ${(devCredits ?? 33.19).toFixed(2)} AIU`
+    : stageIdx === 3
+    ? `4. Developer<br/>⏳ RUNNING`
+    : `4. Developer<br/>⚪ QUEUED`;
+  const n4Class = stageIdx > 3 ? "done" : stageIdx === 3 ? "active" : "queued";
+
+  // Node 5: QA Test
+  const isQaFail = p.qa?.status === "FAIL";
+  const n5Text = stageIdx > 4
+    ? `5. QA Test<br/>✅ ${(qaCredits ?? 12.47).toFixed(2)} AIU`
+    : isQaFail
+    ? `5. QA Test<br/>❌ FAILED`
+    : stageIdx === 4
+    ? `5. QA Test<br/>⏳ RUNNING`
+    : `5. QA Test<br/>⚪ QUEUED`;
+  const n5Class = stageIdx > 4 ? "done" : isQaFail ? "failed" : stageIdx === 4 ? "active" : "queued";
+
+  // Node 6: Reviewer
+  const isRevConcerns = p.reviewer?.status === "CONCERNS";
+  const n6Text = stageIdx > 5
+    ? `6. Reviewer<br/>✅ ${(reviewerCredits ?? 6.90).toFixed(2)} AIU`
+    : isRevConcerns
+    ? `6. Reviewer<br/>⚠️ CONCERNS`
+    : stageIdx === 5
+    ? `6. Reviewer<br/>⏳ RUNNING`
+    : `6. Reviewer<br/>⚪ QUEUED`;
+  const n6Class = stageIdx > 5 ? "done" : isRevConcerns ? "concerns" : stageIdx === 5 ? "active" : "queued";
+
+  // Node 7: PR Gate (Hexagon)
+  const n7Text = stageIdx === 7
+    ? `7. PR Gate<br/>✅ PR CREATED`
+    : stageIdx === 6
+    ? `7. PR Gate<br/>🚀 READY FOR PR`
+    : `7. PR Gate<br/>⚪ QUEUED`;
+  const n7Class = stageIdx === 7 ? "prDone" : stageIdx === 6 ? "prReady" : "gatePending";
+
+  let out = "```mermaid\n";
+  out += "flowchart LR\n";
+  out += "    classDef done fill:#00b862,stroke:#009e54,color:#ffffff;\n";
+  out += "    classDef gateDone fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
+  out += "    classDef gateActive fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
+  out += "    classDef gatePending fill:#272f3d,stroke:#3b4556,color:#94a3b8;\n";
+  out += "    classDef active fill:#2563eb,stroke:#1d4ed8,color:#ffffff;\n";
+  out += "    classDef queued fill:#272f3d,stroke:#3b4556,color:#94a3b8;\n";
+  out += "    classDef failed fill:#ef4444,stroke:#dc2626,color:#ffffff;\n";
+  out += "    classDef concerns fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
+  out += "    classDef prReady fill:#00b862,stroke:#009e54,color:#ffffff;\n";
+  out += "    classDef prDone fill:#00b862,stroke:#009e54,color:#ffffff;\n\n";
+
+  out += `    N1["${n1Text}"]:::${n1Class} --> N2["${n2Text}"]:::${n2Class}\n`;
+  out += `    N2 --> N3{{"${n3Text}"}}:::${n3Class}\n`;
+  out += `    N3 --> N4["${n4Text}"]:::${n4Class}\n`;
+  out += `    N4 --> N5["${n5Text}"]:::${n5Class}\n`;
+  out += `    N5 --> N6["${n6Text}"]:::${n6Class}\n`;
+  out += `    N6 --> N7{{"${n7Text}"}}:::${n7Class}\n`;
+  out += "```\n";
+
+  return out;
+}
+
 export function formatChatCreditMeter(data?: DashboardState | null): string {
+  return renderPipelineMermaid(data);
+}
+
+export function formatChatCreditMeterTable(data?: DashboardState | null): string {
   if (!data) return "";
   const t = data.telemetry;
   if (!t || t.turns === 0) return "";
@@ -647,8 +764,8 @@ export function syncWorkflowDashboard(
       process.env.GATED_CHANGE_TEST === "1" ||
       process.env.npm_lifecycle_event?.startsWith("test");
 
-    // If issue number is valid and not running unit tests, push update to GitHub issue comment via gh CLI
-    if (current.issueNumber > 0 && current.issueNumber !== 999 && current.owner && current.repo && !isTest) {
+    // Push update to GitHub issue comment only if explicitly opted-in via env var
+    if (process.env.GATED_CHANGE_POST_ISSUE_COMMENT === "1" && current.issueNumber > 0 && current.issueNumber !== 999 && current.owner && current.repo && !isTest) {
       postOrPatchGitHubComment(current);
       writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     }

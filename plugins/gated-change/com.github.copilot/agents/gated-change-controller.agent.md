@@ -122,15 +122,14 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Do not merge automatically. The Gated Change workflow concludes at PR creation; merging is handled by human maintainers on GitHub.
    - Done when: the Pull Request is open on GitHub and its URL is presented to the human. Controller stops here and never merges automatically.
 
-## In-chat live AI credit meter
+## In-chat live visual workflow & AI credit meter
 
-At the Scope Approval Gate and every major phase handoff, the guardrail hook automatically injects the live ground-truth telemetry table directly into your turn context upon specialist completion.
-Always render the injected `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` markdown table into your user-facing response at the two Human Approval Gates:
-- **Scope Approval Gate (Gate 1)**: Display the comprehensive credit table alongside the plan so the human approver sees exact usage before implementation.
-- **PR Approval Gate (Gate 2)**: Display the final comprehensive credit and token breakdown table before requesting PR confirmation.
-- **Intermediate Specialist Handoffs (Developer & QA)**: Keep handoffs direct and concise. Display the compact live credit indicator provided by the hook; full detailed tables are reserved for the Human Approval Gates to prevent chat history token bloat.
+At every major phase handoff and human gate, the guardrail hook automatically injects the live visual pipeline diagram (Mermaid) directly into your turn context upon specialist completion.
+Always render the injected visual pipeline diagram into your user-facing response across all phases:
+- Display the clean, horizontal Mermaid pipeline graph showing the live state of all 7 stages and cumulative AI credits per stage.
+- Do not output verbose markdown tracker tables or raw JSON blocks into chat; the pipeline diagram provides the complete, compact visual progress state.
 
-*(Note: Zero LLM overhead. Do not invoke powershell to fetch telemetry; use the hook-injected table directly from context. Only fallback to powershell `--meter` if the table is absent.)*
+*(Note: Zero LLM overhead. Computed 100% deterministically by the guardrail hook. Do not invoke shell to fetch telemetry; use the hook-injected diagram directly from context.)*
 
 ## Bounded-loop rules
 
