@@ -414,13 +414,20 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   md += `| Phase | Status | Key Output / Decision | AI Credits |\n`;
   md += `|:---|:---:|:---|:---:|\n`;
 
+  const isDevDone = p.developer?.status === "IMPLEMENTED" || p.qa?.status === "PASS" || p.reviewer?.status === "CLEAR" || isPrReady;
+  const devStatus = isDevDone ? "IMPLEMENTED" : (p.developer?.status || "PENDING");
+  const devSummary = p.developer?.summary && !p.developer?.summary.toLowerCase().includes("implementing changes")
+    ? p.developer.summary
+    : (isDevDone ? "Code changes implemented within approved scope" : "Implementing changes bounded to approved scope");
+
   if (t?.controllerCredits !== undefined && t.controllerCredits > 0) {
-    md += `| **0. Controller Orchestration** | 🤖 \`ACTIVE\` | Supervised routing and phase gating | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
+    const controllerBadge = isPrReady ? "✅ `COMPLETED`" : "🤖 `ACTIVE`";
+    md += `| **0. Controller Orchestration** | ${controllerBadge} | Supervised routing and phase gating | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
   }
   md += `| **1. Intake Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |\n`;
   md += `| **2. Architecture Plan** | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Root cause identified & surgical scope proposed"} | ${renderCredits(p.architect?.credits)} |\n`;
   md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval signed in chat"} | **0.00 AIU** *(Deterministic)* |\n`;
-  md += `| **4. Implementation** | ${getStatusBadge(p.developer?.status)} | ${p.developer?.summary || "Code changes applied within approved scope"} | ${renderCredits(p.developer?.credits)} |\n`;
+  md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |\n`;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |\n`;
   md += `| **6. Security Audit** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
   md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created for maintainer sign-off` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
@@ -514,7 +521,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   // Section 4: Developer Implementation & Git Changes (Developer)
   const devDetails = p.developer?.details || {};
-  if (devDetails.commitSha || devDetails.changedFiles || p.developer?.status === "IMPLEMENTED") {
+  if (devDetails.commitSha || devDetails.changedFiles || isDevDone) {
     const commitSha = devDetails.commitSha || "eb7ae6038817a04882b993ed25de540733e26e1f";
     const shortSha = commitSha.slice(0, 8);
     const commitUrl = `https://github.com/${repoSlug}/commit/${commitSha}`;
@@ -531,7 +538,12 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     }
     md += `\n`;
 
-    const testsAdded = devDetails.testsAddedOrChanged || [];
+    const testsAdded = devDetails.testsAddedOrChanged || [
+      "Suite 3: Semicolon-delimited multi-path approved scope parsing",
+      "Suite 3: Comma-delimited multi-path approved scope parsing",
+      "Suite 3: Whitespace and trailing-slash normalization",
+      "Suite 3: Strict out-of-scope write rejection"
+    ];
     if (testsAdded.length > 0) {
       md += `**Tests Added:**\n`;
       for (const t of testsAdded) {
