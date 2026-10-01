@@ -256,11 +256,17 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
   if (!existsSync3(dbPath)) return null;
   let db = null;
   try {
-    const req = typeof __require !== "undefined" ? __require : createRequire(import.meta.url);
+    const req = createRequire(import.meta.url);
     const { DatabaseSync } = req("node:sqlite");
     if (!DatabaseSync) return null;
     db = new DatabaseSync(dbPath, { readOnly: true });
     let effectiveSessionId = sessionId;
+    if (effectiveSessionId) {
+      const exists = db.prepare(`SELECT 1 FROM assistant_usage_events WHERE session_id = ? LIMIT 1`).get(effectiveSessionId);
+      if (!exists) {
+        effectiveSessionId = void 0;
+      }
+    }
     if (!effectiveSessionId) {
       const latestRow = db.prepare(`SELECT session_id FROM assistant_usage_events ORDER BY id DESC LIMIT 1`).get();
       if (latestRow && latestRow.session_id) {
@@ -286,6 +292,23 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
       WHERE session_id = ? AND id >= ?
     `).get(effectiveSessionId, startEventId);
     if (!row || !row.turns || row.turns === 0) return null;
+    const controllerRow = db.prepare(`
+      SELECT COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
+      FROM assistant_usage_events
+      WHERE session_id = ? AND id >= ? AND agent_id IS NULL
+    `).get(effectiveSessionId, startEventId);
+    const subagentRows = db.prepare(`
+      SELECT agent_id, MIN(id) as first_id, COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
+      FROM assistant_usage_events
+      WHERE session_id = ? AND id >= ? AND agent_id IS NOT NULL
+      GROUP BY agent_id
+      ORDER BY first_id ASC
+    `).all(effectiveSessionId, startEventId);
+    const subagents = (subagentRows || []).map((r) => ({
+      agentId: String(r.agent_id),
+      turns: Number(r.turns) || 0,
+      credits: Number(r.credits) || 0
+    }));
     const totalInput = Number(row.input_tokens) || 0;
     const cacheRead = Number(row.cache_read_tokens) || 0;
     const cacheHitRate = totalInput > 0 ? Math.round(cacheRead / totalInput * 1e3) / 10 : 0;
@@ -301,7 +324,10 @@ function getGroundTruthTelemetry(sessionId, startEventId = 0) {
       cacheHitRatePercent: cacheHitRate,
       firstEventId: Number(row.first_event_id) || 0,
       latestEventId: Number(row.latest_event_id) || 0,
-      durationSeconds: Number(row.duration_seconds) || 0
+      durationSeconds: Number(row.duration_seconds) || 0,
+      controllerCredits: Number(controllerRow?.credits) || 0,
+      controllerTurns: Number(controllerRow?.turns) || 0,
+      subagents
     };
   } catch {
     return null;
@@ -685,14 +711,12 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       current.sessionId = update.sessionId;
     }
     current.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
-    if (current.sessionId) {
-      const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
-      if (tele) {
-        if (!current.startEventId && tele.firstEventId) {
-          current.startEventId = tele.firstEventId;
-        }
-        current.telemetry = tele;
+    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    if (tele) {
+      if (!current.startEventId && tele.firstEventId) {
+        current.startEventId = tele.firstEventId;
       }
+      current.telemetry = tele;
     }
     if (update.phase) {
       const existingPhase = current.phases[update.phase] || { status: "PENDING" };
@@ -701,10 +725,22 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0;
         } else {
-          const recordedCredits = Object.entries(current.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-          const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
-          if (phaseCredits === void 0 || update.status !== "IN_PROGRESS") {
-            phaseCredits = computed;
+          const subagentIdxMap = {
+            intake: 0,
+            architect: 1,
+            developer: 2,
+            qa: 3,
+            reviewer: 4
+          };
+          const subagentIdx = subagentIdxMap[update.phase];
+          if (subagentIdx !== void 0 && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
+            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          } else {
+            const recordedCredits = Object.entries(current.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            if (phaseCredits === void 0 || update.status !== "IN_PROGRESS") {
+              phaseCredits = computed;
+            }
           }
         }
       }

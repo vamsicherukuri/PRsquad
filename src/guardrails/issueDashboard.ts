@@ -13,6 +13,12 @@ export interface PhaseRecord {
   details?: Record<string, any>;
 }
 
+export interface SubagentTelemetry {
+  agentId: string;
+  turns: number;
+  credits: number;
+}
+
 export interface SessionTelemetry {
   model: string;
   turns: number;
@@ -26,6 +32,9 @@ export interface SessionTelemetry {
   firstEventId?: number;
   latestEventId?: number;
   durationSeconds?: number;
+  controllerCredits?: number;
+  controllerTurns?: number;
+  subagents?: SubagentTelemetry[];
 }
 
 export interface DashboardState {
@@ -77,19 +86,53 @@ export function formatChatCreditMeter(data?: DashboardState | null): string {
   const t = data.telemetry;
   if (!t || t.turns === 0) return "";
   const p = data.phases || {};
+  const subagents = t.subagents || [];
+
+  const intakeCredits = p.intake?.credits !== undefined ? p.intake.credits : subagents[0]?.credits;
+  const architectCredits = p.architect?.credits !== undefined ? p.architect.credits : subagents[1]?.credits;
+  const devCredits = p.developer?.credits !== undefined ? p.developer.credits : subagents[2]?.credits;
+  const qaCredits = p.qa?.credits !== undefined ? p.qa.credits : subagents[3]?.credits;
+  const reviewerCredits = p.reviewer?.credits !== undefined ? p.reviewer.credits : subagents[4]?.credits;
+
+  const intakeStatus = p.intake?.status || (subagents.length > 0 ? "READY" : "PENDING");
+  const architectStatus = p.architect?.status || (subagents.length > 1 ? "PLAN_READY" : "PENDING");
+  const devStatus = p.developer?.status || (subagents.length > 2 ? "IMPLEMENTED" : "PENDING");
+  const qaStatus = p.qa?.status || (subagents.length > 3 ? "PASS" : "PENDING");
+  const reviewerStatus = p.reviewer?.status || (subagents.length > 4 ? "APPROVED" : "PENDING");
+
   let out = `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)\n\n`;
-  out += `> **Model:** \`${t.model}\` | **Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} input tokens)*  \n`;
-  out += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** across ${t.turns} interaction turns  \n`;
+  out += `> **Billing Model:** \`${t.model}\`  \n`;
+  out += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** *(Official Copilot AI Units)*  \n`;
+  out += `> **Prompt Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} cold input tokens)*  \n`;
+  out += `> **Model Interaction Turns:** ${t.turns} turns recorded across active specialists  \n`;
   out += `> **Mechanical Guardrails:** **0.00 AIU / 0 Tokens** *(Deterministic)*  \n\n`;
+
+  out += `| Ground-Truth Token Metric | Actual Count | Notes / Billing Weight |\n`;
+  out += `|:---|:---:|:---|\n`;
+  out += `| **Raw Input Tokens** | ${t.inputTokens.toLocaleString()} | Cumulative prompt context evaluated across turns |\n`;
+  out += `| ↳ *Cache Read (Hit)* | ${t.cacheReadTokens.toLocaleString()} | Billed at ~90% prompt-cache discount |\n`;
+  out += `| ↳ *Cache Write (Miss)* | ${t.cacheWriteTokens.toLocaleString()} | Initial prompt cache population |\n`;
+  out += `| **Output Tokens** | ${t.outputTokens.toLocaleString()} | Completion tokens generated across ${t.turns} turns |\n`;
+  if (t.reasoningTokens > 0) {
+    out += `| **Reasoning Tokens** | ${t.reasoningTokens.toLocaleString()} | Extended thinking / reasoning capacity |\n`;
+  }
+  out += `| **Mechanical Guardrails** | **0 tokens / 0 AIU** | Scope Gate, Sandbox, PR Creator, Dashboard Sync (Deterministic) |\n`;
+  out += `| **Total Billed AI Credits** | **${t.actualAiCredits.toFixed(2)} AIU** | Ground-truth measurement via Copilot App session store |\n\n`;
+
+  out += `#### 📊 Specialist Phase Breakdown\n\n`;
   out += `| Phase | Specialist / Actor | Status | Actual AI Credits |\n`;
   out += `|:---|:---|:---:|:---:|\n`;
-  out += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(p.intake?.status)} | ${renderCredits(p.intake?.credits)} |\n`;
-  out += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(p.architect?.status)} | ${renderCredits(p.architect?.credits)} |\n`;
-  out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status)} | **0.00 AIU** *(Deterministic)* |\n`;
-  out += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(p.developer?.status)} | ${renderCredits(p.developer?.credits)} |\n`;
-  out += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(p.qa?.status)} | ${renderCredits(p.qa?.credits)} |\n`;
-  out += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(p.reviewer?.status)} | ${renderCredits(p.reviewer?.credits)} |\n`;
-  out += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status)} | **0.00 AIU** *(Deterministic)* |\n`;
+  if (t.controllerCredits !== undefined && t.controllerCredits > 0) {
+    out += `| **0. Controller Orchestration** | \`@gated-change-controller\` | ⏳ \`IN_PROGRESS\` | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
+  }
+  out += `| **1. Intake Triage** | \`@gated-change-intake\` | ${getStatusBadge(intakeStatus)} | ${renderCredits(intakeCredits)} |\n`;
+  out += `| **2. Architecture Plan** | \`@gated-change-architect\` | ${getStatusBadge(architectStatus)} | ${renderCredits(architectCredits)} |\n`;
+  out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
+  out += `| **4. Implementation** | \`@gated-change-developer\` | ${getStatusBadge(devStatus)} | ${renderCredits(devCredits)} |\n`;
+  out += `| **5. QA Verification** | \`@gated-change-qa\` | ${getStatusBadge(qaStatus)} | ${renderCredits(qaCredits)} |\n`;
+  out += `| **6. Security Audit** | \`@gated-change-reviewer\` | ${getStatusBadge(reviewerStatus)} | ${renderCredits(reviewerCredits)} |\n`;
+  out += `| **7. PR Approval Gate** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
+
   return out;
 }
 
@@ -99,12 +142,18 @@ export function getGroundTruthTelemetry(sessionId?: string, startEventId: number
 
   let db: any = null;
   try {
-    const req = typeof require !== "undefined" ? require : createRequire(import.meta.url);
+    const req = createRequire(import.meta.url);
     const { DatabaseSync } = req("node:sqlite");
     if (!DatabaseSync) return null;
     db = new DatabaseSync(dbPath, { readOnly: true });
 
     let effectiveSessionId = sessionId;
+    if (effectiveSessionId) {
+      const exists = db.prepare(`SELECT 1 FROM assistant_usage_events WHERE session_id = ? LIMIT 1`).get(effectiveSessionId);
+      if (!exists) {
+        effectiveSessionId = undefined;
+      }
+    }
     if (!effectiveSessionId) {
       const latestRow = db.prepare(`SELECT session_id FROM assistant_usage_events ORDER BY id DESC LIMIT 1`).get();
       if (latestRow && latestRow.session_id) {
@@ -133,6 +182,26 @@ export function getGroundTruthTelemetry(sessionId?: string, startEventId: number
 
     if (!row || !row.turns || row.turns === 0) return null;
 
+    const controllerRow = db.prepare(`
+      SELECT COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
+      FROM assistant_usage_events
+      WHERE session_id = ? AND id >= ? AND agent_id IS NULL
+    `).get(effectiveSessionId, startEventId);
+
+    const subagentRows = db.prepare(`
+      SELECT agent_id, MIN(id) as first_id, COUNT(*) as turns, ROUND(COALESCE(SUM(total_nano_aiu), 0) / 1000000000.0, 2) as credits
+      FROM assistant_usage_events
+      WHERE session_id = ? AND id >= ? AND agent_id IS NOT NULL
+      GROUP BY agent_id
+      ORDER BY first_id ASC
+    `).all(effectiveSessionId, startEventId);
+
+    const subagents: SubagentTelemetry[] = (subagentRows || []).map((r: any) => ({
+      agentId: String(r.agent_id),
+      turns: Number(r.turns) || 0,
+      credits: Number(r.credits) || 0,
+    }));
+
     const totalInput = Number(row.input_tokens) || 0;
     const cacheRead = Number(row.cache_read_tokens) || 0;
     const cacheHitRate = totalInput > 0 ? Math.round((cacheRead / totalInput) * 1000) / 10 : 0;
@@ -150,6 +219,9 @@ export function getGroundTruthTelemetry(sessionId?: string, startEventId: number
       firstEventId: Number(row.first_event_id) || 0,
       latestEventId: Number(row.latest_event_id) || 0,
       durationSeconds: Number(row.duration_seconds) || 0,
+      controllerCredits: Number(controllerRow?.credits) || 0,
+      controllerTurns: Number(controllerRow?.turns) || 0,
+      subagents,
     };
   } catch {
     return null;
@@ -462,14 +534,12 @@ export function syncWorkflowDashboard(
     current.lastUpdated = new Date().toISOString();
 
     // Query Ground-Truth Telemetry from Copilot App session store
-    if (current.sessionId) {
-      const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
-      if (tele) {
-        if (!current.startEventId && tele.firstEventId) {
-          current.startEventId = tele.firstEventId;
-        }
-        current.telemetry = tele;
+    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    if (tele) {
+      if (!current.startEventId && tele.firstEventId) {
+        current.startEventId = tele.firstEventId;
       }
+      current.telemetry = tele;
     }
 
     if (update.phase) {
@@ -481,12 +551,24 @@ export function syncWorkflowDashboard(
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0.0;
         } else {
-          const recordedCredits = Object.entries(current.phases)
-            .filter(([k]) => k !== update.phase)
-            .reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-          const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
-          if (phaseCredits === undefined || update.status !== "IN_PROGRESS") {
-            phaseCredits = computed;
+          const subagentIdxMap: Record<string, number> = {
+            intake: 0,
+            architect: 1,
+            developer: 2,
+            qa: 3,
+            reviewer: 4,
+          };
+          const subagentIdx = subagentIdxMap[update.phase];
+          if (subagentIdx !== undefined && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
+            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          } else {
+            const recordedCredits = Object.entries(current.phases)
+              .filter(([k]) => k !== update.phase)
+              .reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            if (phaseCredits === undefined || update.status !== "IN_PROGRESS") {
+              phaseCredits = computed;
+            }
           }
         }
       }

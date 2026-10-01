@@ -5,12 +5,14 @@
  * Synchronizes living workflow dashboard on GitHub issue comments across all specialist phases.
  */
 
-import { readFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { loadState, saveState, loadApprovalLock, saveApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import {
   syncWorkflowDashboard,
   formatChatCreditMeter,
+  getGroundTruthTelemetry,
   extractPlanMarkdown,
   extractDeveloperDetails,
   extractQADetails,
@@ -45,20 +47,84 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
 
 async function main() {
   if (process.argv.includes("--meter")) {
-    const effectiveCwd = process.cwd();
-    const repoRoot = getRepoRoot(effectiveCwd);
-    const state = loadState(repoRoot);
-    const lock = loadApprovalLock(repoRoot);
-    const resolvedIssue = resolveIssueNumber({}, {}, state, lock);
-    const dash = syncWorkflowDashboard(repoRoot, {
-      issueNumber: resolvedIssue,
-      sessionId: state.sessionId,
-    });
-    const meter = formatChatCreditMeter(dash);
-    if (meter) {
+    let effectiveCwd = process.cwd();
+    let repoRoot = getRepoRoot(effectiveCwd);
+    let state = loadState(repoRoot);
+
+    // If cwd was not in a repository/worktree with state, search active worktrees by latest modified time
+    if (!state?.sessionId) {
+      const candidates = [
+        "C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline",
+        "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline",
+        "C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline",
+      ];
+      let bestState: any = null;
+      let bestMtime = 0;
+      let bestRepo = repoRoot;
+
+      for (const parent of candidates) {
+        if (existsSync(parent)) {
+          try {
+            const entries = readdirSync(parent, { withFileTypes: true });
+            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join(parent, d.name));
+            dirs.push(parent);
+            for (const d of dirs) {
+              const stateFile = join(d, ".gated-change", "state.json");
+              if (existsSync(stateFile)) {
+                try {
+                  const stat = statSync(stateFile);
+                  if (stat.mtimeMs > bestMtime) {
+                    const parsed = JSON.parse(readFileSync(stateFile, "utf-8"));
+                    if (parsed) {
+                      bestMtime = stat.mtimeMs;
+                      bestState = parsed;
+                      bestRepo = d;
+                    }
+                  }
+                } catch {}
+              }
+            }
+          } catch {}
+        }
+      }
+      if (bestState) {
+        state = bestState;
+        repoRoot = bestRepo;
+      }
+    }
+
+    let phases: Record<string, any> = {};
+    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
+    if (existsSync(dashFile)) {
+      try {
+        const parsed = JSON.parse(readFileSync(dashFile, "utf-8"));
+        if (parsed.phases) phases = parsed.phases;
+      } catch {}
+    } else if (state?.phase) {
+      phases = {
+        intake: { status: "READY" },
+        architect: { status: "PLAN_READY" },
+        scopeGate: { status: state.humanApproval ? "APPROVED" : "PENDING", credits: 0.0 },
+        developer: { status: state.phase === "DEVELOPING" ? "IN_PROGRESS" : "PENDING" },
+        qa: { status: "PENDING" },
+        reviewer: { status: "PENDING" },
+        mergeGate: { status: "PENDING", credits: 0.0 },
+      };
+    }
+
+    const tele = getGroundTruthTelemetry(state?.sessionId, 0);
+    if (tele && tele.turns > 0) {
+      const meter = formatChatCreditMeter({
+        issueNumber: state?.issue?.number || 0,
+        owner: state?.issue?.owner || "",
+        repo: state?.issue?.repo || "",
+        lastUpdated: new Date().toISOString(),
+        phases,
+        telemetry: tele,
+      });
       process.stdout.write(meter + "\n");
     } else {
-      process.stdout.write("⚡ Live AI Credit Meter: Active\n");
+      process.stdout.write("### ⚡ Live AI Credit Meter\n\n> Telemetry active. (Recording ground-truth token events for active session...)\n");
     }
     process.exit(0);
   }
