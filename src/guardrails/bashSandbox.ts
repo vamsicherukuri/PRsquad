@@ -24,8 +24,11 @@ const BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 const DANGEROUS_SYSTEM_REGEX =
   /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
 
-// Any 'git clean' invocation, captured so we can inspect its flags regardless of order
-const GIT_CLEAN_COMMAND_REGEX = /\bgit\s+clean\b(.*)$/i;
+// Any 'git clean' invocation, captured so we can inspect its flags regardless of order.
+// The 's' (dotAll) flag ensures '.' matches newlines too, so the full remainder of the
+// command string (including flags appearing after an embedded newline) is captured,
+// rather than only the rest of the current line.
+const GIT_CLEAN_COMMAND_REGEX = /\bgit\s+clean\b(.*)$/is;
 
 /**
  * Determines whether a 'git clean' invocation includes any force-type flag
@@ -41,6 +44,11 @@ function isForceGitClean(trimmed: string): boolean {
   const tokens = (match[1] || "").split(/\s+/).filter(Boolean);
 
   for (const token of tokens) {
+    // Once a bare '--' separator is encountered, all remaining tokens are pathspecs
+    // (not flags) and must not be evaluated as force-flag clusters.
+    if (token === "--") {
+      break;
+    }
     if (token === "--force") {
       return true;
     }

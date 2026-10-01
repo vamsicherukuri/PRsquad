@@ -377,6 +377,29 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
     revCleanForce.reason
   );
 
+  // Hardening regression: multi-line command string with 'git clean -fdx' followed by
+  // a newline and another command must still be blocked with the exact POLICY_DENIAL reason.
+  const devCleanMultiline = validateCommandForAgent(
+    "git clean -fdx\necho done",
+    "gated-change-developer"
+  );
+  assert(
+    !devCleanMultiline.allowed && devCleanMultiline.reason === CLEAN_DENIAL_REASON,
+    "Developer strictly blocked from multi-line 'git clean -fdx\\necho done' with exact POLICY_DENIAL reason",
+    devCleanMultiline.reason
+  );
+
+  // Hardening regression: pathspec after '--' separator starting with 'f' must not be
+  // misdetected as a force flag; dry-run invocation remains allowed.
+  const devCleanDryRunPathspec = validateCommandForAgent(
+    "git clean -n -- -force.txt",
+    "gated-change-developer"
+  );
+  assert(
+    devCleanDryRunPathspec.allowed,
+    "Developer allowed 'git clean -n -- -force.txt' (pathspec after '--' not misdetected as force flag)"
+  );
+
   // PowerShell execution tool tests (Windows Copilot host compatibility)
   const psDevInput = JSON.stringify({
     tool: "powershell",
