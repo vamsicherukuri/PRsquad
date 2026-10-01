@@ -792,16 +792,16 @@ async function main() {
       const dashMerge = syncWorkflowDashboard(repoRoot, {
         sessionId: input.sessionId || state.sessionId,
         phase: "mergeGate",
-        status: "READY_FOR_MERGE",
+        status: "PR_OPEN",
         summary: prUrl
           ? `Pull Request ${prNumber ? `#${prNumber}` : ""} is officially OPEN on GitHub: ${prUrl}. Merging is reserved for human maintainers on GitHub after PR review.`
-          : "Audit complete. Ready for Pull Request and human merge approval on GitHub.",
+          : "Audit complete. Pull Request is open and awaiting human maintainer review on GitHub.",
         details: {
           prNumber,
           prUrl,
           baseBranch: "copilot-app-plugin-alignment",
           headBranch: state.activeBranch || `fix/issue-${resolvedIssue}`,
-          readyForMerge: true,
+          prOpen: true,
         },
       });
 

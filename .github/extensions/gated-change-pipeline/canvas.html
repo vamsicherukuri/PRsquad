@@ -653,7 +653,7 @@
       <span class="pipeline-title">Gated Change Pipeline</span>
       <span class="issue-tag" id="issue-tag">Issue #11</span>
       <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17" target="_blank" class="pr-link-badge" id="header-pr-link" style="display:none;">
-        🔗 PR #17 Ready
+        🔗 PR #17 Open
       </a>
     </div>
     <div class="meta-metrics">
@@ -738,7 +738,7 @@
       <!-- PR Gate -->
       <div class="stage-card gate-approved selected" id="stage-6" onclick="selectStage(6)" title="Pull Request Gate">
         <div class="stage-name">PR Gate</div>
-        <div class="stage-metric" id="metric-6">PR Ready</div>
+        <div class="stage-metric" id="metric-6">PR Open</div>
       </div>
     </div>
 
@@ -854,17 +854,17 @@
         <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--text-muted); font-weight:600;" id="detail-title">
           Pull Request Gate
         </span>
-        <span id="detail-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; font-family:ui-monospace; background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);">
-          READY FOR MERGE
+        <span id="detail-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; font-family:ui-monospace; background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);">
+          PR OPEN · AWAITING REVIEW
         </span>
       </div>
       <div style="font-size:12px; line-height:1.45; color:#c9d1d9;" id="detail-content">
-        Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.
+        Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.
       </div>
 
       <div class="pr-banner-box" id="pr-banner" style="display:none;">
         <div style="font-size:11.5px; color:var(--green-text); font-weight:600;">
-          PR is open and passing all checks
+          Pull Request is open and awaiting human review
         </div>
         <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/23" target="_blank" id="pr-banner-link" class="pr-link-badge">
           View Pull Request on GitHub
@@ -990,16 +990,16 @@
       },
       {
         title: "Pull Request Gate",
-        badge: "READY FOR MERGE",
-        badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Pull Request is officially OPEN on GitHub passing all checks. Human maintainer review required to merge into baseline.",
+        badge: "PR OPEN · AWAITING REVIEW",
+        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
+        content: "Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.",
         gov: {
           hookName: "prCreator.ts",
           hookDesc: "Deterministic PR governor enforcing enterprise review policies.",
           triggerName: "gate: postToolUse (PR)",
           triggerDesc: "Validates QA and Reviewer audit clearance before creating GitHub pull request.",
-          policyName: "Human Approval Required",
-          policyDesc: "Auto-merge physically disabled (auto-merge: disabled); requires maintainer review.",
+          policyName: "Human Review Required (Auto-Merge Disabled)",
+          policyDesc: "Pipeline stops at PR creation; auto-merge is physically disabled and merging is strictly reserved for human maintainers.",
           cost: "0.00 AIU · Zero Token Overhead"
         }
       }
@@ -1305,19 +1305,19 @@
       const prUrl = mg.details?.prUrl || 'https://github.com/vamsicherukuri/gated-fix-pipeline/pull/17';
       const prNum = mg.details?.prNumber || 17;
 
-      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE'].includes(mg.status) || prUrl) {
+      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) || prUrl) {
         s6.className = 'stage-card gate-approved' + (currentSelected === 6 ? ' selected' : '');
-        m6.textContent = 'PR #' + prNum + ' Ready';
-        stageMeta[6].badge = 'READY FOR MERGE';
-        stageMeta[6].badgeStyle = 'background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);';
-        stageMeta[6].content = mg.summary || `Pull Request #${prNum} is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required to merge into baseline.`;
+        m6.textContent = 'PR #' + prNum + ' Open';
+        stageMeta[6].badge = 'PR OPEN · AWAITING REVIEW';
+        stageMeta[6].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
+        stageMeta[6].content = mg.summary || `Pull Request #${prNum} is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.`;
 
         // Header and banner buttons
         const headerPr = document.getElementById('header-pr-link');
         if (headerPr) {
           headerPr.style.display = 'inline-flex';
           headerPr.href = prUrl;
-          headerPr.textContent = 'PR #' + prNum + ' Ready';
+          headerPr.textContent = 'PR #' + prNum + ' Open';
         }
 
         const prBanner = document.getElementById('pr-banner');
@@ -1378,7 +1378,7 @@
 
       // Compute latest active stage
       let latestActive = 2; // Default Scope Gate
-      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN'].includes(mg.status) || p.mergeGate) latestActive = 6;
+      if (['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'PR_CREATED'].includes(mg.status) || p.mergeGate) latestActive = 6;
       else if (revStatus === 'IN_PROGRESS') latestActive = 5;
       else if (revStatus === 'CLEAR') latestActive = 6;
       else if (qaStatus === 'IN_PROGRESS') latestActive = 4;

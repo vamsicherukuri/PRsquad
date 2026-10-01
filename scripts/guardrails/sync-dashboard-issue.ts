@@ -152,7 +152,7 @@ const state = {
       },
     },
     mergeGate: {
-      status: "READY_FOR_MERGE",
+      status: "PR_OPEN",
       summary: "Pull Request #10 is officially OPEN on GitHub: https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10. Merging is reserved for human maintainers on GitHub after PR review.",
       updatedAt: "2026-09-30T21:50:36.000Z",
       details: {
@@ -160,7 +160,7 @@ const state = {
         prUrl: "https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10",
         baseBranch: "copilot-app-plugin-alignment",
         headBranch: "vamsicherukuri-issue-9-scope-enforcer-fails-to-match-multi-path-fc980a",
-        readyForMerge: true,
+        prOpen: true,
       },
     },
   },

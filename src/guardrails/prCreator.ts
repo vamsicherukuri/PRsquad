@@ -144,8 +144,8 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         if (parsed.url) {
           syncWorkflowDashboard(rootDir, {
             phase: "mergeGate",
-            status: "READY_FOR_MERGE",
-            summary: `PR #${parsed.number} is open: ${parsed.url}. Awaiting human review & merge on GitHub.`,
+            status: "PR_OPEN",
+            summary: `PR #${parsed.number} is open: ${parsed.url}. Awaiting human maintainer review on GitHub.`,
           });
           return {
             success: true,
@@ -222,8 +222,8 @@ ${issueTitle}
       // 6. Update living dashboard on issue
       syncWorkflowDashboard(rootDir, {
         phase: "mergeGate",
-        status: "READY_FOR_MERGE",
-        summary: `PR ${prNumber ? `#${prNumber}` : ""} opened: ${prUrl}. Awaiting human review & merge on GitHub.`,
+        status: "PR_OPEN",
+        summary: `PR ${prNumber ? `#${prNumber}` : ""} opened: ${prUrl}. Awaiting human maintainer review on GitHub.`,
       });
 
       return {

@@ -252,7 +252,7 @@ var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 function getStatusBadge(status) {
   if (!status || status === "PENDING") return "\u26AA `PENDING`";
   if (status === "IN_PROGRESS") return "\u23F3 `IN_PROGRESS`";
-  if (["READY", "PLAN_READY", "APPROVED", "IMPLEMENTED", "PASS", "CLEAR", "READY_FOR_MERGE"].includes(status)) {
+  if (["READY", "PLAN_READY", "APPROVED", "IMPLEMENTED", "PASS", "CLEAR", "READY_FOR_MERGE", "PR_CREATED", "PR_OPEN", "PR_READY"].includes(status)) {
     return `\u2705 \`${status}\``;
   }
   if (["FAIL", "BLOCKED"].includes(status)) {
@@ -384,7 +384,7 @@ function renderDashboardMarkdown(data) {
   const prUrl = mg.details?.prUrl || `https://github.com/${repoSlug}/pull/${prNum}`;
   const baseBranch = mg.details?.baseBranch || "copilot-app-plugin-alignment";
   const headBranch = mg.details?.headBranch || currentBranch;
-  const isPrReady = ["READY_FOR_MERGE", "PR_OPEN", "OPEN", "DONE"].includes(mg.status) || Boolean(mg.details?.prUrl);
+  const isPrReady = ["READY_FOR_MERGE", "PR_OPEN", "OPEN", "DONE", "PR_CREATED"].includes(mg.status) || Boolean(mg.details?.prUrl);
   const totalCredits = t?.actualAiCredits !== void 0 ? `${t.actualAiCredits.toFixed(2)} AIU` : "0.00 AIU";
   const turnsCount = t?.turns || 0;
   const cacheHit = t?.cacheHitRatePercent !== void 0 ? `${t.cacheHitRatePercent}%` : "\u2014";
@@ -398,7 +398,7 @@ function renderDashboardMarkdown(data) {
 `;
     md += `> **Branch:** \`${headBranch}\` \u2192 \`${baseBranch}\`  
 `;
-    md += `> **Pipeline Status:** \u2705 **All automated checks passed** \xB7 Awaiting maintainer review & merge  
+    md += `> **Pipeline Status:** \u2705 **All automated checks passed** \xB7 Pull Request open awaiting human review  
 `;
     md += `> **Resource Consumption:** **${totalCredits}** \xB7 ${turnsCount} turns \xB7 ${cacheHit} prompt cache hit rate  
 
@@ -444,9 +444,9 @@ function renderDashboardMarkdown(data) {
 `;
   md += `| **6. Security Audit** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags \xB7 In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |
 `;
-  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created for maintainer sign-off` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |
+  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created \xB7 Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |
 `;
-  md += `| **Total** | \u{1F3C1} **${isPrReady ? "READY FOR MERGE" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |
+  md += `| **Total** | \u{1F3C1} **${isPrReady ? "PR OPEN \xB7 AWAITING REVIEW" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |
 
 `;
   md += `---
@@ -506,7 +506,7 @@ function renderDashboardMarkdown(data) {
 `;
     md += `> **Scope Compliance:** \u2705 \`PASS\`  
 `;
-    md += `> **Merge Recommendation:** \u2705 \`READY_FOR_MERGE\`  
+    md += `> **Reviewer Verdict:** \u2705 \`CLEAR\` \xB7 Approved for Pull Request creation  
 
 `;
     const riskFlags = revDetails.riskFlags || [];
@@ -538,7 +538,7 @@ function renderDashboardMarkdown(data) {
 `;
     }
     if (revDetails.mergeGateSummary) {
-      md += `#### \u{1F4DD} Reviewer Merge Gate Summary
+      md += `#### \u{1F4DD} Reviewer Gate Summary
 
 ${revDetails.mergeGateSummary}
 

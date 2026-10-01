@@ -64,7 +64,7 @@ export const DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 function getStatusBadge(status?: string): string {
   if (!status || status === "PENDING") return "⚪ `PENDING`";
   if (status === "IN_PROGRESS") return "⏳ `IN_PROGRESS`";
-  if (["READY", "PLAN_READY", "APPROVED", "IMPLEMENTED", "PASS", "CLEAR", "READY_FOR_MERGE"].includes(status)) {
+  if (["READY", "PLAN_READY", "APPROVED", "IMPLEMENTED", "PASS", "CLEAR", "READY_FOR_MERGE", "PR_CREATED", "PR_OPEN", "PR_READY"].includes(status)) {
     return `✅ \`${status}\``;
   }
   if (["FAIL", "BLOCKED"].includes(status)) {
@@ -94,9 +94,9 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
 
   // Determine linear stage index (0 to 7) based on validated phase statuses
   let stageIdx = 0;
-  if (p.mergeGate?.status === "PR_CREATED") {
+  if (p.mergeGate?.status === "PR_CREATED" || p.mergeGate?.status === "PR_OPEN" || p.mergeGate?.status === "READY_FOR_MERGE") {
     stageIdx = 7;
-  } else if (p.reviewer?.status === "CLEAR" || p.reviewer?.status === "APPROVED" || p.mergeGate?.status === "READY_FOR_MERGE") {
+  } else if (p.reviewer?.status === "CLEAR" || p.reviewer?.status === "APPROVED") {
     stageIdx = 6;
   } else if (p.qa?.status === "PASS") {
     stageIdx = 5;
@@ -164,7 +164,7 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
 
   // Node 7: PR Gate (Hexagon)
   const n7Text = stageIdx === 7
-    ? `7. PR Gate<br/>✅ PR CREATED`
+    ? `7. PR Gate<br/>✅ PR OPEN`
     : stageIdx === 6
     ? `7. PR Gate<br/>🚀 READY FOR PR`
     : `7. PR Gate<br/>⚪ QUEUED`;
@@ -386,7 +386,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   const prUrl = mg.details?.prUrl || `https://github.com/${repoSlug}/pull/${prNum}`;
   const baseBranch = mg.details?.baseBranch || "copilot-app-plugin-alignment";
   const headBranch = mg.details?.headBranch || currentBranch;
-  const isPrReady = ["READY_FOR_MERGE", "PR_OPEN", "OPEN", "DONE"].includes(mg.status) || Boolean(mg.details?.prUrl);
+  const isPrReady = ["READY_FOR_MERGE", "PR_OPEN", "OPEN", "DONE", "PR_CREATED"].includes(mg.status) || Boolean(mg.details?.prUrl);
 
   const totalCredits = t?.actualAiCredits !== undefined ? `${t.actualAiCredits.toFixed(2)} AIU` : "0.00 AIU";
   const turnsCount = t?.turns || 0;
@@ -399,7 +399,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     md += `## 🚀 Fix Ready for Review — [Pull Request #${prNum}](${prUrl})\n\n`;
     md += `> **Issue:** #${data.issueNumber}${data.issueTitle ? ` — ${data.issueTitle}` : ""}  \n`;
     md += `> **Branch:** \`${headBranch}\` → \`${baseBranch}\`  \n`;
-    md += `> **Pipeline Status:** ✅ **All automated checks passed** · Awaiting maintainer review & merge  \n`;
+    md += `> **Pipeline Status:** ✅ **All automated checks passed** · Pull Request open awaiting human review  \n`;
     md += `> **Resource Consumption:** **${totalCredits}** · ${turnsCount} turns · ${cacheHit} prompt cache hit rate  \n\n`;
   } else {
     md += `## 🛡️ Gated Fix Pipeline — Issue #${data.issueNumber}\n\n`;
@@ -430,8 +430,8 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |\n`;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |\n`;
   md += `| **6. Security Audit** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
-  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created for maintainer sign-off` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
-  md += `| **Total** | 🏁 **${isPrReady ? "READY FOR MERGE" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |\n\n`;
+  md += `| **7. PR Approval Gate** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created · Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
+  md += `| **Total** | 🏁 **${isPrReady ? "PR OPEN · AWAITING REVIEW" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |\n\n`;
 
   md += `---\n\n`;
   md += `### 🧠 Agent Findings & Verification Package\n\n`;
@@ -470,7 +470,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     md += `<details>\n<summary><b>🔍 2. Security & Code Quality Audit (Reviewer Verdict: CLEAR)</b></summary>\n\n`;
     md += `> **Assessment:** ${getStatusBadge(assessment)} (Zero security vulnerabilities; diff strictly limited to declared files)  \n`;
     md += `> **Scope Compliance:** ✅ \`PASS\`  \n`;
-    md += `> **Merge Recommendation:** ✅ \`READY_FOR_MERGE\`  \n\n`;
+    md += `> **Reviewer Verdict:** ✅ \`CLEAR\` · Approved for Pull Request creation  \n\n`;
 
     const riskFlags = revDetails.riskFlags || [];
     if (riskFlags.length > 0) {
@@ -493,7 +493,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     }
 
     if (revDetails.mergeGateSummary) {
-      md += `#### 📝 Reviewer Merge Gate Summary\n\n${revDetails.mergeGateSummary}\n\n`;
+      md += `#### 📝 Reviewer Gate Summary\n\n${revDetails.mergeGateSummary}\n\n`;
     }
     md += `</details>\n\n`;
   }
