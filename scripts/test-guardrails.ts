@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
+import { isWithinScope } from "../src/scopeTool.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
 import {
@@ -372,6 +373,46 @@ console.log("\nSuite 5: Guardrail 4 — Tier 1 AST Symbol Sweep");
   const report = runSymbolSweep(["src/scopeTool.ts"], "src/services/fake/");
   assert(report.totalSymbolsAnalyzed >= 2, "Analyzed exported symbols count >= 2");
   assert(report.externalReferencesFound.length > 0, "Detects external references in src/actions/architect.ts");
+}
+
+// ---------------------------------------------------------------------------
+// 6. Scoped Read Tool — Multi-Path Declared Scope Tests (Issue #11)
+// ---------------------------------------------------------------------------
+console.log("\nSuite 6: Guardrail 5 — Scoped Read Tool Multi-Path Matching");
+{
+  const root = "C:/repo";
+
+  // (a) Issue's exact repro case: semicolon-separated multi-path declared scope
+  const semiScope = "src/scopeTool.ts; scripts/test-guardrails.ts";
+  const semiMatch = isWithinScope("src/scopeTool.ts", semiScope, root);
+  assert(semiMatch, "isWithinScope matches first entry in semicolon-separated multi-path scope");
+
+  // (b) Comma-separated multi-path matching a second entry
+  const commaScope = "src/scopeTool.ts, scripts/test-guardrails.ts";
+  const commaMatch = isWithinScope("scripts/test-guardrails.ts", commaScope, root);
+  assert(commaMatch, "isWithinScope matches second entry in comma-separated multi-path scope");
+
+  // (c) Path outside all declared entries still returns false
+  const outsideMatch = isWithinScope("src/other.ts", commaScope, root);
+  assert(!outsideMatch, "isWithinScope strictly denies path outside all declared multi-path entries");
+
+  // (d) Nested-under-entry path still matches
+  const nestedMatch = isWithinScope("src/guardrails/scopeEnforcer.ts", "src/guardrails, scripts", root);
+  assert(nestedMatch, "isWithinScope matches path nested under a declared directory entry");
+
+  // (e) Empty/whitespace/delimiter-only declaredScope strictly returns false
+  const emptyMatch = isWithinScope("src/scopeTool.ts", "", root);
+  assert(!emptyMatch, "isWithinScope strictly denies empty declaredScope");
+
+  const whitespaceMatch = isWithinScope("src/scopeTool.ts", "   ", root);
+  assert(!whitespaceMatch, "isWithinScope strictly denies whitespace-only declaredScope");
+
+  const delimiterOnlyMatch = isWithinScope("src/scopeTool.ts", ";,;", root);
+  assert(!delimiterOnlyMatch, "isWithinScope strictly denies delimiter-only declaredScope");
+
+  // Sibling prefix containment must still be strict with multi-path entries
+  const siblingMatch = isWithinScope("src/scopeTool_other.ts", "src/scopeTool.ts, scripts", root);
+  assert(!siblingMatch, "isWithinScope strictly denies sibling path that is not nested under declared entry");
 }
 
 console.log("\n=======================================================");
