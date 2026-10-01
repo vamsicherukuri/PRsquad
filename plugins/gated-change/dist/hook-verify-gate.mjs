@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync5, readFileSync as readFileSync4, appendFileSync as appendFileSync2, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
 import { join as join5 } from "node:path";
+import { homedir as homedir2 } from "node:os";
 import { execSync as execSync4 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
@@ -158,10 +153,10 @@ function loadState(rootDir = getRepoRoot()) {
     baseRef: null,
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  saveState2(defaultState, rootDir);
+  saveState(defaultState, rootDir);
   return defaultState;
 }
-function saveState2(state, rootDir = getRepoRoot()) {
+function saveState(state, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
   state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   const filePath = join(rootDir, GATED_CHANGE_DIR, STATE_FILE);
@@ -182,7 +177,7 @@ function saveState2(state, rootDir = getRepoRoot()) {
   } catch {
   }
 }
-function loadApprovalLock2(rootDir = getRepoRoot()) {
+function loadApprovalLock(rootDir = getRepoRoot()) {
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
   if (!existsSync(filePath)) return null;
@@ -244,7 +239,7 @@ function revokeApprovalLock(status, rootDir = getRepoRoot()) {
     saveApprovalLock(lock, rootDir);
     const state = loadState(rootDir);
     state.humanApproval = false;
-    saveState2(state, rootDir);
+    saveState(state, rootDir);
   } catch {
   }
 }
@@ -792,11 +787,6 @@ ${t?.controllerCredits !== void 0 && t.controllerCredits > 0 ? `| **0. Controlle
         severity: "LOW",
         finding: "Prefix-containment matching means a scope entry like 'src/scope' would also allow 'src/scopeTool.ts' only if exact or nested match; current logic uses candidate+'/' so this specific false-positive is avoided, but a candidate that is itself a substring-prefix folder (e.g. 'src') would still broadly permit all of src/** \u2014 pre-existing behavior, not introduced by this diff, flagged for awareness only.",
         evidence: "src/guardrails/scopeEnforcer.ts normalized.startsWith(candidate + '/')"
-      },
-      {
-        severity: "MEDIUM",
-        finding: "Unrelated debug artifact present in a file in the declared blast radius (not part of this diff) writes to a hardcoded absolute local path on every hook invocation \u2014 informational only, outside approved scope/diff, pre-existing and not modified by this change.",
-        evidence: "scripts/guardrails/hook-enforce-scope.ts: appendFileSync('C:/Users/vcherukuri/hook-debug.log', ...)"
       }
     ];
     if (riskFlags.length > 0) {
@@ -995,16 +985,7 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       }
     }
     return current;
-  } catch (err) {
-    try {
-      const { appendFileSync: appendFileSync3 } = __require("node:fs");
-      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "syncWorkflowDashboard_error",
-        error: String(err?.message || err),
-        time: (/* @__PURE__ */ new Date()).toISOString()
-      }) + "\n");
-    } catch {
-    }
+  } catch {
     return null;
   }
 }
@@ -1071,16 +1052,7 @@ function postOrPatchGitHubComment(state) {
         state.commentId = newId;
       }
     }
-  } catch (err) {
-    try {
-      const { appendFileSync: appendFileSync3 } = __require("node:fs");
-      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "postOrPatchGitHubComment_error",
-        error: String(err?.message || err),
-        time: (/* @__PURE__ */ new Date()).toISOString()
-      }) + "\n");
-    } catch {
-    }
+  } catch {
   } finally {
     try {
       if (existsSync2(tempPath)) {
@@ -1641,10 +1613,11 @@ async function main() {
     let repoRoot2 = getRepoRoot(effectiveCwd2);
     let state2 = loadState(repoRoot2);
     if (!state2?.sessionId) {
+      const home = homedir2();
       const candidates = [
-        "C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline",
-        "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline",
-        "C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline"
+        join5(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join5(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join5(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
       let bestMtime = 0;
@@ -1723,16 +1696,6 @@ async function main() {
     } catch {
     }
   }
-  try {
-    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-verify-gate",
-      time: (/* @__PURE__ */ new Date()).toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {
-  }
   let input = {};
   if (rawInput.trim()) {
     try {
@@ -1748,7 +1711,7 @@ async function main() {
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     ensureNodeModulesInWorktree(repoRoot2);
     const state2 = loadState(repoRoot2);
-    let lock2 = loadApprovalLock2(repoRoot2);
+    let lock2 = loadApprovalLock(repoRoot2);
     if (!lock2 || lock2.status !== "ACTIVE") {
       const prompt3 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
       const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt3.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt3.includes("Human Approval: Confirmed") || prompt3.includes("humanApprovalConfirmed: true") || prompt3.includes("/approve");
@@ -1814,7 +1777,7 @@ async function main() {
     if (lock2.currentAttempt > lock2.maxAttempts) {
       revokeApprovalLock("EXHAUSTED", repoRoot2);
       state2.phase = "ESCALATED";
-      saveState2(state2, repoRoot2);
+      saveState(state2, repoRoot2);
       appendAuditLog({
         sessionId: state2.sessionId,
         agent: "controller",
@@ -1868,12 +1831,12 @@ async function main() {
     } else {
       state2.issue.number = resolvedIssue2;
     }
-    saveState2(state2, repoRoot2);
+    saveState(state2, repoRoot2);
     const prompt2 = toolArgs.prompt || toolArgs.content || "";
     const extractedPlan = extractPlanMarkdown(prompt2);
     if (input.sessionId) {
       state2.sessionId = input.sessionId;
-      saveState2(state2, repoRoot2);
+      saveState(state2, repoRoot2);
     }
     syncWorkflowDashboard(repoRoot2, {
       owner: state2.issue?.owner || "vamsicherukuri",
@@ -2172,11 +2135,11 @@ ${stateObj.issue.body.trim()}`);
     const effectiveCwd2 = input.cwd || process.cwd();
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     const state2 = loadState(repoRoot2);
-    const lock2 = loadApprovalLock2(repoRoot2);
+    const lock2 = loadApprovalLock(repoRoot2);
     const resolvedIssue2 = resolveIssueNumber(input, toolArgs, state2, lock2);
     if (input.sessionId && (!state2.sessionId || state2.sessionId !== input.sessionId)) {
       state2.sessionId = input.sessionId;
-      saveState2(state2, repoRoot2);
+      saveState(state2, repoRoot2);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
@@ -2314,12 +2277,12 @@ ${stateObj.issue.body.trim()}`);
   const repoRoot = getRepoRoot(effectiveCwd);
   ensureNodeModulesInWorktree(repoRoot);
   const state = loadState(repoRoot);
-  const lock = loadApprovalLock2(repoRoot);
+  const lock = loadApprovalLock(repoRoot);
   const resolvedIssue = resolveIssueNumber(input, toolArgs, state, lock);
   const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
   if (input.sessionId && (!state.sessionId || state.sessionId !== input.sessionId)) {
     state.sessionId = input.sessionId;
-    saveState2(state, repoRoot);
+    saveState(state, repoRoot);
   }
   if (isAgentMatch(targetAgent, "gated-change-architect")) {
     const declaredScope = state.approvedScope || state.issue?.declaredScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";

@@ -4,7 +4,7 @@
  * Intercepts all 'edit' tool calls and blocks modifications outside the approved scope.
  */
 
-import { readFileSync, appendFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { isEditAllowed, formatScopeDenialNudge } from "../../src/guardrails/scopeEnforcer.js";
 import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
@@ -18,16 +18,6 @@ async function main() {
       // No stdin
     }
   }
-
-  try {
-    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-enforce-scope",
-      time: new Date().toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {

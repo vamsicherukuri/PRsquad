@@ -2,7 +2,7 @@ import { writeFileSync, unlinkSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync, execFileSync } from "node:child_process";
-import { loadState, getRepoRoot, findGatedChangeDir, getRepoOwnerAndName } from "./stateStore.js";
+import { loadState, saveState, loadApprovalLock, getRepoRoot, findGatedChangeDir, getRepoOwnerAndName } from "./stateStore.js";
 import { syncWorkflowDashboard } from "./issueDashboard.js";
 
 export interface PROptions {

@@ -461,11 +461,6 @@ ${t?.controllerCredits !== undefined && t.controllerCredits > 0 ? `| **0. Contro
         severity: "LOW",
         finding: "Prefix-containment matching means a scope entry like 'src/scope' would also allow 'src/scopeTool.ts' only if exact or nested match; current logic uses candidate+'/' so this specific false-positive is avoided, but a candidate that is itself a substring-prefix folder (e.g. 'src') would still broadly permit all of src/** — pre-existing behavior, not introduced by this diff, flagged for awareness only.",
         evidence: "src/guardrails/scopeEnforcer.ts normalized.startsWith(candidate + '/')"
-      },
-      {
-        severity: "MEDIUM",
-        finding: "Unrelated debug artifact present in a file in the declared blast radius (not part of this diff) writes to a hardcoded absolute local path on every hook invocation — informational only, outside approved scope/diff, pre-existing and not modified by this change.",
-        evidence: "scripts/guardrails/hook-enforce-scope.ts: appendFileSync('C:/Users/vcherukuri/hook-debug.log', ...)"
       }
     ];
 
@@ -502,7 +497,7 @@ ${t?.controllerCredits !== undefined && t.controllerCredits > 0 ? `| **0. Contro
   }
 
   // Section 5: Pull Request & PR Approval Gate Status
-  const mg = p.mergeGate || {};
+  const mg = (p.mergeGate || {}) as any;
   const prNum = mg.details?.prNumber || 10;
   const prUrl = mg.details?.prUrl || `https://github.com/${repoSlug}/pull/${prNum}`;
   const baseBranch = mg.details?.baseBranch || "copilot-app-plugin-alignment";
@@ -683,15 +678,7 @@ export function syncWorkflowDashboard(
     }
 
     return current;
-  } catch (err: any) {
-    try {
-      const { appendFileSync } = require("node:fs");
-      appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "syncWorkflowDashboard_error",
-        error: String(err?.message || err),
-        time: new Date().toISOString()
-      }) + "\n");
-    } catch {}
+  } catch {
     return null;
   }
 }
@@ -768,15 +755,8 @@ export function postOrPatchGitHubComment(state: DashboardState): void {
         state.commentId = newId;
       }
     }
-  } catch (err: any) {
-    try {
-      const { appendFileSync } = require("node:fs");
-      appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "postOrPatchGitHubComment_error",
-        error: String(err?.message || err),
-        time: new Date().toISOString()
-      }) + "\n");
-    } catch {}
+  } catch {
+    // Graceful fallback if gh CLI or network fails
   } finally {
     try {
       if (existsSync(tempPath)) {

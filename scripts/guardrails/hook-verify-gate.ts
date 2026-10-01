@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync, appendFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { loadState, saveState, loadApprovalLock, saveApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot, ensureNodeModulesInWorktree } from "../../src/guardrails/stateStore.js";
 import {
@@ -64,10 +65,11 @@ async function main() {
 
     // If cwd was not in a repository/worktree with state, search active worktrees by latest modified time
     if (!state?.sessionId) {
+      const home = homedir();
       const candidates = [
-        "C:/Users/vcherukuri/factory/sample repos/copilot-worktrees/gated-fix-pipeline",
-        "C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline",
-        "C:/Users/vcherukuri/factory/sample repos/gated-fix-pipeline",
+        join(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join(home, "factory/sample repos/gated-fix-pipeline"),
       ];
       let bestState: any = null;
       let bestMtime = 0;
@@ -148,16 +150,6 @@ async function main() {
       // No stdin
     }
   }
-
-  try {
-    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-verify-gate",
-      time: new Date().toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {

@@ -5,7 +5,7 @@
  * (or fallback fixture), and injects verified structured issue context.
  */
 
-import { readFileSync, appendFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch, getRepoOwnerAndName, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
@@ -20,16 +20,6 @@ async function main() {
       // No stdin provided
     }
   }
-
-  try {
-    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-intake-ingest",
-      time: new Date().toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {

@@ -4,7 +4,7 @@
  * Intercepts all 'bash' tool calls and validates commands based on the active agent's role.
  */
 
-import { readFileSync, appendFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { validateCommandForAgent } from "../../src/guardrails/bashSandbox.js";
 import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
@@ -18,16 +18,6 @@ async function main() {
       // No stdin
     }
   }
-
-  try {
-    appendFileSync("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-sandbox-bash",
-      time: new Date().toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {}
 
   let input: HookInput = {};
   if (rawInput.trim()) {

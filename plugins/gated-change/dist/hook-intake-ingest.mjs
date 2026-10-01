@@ -1,13 +1,7 @@
 #!/usr/bin/env node
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined") return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
 
 // scripts/guardrails/hook-intake-ingest.ts
-import { readFileSync as readFileSync4, appendFileSync as appendFileSync2 } from "node:fs";
+import { readFileSync as readFileSync4 } from "node:fs";
 
 // src/guardrails/ingestIssue.ts
 import { execSync } from "node:child_process";
@@ -673,11 +667,6 @@ ${t?.controllerCredits !== void 0 && t.controllerCredits > 0 ? `| **0. Controlle
         severity: "LOW",
         finding: "Prefix-containment matching means a scope entry like 'src/scope' would also allow 'src/scopeTool.ts' only if exact or nested match; current logic uses candidate+'/' so this specific false-positive is avoided, but a candidate that is itself a substring-prefix folder (e.g. 'src') would still broadly permit all of src/** \u2014 pre-existing behavior, not introduced by this diff, flagged for awareness only.",
         evidence: "src/guardrails/scopeEnforcer.ts normalized.startsWith(candidate + '/')"
-      },
-      {
-        severity: "MEDIUM",
-        finding: "Unrelated debug artifact present in a file in the declared blast radius (not part of this diff) writes to a hardcoded absolute local path on every hook invocation \u2014 informational only, outside approved scope/diff, pre-existing and not modified by this change.",
-        evidence: "scripts/guardrails/hook-enforce-scope.ts: appendFileSync('C:/Users/vcherukuri/hook-debug.log', ...)"
       }
     ];
     if (riskFlags.length > 0) {
@@ -876,16 +865,7 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       }
     }
     return current;
-  } catch (err) {
-    try {
-      const { appendFileSync: appendFileSync3 } = __require("node:fs");
-      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "syncWorkflowDashboard_error",
-        error: String(err?.message || err),
-        time: (/* @__PURE__ */ new Date()).toISOString()
-      }) + "\n");
-    } catch {
-    }
+  } catch {
     return null;
   }
 }
@@ -952,16 +932,7 @@ function postOrPatchGitHubComment(state) {
         state.commentId = newId;
       }
     }
-  } catch (err) {
-    try {
-      const { appendFileSync: appendFileSync3 } = __require("node:fs");
-      appendFileSync3("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-        event: "postOrPatchGitHubComment_error",
-        error: String(err?.message || err),
-        time: (/* @__PURE__ */ new Date()).toISOString()
-      }) + "\n");
-    } catch {
-    }
+  } catch {
   } finally {
     try {
       if (existsSync3(tempPath)) {
@@ -980,16 +951,6 @@ async function main() {
       rawInput = readFileSync4(0, "utf-8");
     } catch {
     }
-  }
-  try {
-    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-intake-ingest",
-      time: (/* @__PURE__ */ new Date()).toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {
   }
   let input = {};
   if (rawInput.trim()) {

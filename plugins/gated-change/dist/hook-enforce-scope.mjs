@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-enforce-scope.ts
-import { readFileSync as readFileSync2, appendFileSync as appendFileSync2 } from "node:fs";
+import { readFileSync as readFileSync2 } from "node:fs";
 
 // src/guardrails/scopeEnforcer.ts
 import { execSync as execSync2 } from "node:child_process";
@@ -303,16 +303,6 @@ async function main() {
       rawInput = readFileSync2(0, "utf-8");
     } catch {
     }
-  }
-  try {
-    appendFileSync2("C:/Users/vcherukuri/hook-debug.log", JSON.stringify({
-      hook: "hook-enforce-scope",
-      time: (/* @__PURE__ */ new Date()).toISOString(),
-      argv: process.argv,
-      cwd: process.cwd(),
-      rawInput
-    }) + "\n");
-  } catch {
   }
   let input = {};
   if (rawInput.trim()) {
