@@ -2,7 +2,7 @@ import { writeFileSync, unlinkSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync, execFileSync } from "node:child_process";
-import { loadState, getRepoRoot, findGatedChangeDir } from "./stateStore.js";
+import { loadState, getRepoRoot, findGatedChangeDir, getRepoOwnerAndName } from "./stateStore.js";
 import { syncWorkflowDashboard } from "./issueDashboard.js";
 
 export interface PROptions {
@@ -88,8 +88,9 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       issueNum = 11;
     }
 
-    const owner = state.issue?.owner || "vamsicherukuri";
-    const repo = state.issue?.repo || "gated-fix-pipeline";
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
+    const repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
 
     let issueTitle = state.issue?.title;
     if (!issueTitle || (state.issue?.number && state.issue.number !== issueNum) || issueTitle === "Multi-path scope enforcer alignment") {

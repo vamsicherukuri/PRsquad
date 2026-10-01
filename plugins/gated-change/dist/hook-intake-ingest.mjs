@@ -136,6 +136,21 @@ function getRepoRoot(preferredDir) {
     return fallback;
   }
 }
+function getRepoOwnerAndName(rootDir = getRepoRoot()) {
+  try {
+    const remoteUrl = execSync2("git remote get-url origin", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const match = remoteUrl.match(/[:/]([^/:]+)\/([^/:]+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+  } catch {
+  }
+  return { owner: "", repo: "" };
+}
 function findGatedChangeDir(rootDir = getRepoRoot()) {
   const localDir = join2(rootDir, GATED_CHANGE_DIR);
   const localLock = join2(localDir, LOCK_FILE);
@@ -987,7 +1002,8 @@ async function main() {
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetAgent = toolArgs.agent_type || toolArgs.name || toolArgs.agent || input.agent;
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
-    const state = loadState();
+    const repoRoot = getRepoRoot();
+    const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
     let issueNum = 1;
     const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
@@ -1002,8 +1018,9 @@ async function main() {
     } else if (state.issue?.number && state.issue.number > 0) {
       issueNum = state.issue.number;
     }
-    let owner = state.issue?.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || "gated-fix-pipeline";
+    const remoteInfo = getRepoOwnerAndName(repoRoot);
+    let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
+    let repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {

@@ -38,6 +38,25 @@ export function getRepoRoot(preferredDir?: string): string {
 }
 
 /**
+ * Dynamically resolves repository owner and name from the git origin remote.
+ * Completely repository- and technology-agnostic.
+ */
+export function getRepoOwnerAndName(rootDir: string = getRepoRoot()): { owner: string; repo: string } {
+  try {
+    const remoteUrl = execSync("git remote get-url origin", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const match = remoteUrl.match(/[:/]([^/:]+)\/([^/:]+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+  } catch {}
+  return { owner: "", repo: "" };
+}
+
+/**
  * Normalizes any Windows or POSIX path into a clean, relative POSIX path
  * from the repository root (e.g. "src/auth/service.ts").
  */

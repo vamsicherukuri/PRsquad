@@ -7,7 +7,7 @@
 
 import { readFileSync, appendFileSync } from "node:fs";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
-import { loadState, saveState, appendAuditLog, isAgentMatch } from "../../src/guardrails/stateStore.js";
+import { loadState, saveState, appendAuditLog, isAgentMatch, getRepoOwnerAndName, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
 import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
 
@@ -50,7 +50,8 @@ async function main() {
 
   // Only intercept when invoking gated-change-intake (supports qualified names)
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
-    const state = loadState();
+    const repoRoot = getRepoRoot();
+    const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
     // Extract issue number accurately
@@ -68,9 +69,10 @@ async function main() {
       issueNum = state.issue.number;
     }
 
-    // Extract owner and repo
-    let owner = state.issue?.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || "gated-fix-pipeline";
+    // Extract owner and repo dynamically from remote origin or prompt
+    const remoteInfo = getRepoOwnerAndName(repoRoot);
+    let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
+    let repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {

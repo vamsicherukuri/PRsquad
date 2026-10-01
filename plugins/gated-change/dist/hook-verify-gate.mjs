@@ -43,6 +43,21 @@ function getRepoRoot(preferredDir) {
     return fallback;
   }
 }
+function getRepoOwnerAndName(rootDir = getRepoRoot()) {
+  try {
+    const remoteUrl = execSync("git remote get-url origin", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const match = remoteUrl.match(/[:/]([^/:]+)\/([^/:]+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+  } catch {
+  }
+  return { owner: "", repo: "" };
+}
 function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   let cleanFilePath = filePath.replace(/\\/g, "/");
   let cleanRootDir = rootDir.replace(/\\/g, "/");
@@ -1454,8 +1469,9 @@ function createPullRequest(options = {}) {
     if (!issueNum) {
       issueNum = 11;
     }
-    const owner = state.issue?.owner || "vamsicherukuri";
-    const repo = state.issue?.repo || "gated-fix-pipeline";
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
+    const repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
     let issueTitle = state.issue?.title;
     if (!issueTitle || state.issue?.number && state.issue.number !== issueNum || issueTitle === "Multi-path scope enforcer alignment") {
       try {
