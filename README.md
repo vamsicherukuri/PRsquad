@@ -53,20 +53,34 @@ The result is a governed development flow designed to reduce risks such as **age
 
 ### 3-Step Setup
 
-1. **Add Marketplace Source**: In the GitHub Copilot App settings, add this repository as a custom marketplace:
+1. **Add the Marketplace Source**  
+   In GitHub Copilot App settings, add this repository as a custom marketplace source:
    ```text
    https://github.com/vamsicherukuri/gated-fix-pipeline
    ```
-2. **Install `prsquad`**: Select and install **`prsquad`** (`v0.1.49`) from the plugin catalog.
-3. **Execute Supervised Workflow**: Open any GitHub issue in the App, start a **Plan** session, and invoke:
+
+2. **Install `prsquad`**  
+   Find `prsquad` in the plugin catalog and install version `v0.1.49`.
+
+3. **Run the Supervised Workflow**  
+   Open a GitHub issue in the Copilot App, start a **Plan** session, and invoke:
    ```text
    @prsquad resolve issue #22 using the supervised pipeline
    ```
-   * `@prsquad-architect` drafts a surgical blast-radius plan (read-only symbol jail).
-   * Type `/approve` in chat to cryptographically sign `approval.lock`.
-   * Specialists `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute under active PreToolUse containment, delivering a verified Pull Request stopping at the human Merge Gate.
+   PRsquad then guides the issue through its governed workflow:  
+   `Triage` → `Architecture` → `Scope Approval` → `Development` → `QA` → `Code Review` → `PR Approval`
+   * `@prsquad-architect` analyzes the issue and proposes a scoped implementation plan.
+   * Review the plan and type `/approve` to authorize implementation.
+   * `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute within deterministic policy, scope, and tool guardrails.
+   * After final human approval, PRsquad opens the Pull Request and stops. Merge remains a human-maintainer decision.
 
-> **Evaluating without the Copilot App?** You can test the 7-stage workflow immediately in the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)** (zero install required) or run the local test suite via `npm run check:plugin && npm run test:guardrails`.
+---
+
+> **Want to explore PRsquad without installing the plugin?**  
+> Try the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)** to walk through the 7-stage workflow, or validate the repository locally with:
+> ```bash
+> npm run check:plugin && npm run test:guardrails
+> ```
 
 ---
 
