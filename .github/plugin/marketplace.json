@@ -1,16 +1,16 @@
 {
-  "name": "gated-change-marketplace",
+  "name": "prsquad-marketplace",
   "owner": {
     "name": "Vamsi Cherukuri"
   },
   "metadata": {
-    "description": "Governed GitHub Copilot App workflow patterns for enterprise software delivery",
+    "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates.",
     "version": "0.1.49"
   },
   "plugins": [
     {
-      "name": "gated-change",
-      "description": "PRSquad: A governed issue-to-PR workflow with specialist agents and explicit human gates.",
+      "name": "prsquad",
+      "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates.",
       "version": "0.1.49",
       "source": "./plugins/gated-change"
     }

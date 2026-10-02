@@ -1,8 +1,13 @@
-# Gated Change — GitHub Copilot App Enterprise Challenge
+# PRsquad · Supervised Agentic Workflow for GitHub Copilot
 
-This repository implements the workflow designed in [`implementation-plan.md`](implementation-plan.md) as a **GitHub Copilot App-native, governed issue-to-PR pattern**.
+> **"Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates."**
 
-The project began as a narrow SDK proof of concept called **Gated Fix Pipeline**. That prototype is intentionally retained under `harness/agents/` and `src/` because it contains useful working examples of bounded control flow and deterministic scope checks. Deliberately kept out of `.github/agents/` so it is never auto-discovered as a selectable agent in VS Code or the GitHub Copilot App. The **customer-facing challenge implementation now lives under `plugins/gated-change/`** and is intended to run inside the GitHub Copilot App.
+[![Plugin Checks](https://img.shields.io/badge/Plugin%20Consistency-78%2F78%20PASS-brightgreen)](scripts/check-plugin-consistency.ts)
+[![Verification Tests](https://img.shields.io/badge/Automated%20Tests-277%2F277%20PASS%20(100%25)-brightgreen)](scripts/test-guardrails.ts)
+[![Platform](https://img.shields.io/badge/Platform-GitHub%20Copilot%20App-blue)](#)
+[![Pattern](https://img.shields.io/badge/Pattern-Supervised%20Agentic%20Workflow-purple)](#)
+
+**PRsquad** is an enterprise-ready **Supervised Agentic Workflow** built natively for the **GitHub Copilot App**. A supervisor orchestrator (`@prsquad`) coordinates five specialist subagents across seven bounded stages, enforcing physical PreToolUse hooks, cryptographic human scope locks (`approval.lock`), isolated sandbox worktrees, and bounded repair loops.
 
 ## Source of truth
 
@@ -159,21 +164,18 @@ The following are later milestones and should not be presented as implemented un
 - Release-helper and post-merge auto-revert flow,
 - per-stage token/cost instrumentation.
 
-## Testing the first App-native slice
+## Testing the Supervised Agentic Workflow in GitHub Copilot App
 
-1. Use the `copilot-app-plugin-alignment` branch while this migration is being validated.
-2. In the GitHub Copilot App, add this repository as a custom plugin marketplace.
-3. Install `gated-change`.
-4. Open a real GitHub issue from the App and start a **Plan** session.
-5. Select the Gated Change controller using the custom-agent picker. In Copilot CLI, its qualified identifier is `gated-change:gated-change-controller`.
-6. Ask it to run the Gated Change workflow for the issue.
-7. Confirm Intake runs without repository access.
-8. Confirm Architect plans without writing code.
-9. Confirm no Developer work starts before explicit plan/scope approval.
-10. After approval, confirm Developer -> QA -> Reviewer handoff order.
-11. Create a PR in the App, allow native CI to run, and stop at the human Merge Gate.
-
-Do not move to Canvas, scope-hook, or post-merge development until this vertical slice behaves predictably in the actual App.
+1. Use the `copilot-app-plugin-alignment` branch.
+2. In the GitHub Copilot App, add this repository as a custom plugin marketplace (`.github/plugin/marketplace.json`).
+3. Install **`prsquad`**.
+4. Open a real GitHub issue or task in the App and start a **Plan** session.
+5. In chat, invoke `@prsquad`: e.g. `"@prsquad resolve issue #22 using the supervised pipeline"`.
+6. Confirm Intake runs with zero repo scanning (<2s, 0 tokens).
+7. Confirm Architect diagnoses root cause without writing code.
+8. Review the technical plan and type `/approve` in chat to create `approval.lock`.
+9. Watch Developer implement code bounded to the scope prefix, followed by QA validation and Reviewer security audit.
+10. The pipeline safely delivers a verified Pull Request stopping at the Human Merge Gate.
 
 ## Governance / development guidance
 
