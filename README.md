@@ -32,7 +32,7 @@ flowchart TD
     end
 
     subgraph Phase1["🔍 Phase 1: Ingestion & Fast-Fail"]
-        S0["Stage 0: Triage Specialist<br/>(@prsquad-triage)<br/>• Deterministic criteria extraction<br/>• Fast-fail in &lt;2s (0 LLM tokens)"]
+        S0["Stage 0: Triage Specialist<br/>(@prsquad-triage)<br/>• Deterministic criteria extraction<br/>• Fast-fail in under 2s (0 LLM tokens)"]
     end
 
     subgraph Phase2["📐 Phase 2: Diagnostic Blast-Radius Planning"]
@@ -44,15 +44,15 @@ flowchart TD
     end
 
     subgraph Phase4["🔨 Phase 4: Contained Implementation"]
-        S3["Stage 3: Developer Specialist<br/>(@prsquad-dev)<br/>• Isolated feature branch: fix/issue-N<br/>• Active write-barrier &amp; smart nudges"]
+        S3["Stage 3: Developer Specialist<br/>(@prsquad-dev)<br/>• Isolated feature branch: fix/issue-N<br/>• Active write-barrier & smart nudges"]
     end
 
     subgraph Phase5["🧪 Phase 5: Independent Verification"]
         S4["Stage 4: QA Specialist<br/>(@prsquad-qa)<br/>• Isolated worktree test sandbox<br/>• 0 git mutation permissions"]
     end
 
-    subgraph Phase6["🛡️ Phase 6: Contract &amp; Security Sweep"]
-        S5["Stage 5: Reviewer Specialist<br/>(@prsquad-review)<br/>• Read-only AST symbol contract sweep<br/>• OWASP &amp; credential flaw check"]
+    subgraph Phase6["🛡️ Phase 6: Contract & Security Sweep"]
+        S5["Stage 5: Reviewer Specialist<br/>(@prsquad-review)<br/>• Read-only AST symbol contract sweep<br/>• OWASP & credential flaw check"]
     end
 
     subgraph Gate2["🚀 Phase 7: Governed Enterprise Delivery"]
@@ -62,10 +62,10 @@ flowchart TD
     Orch --> S0
     S0 --> S1
     S1 --> S2
-    S2 -->|Maintainer /approve| S3
+    S2 -->|"Maintainer /approve"| S3
     S3 --> S4
-    S4 -->|Tests Pass 100%| S5
-    S4 -.->|Fail: Rework Cycle (Max 3)| S3
+    S4 -->|"Tests Pass 100%"| S5
+    S4 -.->|"Fail: Max 3 Rework Cycles"| S3
     S5 --> S6
 ```
 
