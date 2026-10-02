@@ -1436,10 +1436,12 @@
           desc = `Permitted command: <code>${cmd.slice(0, 55)}${cmd.length > 55 ? '...' : ''}</code>`;
         } else if (e.action === 'human_scope_gate_auto_signed_from_chat') {
           desc = `Verified PM Scope Approval lock: <code>${e.details?.approvedScope || ''}</code>`;
-        } else if (e.action === 'scope_violation_blocked') {
-          desc = `Blocked unauthorized edit to <code>${e.details?.path || ''}</code> (Smart nudge sent)`;
-        } else if (e.action === 'disallowed_command_blocked') {
-          desc = `Blocked dangerous command: <code>${e.details?.command || ''}</code>`;
+        } else if (e.action === 'write_blocked_out_of_scope' || e.action === 'scope_violation_blocked') {
+          const blockedFile = e.details?.attemptedPath || e.details?.path || '';
+          desc = `Blocked unauthorized edit: <code>${blockedFile}</code> (Write barrier active · Smart nudge sent)`;
+        } else if (e.action === 'command_blocked_by_sandbox' || e.action === 'disallowed_command_blocked') {
+          const blockedCmd = e.details?.command || '';
+          desc = `Blocked prohibited command: <code>${blockedCmd}</code>`;
         }
 
         const hookName = e.tool === 'edit' ? 'hook-enforce-scope' 
