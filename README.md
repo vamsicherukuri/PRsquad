@@ -25,17 +25,15 @@
 
 ## What is PRsquad?
 
-**PRsquad** is an enterprise-ready **Supervised Agentic Workflow** built natively for the **GitHub Copilot App**. 
+**PRsquad** is a supervised agentic software-delivery workflow that turns a GitHub issue into a validated, review-ready pull request through specialized AI agents operating within deterministic governance boundaries.
 
-Traditional autonomous AI coding agents suffer from runaway token burn, unconstrained file mutations, hallucinated package updates, and accidental base-branch pushes (`git push origin main`). PRsquad solves this by pairing a **Supervisor Orchestrator (`@prsquad`)** with **five specialized subagents** operating under **mechanical PreToolUse hooks**, **cryptographic human approval locks (`approval.lock`)**, and **hard-bounded repair loops**.
+It separates the lifecycle across **Triage**, **Architect**, **Developer**, **QA**, and **Code Review** agents, coordinated through a defined issue-to-PR workflow.
 
-**Four deterministic mechanisms carry the governance and efficiency story:**
-1. **Intake Triage** intercepts issues in `<2s` and validates acceptance criteria before any planning begins (0 LLM tokens).
-2. **The Scope Gate** physically blocks the Developer agent process at the OS level until a human maintainer signs `approval.lock` in chat.
-3. **The Write-Scope Barrier** rejects unauthorized file mutations and injects smart nudges, keeping agents inside their declared blast radius.
-4. **The Bounded Repair Loop** hard-caps Developer ↔ QA rework cycles at 3 attempts before escalating to the maintainer, eliminating token bleed.
+The agents handle reasoning and execution within their roles, while deterministic hooks enforce critical controls such as approved scope, branch protection, bounded retries, command restrictions, validation sequencing, and human approval gates.
 
-Cross-package impact is caught by a **zero-token TypeScript AST sweep**, not an expensive dedicated LLM agent.
+PRsquad also limits unnecessary context by injecting repository instructions, skills, diffs, test evidence, and workflow state only when relevant to each specialist.
+
+The result is a governed development flow designed to reduce risks such as **agent drift**, **hallucination reinforcement**, **prompt injection**, **scope expansion**, **context bloat**, **unsafe tool use**, and **unbounded autonomous loops**.
 
 ---
 
