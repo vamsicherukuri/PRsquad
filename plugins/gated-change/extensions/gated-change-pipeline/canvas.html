@@ -166,6 +166,157 @@
       border-radius: 4px;
     }
 
+    /* Orchestrator Conductor Card (Option 1) */
+    .orchestrator-conductor-card {
+      min-width: 620px;
+      width: 100%;
+      background: linear-gradient(135deg, rgba(31, 111, 235, 0.08) 0%, rgba(163, 113, 247, 0.06) 100%);
+      border: 1px solid rgba(56, 139, 253, 0.32);
+      border-radius: 6px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      margin-bottom: 5px;
+    }
+
+    .orchestrator-conductor-card:hover {
+      background: linear-gradient(135deg, rgba(31, 111, 235, 0.15) 0%, rgba(163, 113, 247, 0.12) 100%);
+      border-color: var(--blue-border);
+    }
+
+    .orchestrator-conductor-card.selected {
+      border-color: var(--blue-border);
+      box-shadow: 0 0 0 2px var(--blue-border);
+      background: linear-gradient(135deg, rgba(31, 111, 235, 0.20) 0%, rgba(163, 113, 247, 0.15) 100%);
+    }
+
+    .orch-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .orch-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 5px;
+      background: rgba(56, 139, 253, 0.15);
+      border: 1px solid rgba(56, 139, 253, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 13px;
+    }
+
+    .orch-info {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    .orch-top-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .orch-handle {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .orch-badge {
+      font-size: 8.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: rgba(56, 139, 253, 0.12);
+      color: var(--blue-text);
+      border: 1px solid rgba(56, 139, 253, 0.3);
+      padding: 0 5px;
+      border-radius: 4px;
+    }
+
+    .orch-status-pill {
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .orch-status-pill.active {
+      background: rgba(56, 139, 253, 0.15);
+      color: var(--blue-text);
+      border: 1px solid rgba(56, 139, 253, 0.35);
+    }
+    .orch-status-pill.paused {
+      background: rgba(210, 153, 34, 0.15);
+      color: var(--amber-text);
+      border: 1px solid rgba(210, 153, 34, 0.4);
+    }
+    .orch-status-pill.done {
+      background: rgba(46, 160, 67, 0.15);
+      color: var(--green-text);
+      border: 1px solid rgba(46, 160, 67, 0.4);
+    }
+
+    .orch-routing-desc {
+      font-size: 9.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 440px;
+    }
+
+    .orch-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .orch-metrics {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 1px;
+    }
+
+    .orch-credits-val {
+      font-size: 11px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-weight: 700;
+      color: var(--blue-text);
+    }
+
+    .orch-turns-sub {
+      font-size: 9px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      color: var(--text-muted);
+    }
+
+    .orch-select-hint {
+      font-size: 9.5px;
+      color: var(--text-muted);
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      opacity: 0.7;
+    }
+
     .rail-track {
       display: flex;
       align-items: center;
@@ -664,13 +815,37 @@
     </div>
   </div>
 
-  <!-- Dual-Rail Pipeline: Option A (Lean, Simple, No Specialist Icons) -->
+  <!-- Dual-Rail Pipeline: Option 1 (Overarching Conductor Card + Dual-Rail Specialists) -->
   <div class="pipeline-dual-rail" id="pipeline-nodes">
     
+    <!-- Overarching Conductor Card (Option 1) -->
+    <div class="orchestrator-conductor-card" id="orchestrator-card" onclick="selectOrchestrator()" title="Click to view @prsquad Orchestrator & Supervisor details">
+      <div class="orch-left">
+        <div class="orch-avatar">🎮</div>
+        <div class="orch-info">
+          <div class="orch-top-row">
+            <span class="orch-handle">@prsquad</span>
+            <span class="orch-badge">PIPELINE CONDUCTOR</span>
+            <span class="orch-status-pill paused" id="orch-status-pill">● PAUSED AT SCOPE GATE</span>
+          </div>
+          <div class="orch-routing-desc" id="orch-routing-desc">
+            Awaiting maintainer /approve in chat before dispatching @prsquad-dev
+          </div>
+        </div>
+      </div>
+      <div class="orch-right">
+        <div class="orch-metrics">
+          <span class="orch-credits-val" id="orch-credits">🎮 10.88 AIU</span>
+          <span class="orch-turns-sub" id="orch-turns-sub">2 turns (56.1%)</span>
+        </div>
+        <span class="orch-select-hint">Supervisor Details ➔</span>
+      </div>
+    </div>
+
     <!-- Track 1 Header -->
     <div class="rail-header-row">
-      <span class="rail-title">Agent Execution Track (@prsquad) <span id="controller-credits-badge" style="display:none; margin-left:8px; font-weight:normal; font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(88,166,255,0.12); color:var(--blue-text); border:1px solid rgba(88,166,255,0.3);">🎮 Orchestrator: 0.00 AIU</span></span>
-      <span class="rail-title" style="color:var(--blue-text);">Autonomous Specialists <span id="specialists-credits-badge" style="display:none; margin-left:6px; font-weight:normal; font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(63,185,80,0.12); color:var(--green-text); border:1px solid rgba(63,185,80,0.3);">⚡ 0.00 AIU</span></span>
+      <span class="rail-title">Specialist Agent Track</span>
+      <span class="rail-title" style="color:var(--blue-text);" id="specialists-credits-header">Specialists: 8.53 AIU</span>
     </div>
 
     <!-- Track 1: Agent Pipeline -->
@@ -1005,9 +1180,52 @@
       }
     ];
 
+    let latestDashboardData = {
+      issueNumber: 22,
+      issueTitle: "PrCreator fails to sanitize release branch names containing special shell characters",
+      activeBranch: "fix/issue-22",
+      telemetry: {
+        actualAiCredits: 19.41,
+        controllerCredits: 10.88,
+        controllerTurns: 2,
+        turns: 8,
+        cacheHitRatePercent: 59.5,
+        durationSeconds: 36.6
+      },
+      phases: {
+        intake: { credits: 1.33, status: "READY" },
+        architect: { credits: 7.20, status: "PLAN_READY" },
+        scopeGate: { status: "AWAITING" }
+      }
+    };
+
+    function selectOrchestrator(manual = true) {
+      if (manual) userHasManuallySelected = true;
+      currentSelected = 'orchestrator';
+
+      // Remove selected/active states from specialist stages & hooks
+      for (let i = 0; i < 7; i++) {
+        const stageEl = document.getElementById('stage-' + i);
+        if (stageEl) stageEl.classList.remove('selected');
+        const hookEl = document.getElementById('hook-card-' + i);
+        if (hookEl) hookEl.classList.remove('selected');
+        const tetherEl = document.getElementById('tether-' + i);
+        if (tetherEl) tetherEl.classList.remove('active');
+      }
+
+      const orchCard = document.getElementById('orchestrator-card');
+      if (orchCard) orchCard.classList.add('selected');
+
+      renderDetail('orchestrator');
+    }
+
     function selectStage(index, manual = true) {
       if (manual) userHasManuallySelected = true;
       currentSelected = index;
+
+      const orchCard = document.getElementById('orchestrator-card');
+      if (orchCard) orchCard.classList.remove('selected');
+
       for (let i = 0; i < 7; i++) {
         const stageEl = document.getElementById('stage-' + i);
         if (stageEl) {
@@ -1029,6 +1247,10 @@
     }
 
     function renderDetail(index) {
+      if (index === 'orchestrator') {
+        renderOrchestratorDetail();
+        return;
+      }
       const d = stageMeta[index];
       if (!d) return;
       document.getElementById('detail-title').textContent = d.title;
@@ -1060,6 +1282,106 @@
                 <div class="gov-label">Policy Enforced</div>
                 <div class="gov-val" style="color:var(--amber-text);">${d.gov.policyName}</div>
                 <div class="gov-desc">${d.gov.policyDesc}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function renderOrchestratorDetail() {
+      const data = latestDashboardData || {};
+      const t = data.telemetry || {};
+      const total = t.actualAiCredits || 19.41;
+      const ctrlCredits = t.controllerCredits || 10.88;
+      const ctrlTurns = t.controllerTurns || 2;
+      const specCredits = Math.max(0, total - ctrlCredits);
+      const specTurns = Math.max(0, (t.turns || 8) - ctrlTurns);
+      const cacheHit = t.cacheHitRatePercent || 59.5;
+      const issueNum = data.issueNumber || 22;
+      const issueTitle = data.issueTitle || 'PrCreator fails to sanitize release branch names containing special shell characters';
+
+      const p = data.phases || {};
+      const archStatus = p.architect?.status || '';
+      const sgStatus = p.scopeGate?.status || '';
+      const mg = p.mergeGate || {};
+      const prUrl = mg.details?.prUrl || '';
+      const isPrOpen = ['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) && !!prUrl;
+
+      let badgeText = 'ACTIVE SUPERVISOR';
+      let badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
+      let statusDesc = 'Supervising active execution across autonomous specialists.';
+
+      if (isPrOpen) {
+        badgeText = 'PIPELINE COMPLETE';
+        badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
+        statusDesc = 'All 7 stages successfully completed. Pull Request is open on GitHub.';
+      } else if (sgStatus !== 'APPROVED' && ['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
+        badgeText = 'PAUSED AT SCOPE GATE';
+        badgeStyle = 'background:rgba(210,153,34,0.15); color:var(--amber-text); border:1px solid var(--amber-border);';
+        statusDesc = 'The Orchestrator has paused autonomous execution after receiving the technical plan from @prsquad-architect. It is awaiting human approval in chat (/approve) before authorizing @prsquad-dev.';
+      }
+
+      document.getElementById('detail-title').textContent = 'Pipeline Conductor (@prsquad)';
+      const bEl = document.getElementById('detail-badge');
+      bEl.textContent = badgeText;
+      bEl.style.cssText = badgeStyle;
+      document.getElementById('detail-content').innerHTML = `
+        <strong>Issue #${issueNum}:</strong> ${issueTitle}<br/>
+        ${statusDesc}
+      `;
+
+      const govEl = document.getElementById('detail-gov');
+      if (govEl) {
+        govEl.innerHTML = `
+          <div class="gov-card">
+            <div class="gov-header">
+              <span class="gov-title">Orchestrator Resource Breakdown & Telemetry</span>
+              <span class="gov-cost">Total Session: ${total.toFixed(2)} AIU</span>
+            </div>
+            <div class="gov-grid">
+              <div class="gov-pill">
+                <div class="gov-label">Orchestrator Burn</div>
+                <div class="gov-val" style="color:var(--blue-text);">${ctrlCredits.toFixed(2)} AIU (${ctrlTurns} turns)</div>
+                <div class="gov-desc">Supervision, dynamic specialist dispatch & approval gate mediation</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Autonomous Specialists</div>
+                <div class="gov-val" style="color:var(--green-text);">${specCredits.toFixed(2)} AIU (${specTurns} turns)</div>
+                <div class="gov-desc">Intake, Architect, Developer, QA, Reviewer subagents</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Bounded Loop Guard</div>
+                <div class="gov-val" style="color:var(--purple-text);">0 / 3 Repair Loops</div>
+                <div class="gov-desc">Hard ceiling prevents infinite ping-pong between Dev and QA</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Prompt Cache Hit Rate</div>
+                <div class="gov-val" style="color:var(--amber-text);">${cacheHit.toFixed(1)}% Cached</div>
+                <div class="gov-desc">Reuses static prompt context across multi-agent turns</div>
+              </div>
+            </div>
+          </div>
+          <div class="gov-card">
+            <div class="gov-header">
+              <span class="gov-title">Deterministic Governance Policy</span>
+              <span class="gov-cost">0.00 AIU · Zero Token Overhead</span>
+            </div>
+            <div class="gov-grid">
+              <div class="gov-pill">
+                <div class="gov-label">Active Hook</div>
+                <div class="gov-val" style="color:var(--purple-text);">hook-verify-gate.mjs</div>
+                <div class="gov-desc">Enforces human maintainer physical signature check</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Trigger Point</div>
+                <div class="gov-val" style="color:var(--blue-text);">preAgent: developer dispatch</div>
+                <div class="gov-desc">Intercepts orchestrator before subagent process is spawned</div>
+              </div>
+              <div class="gov-pill">
+                <div class="gov-label">Policy Enforced</div>
+                <div class="gov-val" style="color:var(--amber-text);">Physical Signature Lock</div>
+                <div class="gov-desc">Hard-stops developer dispatch until approval.lock exists on disk</div>
               </div>
             </div>
           </div>
@@ -1186,6 +1508,8 @@
 
     function updateDashboard(data) {
       if (!data) return;
+      latestDashboardData = data;
+
       if (data.issueNumber) {
         document.getElementById('issue-tag').textContent = 'Issue #' + data.issueNumber;
       }
@@ -1198,18 +1522,23 @@
         }
 
         const ctrlCredits = data.telemetry.controllerCredits || 0;
+        const ctrlTurns = data.telemetry.controllerTurns || 0;
         const specCredits = Math.max(0, total - ctrlCredits);
 
-        const ctrlBadge = document.getElementById('controller-credits-badge');
-        if (ctrlBadge && ctrlCredits > 0) {
-          ctrlBadge.style.display = 'inline-block';
-          ctrlBadge.textContent = '🎮 Orchestrator: ' + ctrlCredits.toFixed(2) + ' AIU';
+        const orchCreditsEl = document.getElementById('orch-credits');
+        if (orchCreditsEl) {
+          orchCreditsEl.textContent = '🎮 ' + ctrlCredits.toFixed(2) + ' AIU';
         }
 
-        const specBadge = document.getElementById('specialists-credits-badge');
-        if (specBadge && specCredits > 0) {
-          specBadge.style.display = 'inline-block';
-          specBadge.textContent = '⚡ Specialists: ' + specCredits.toFixed(2) + ' AIU';
+        const orchTurnsSubEl = document.getElementById('orch-turns-sub');
+        if (orchTurnsSubEl) {
+          const pct = total > 0 ? ((ctrlCredits / total) * 100).toFixed(1) : 0;
+          orchTurnsSubEl.textContent = `${ctrlTurns} turns (${pct}%)`;
+        }
+
+        const specHeaderEl = document.getElementById('specialists-credits-header');
+        if (specHeaderEl) {
+          specHeaderEl.textContent = 'Specialists: ' + specCredits.toFixed(2) + ' AIU';
         }
       }
 
@@ -1413,6 +1742,33 @@
         }
       }
 
+      // Update Orchestrator status pill & routing description dynamically
+      const orchPill = document.getElementById('orch-status-pill');
+      const orchDesc = document.getElementById('orch-routing-desc');
+
+      if (isPrOpen) {
+        if (orchPill) { orchPill.className = 'orch-status-pill done'; orchPill.textContent = '● COMPLETED SUPERVISION'; }
+        if (orchDesc) { orchDesc.textContent = 'All 7 stages complete. Pull Request is open on GitHub.'; }
+      } else if (sgStatus !== 'APPROVED' && ['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
+        if (orchPill) { orchPill.className = 'orch-status-pill paused'; orchPill.textContent = '● PAUSED AT SCOPE GATE'; }
+        if (orchDesc) { orchDesc.textContent = 'Awaiting maintainer /approve in chat before dispatching @prsquad-dev'; }
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING'].includes(devStatus)) {
+        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING DEVELOPER'; }
+        if (orchDesc) { orchDesc.textContent = 'Routing changes to @prsquad-dev with active write-barrier containment'; }
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'TESTING'].includes(qaStatus)) {
+        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING QA'; }
+        if (orchDesc) { orchDesc.textContent = 'Routing test execution to @prsquad-qa in isolated sandbox'; }
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'AUDITING'].includes(revStatus)) {
+        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING REVIEW'; }
+        if (orchDesc) { orchDesc.textContent = 'Routing code audit to @prsquad-review for AST & secret inspection'; }
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) {
+        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING ARCHITECT'; }
+        if (orchDesc) { orchDesc.textContent = 'Routing investigation to @prsquad-architect for root cause analysis'; }
+      } else {
+        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● ACTIVE CONDUCTOR'; }
+        if (orchDesc) { orchDesc.textContent = 'Supervising 7-stage gated pipeline & dynamic specialist delegation'; }
+      }
+
       // Compute latest active stage
       let latestActive = 0;
       if (isPrOpen) latestActive = 6;
@@ -1429,6 +1785,8 @@
 
       if (!userHasManuallySelected) {
         selectStage(latestActive, false);
+      } else if (currentSelected === 'orchestrator') {
+        renderOrchestratorDetail();
       } else {
         renderDetail(currentSelected);
       }
