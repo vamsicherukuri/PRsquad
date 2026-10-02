@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PRSquad</title>
+  <title>PRsquad</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -42,17 +42,16 @@
       display: flex;
       flex-direction: column;
       overflow-x: hidden;
-      container-type: inline-size;
+      gap: 10px;
     }
 
-    /* Header Bar */
+    /* 1. Header Bar */
     .header-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px solid var(--border-muted);
       flex-wrap: wrap;
     }
@@ -76,6 +75,7 @@
       font-size: 13px;
       font-weight: 700;
       color: var(--text);
+      letter-spacing: -0.2px;
     }
 
     .issue-tag {
@@ -145,33 +145,11 @@
       border-color: #2ea043;
     }
 
-    /* Dual-Rail Pipeline Flow (Option A - Lean & Simple) */
-    .pipeline-dual-rail {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      width: 100%;
-      margin-bottom: 12px;
-      overflow-x: auto;
-      padding: 2px 2px 6px 2px;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
-    }
-
-    .pipeline-dual-rail::-webkit-scrollbar {
-      height: 4px;
-    }
-    .pipeline-dual-rail::-webkit-scrollbar-thumb {
-      background: var(--border);
-      border-radius: 4px;
-    }
-
-    /* Orchestrator Conductor Card (Option 1) */
-    .orchestrator-conductor-card {
-      min-width: 620px;
+    /* 2. Orchestrator Card */
+    .orchestrator-card {
       width: 100%;
       background: linear-gradient(135deg, rgba(31, 111, 235, 0.08) 0%, rgba(163, 113, 247, 0.06) 100%);
-      border: 1px solid rgba(56, 139, 253, 0.32);
+      border: 1px solid rgba(56, 139, 253, 0.3);
       border-radius: 6px;
       padding: 6px 10px;
       display: flex;
@@ -180,18 +158,17 @@
       gap: 10px;
       cursor: pointer;
       transition: all 0.15s ease-in-out;
-      margin-bottom: 5px;
     }
 
-    .orchestrator-conductor-card:hover {
-      background: linear-gradient(135deg, rgba(31, 111, 235, 0.15) 0%, rgba(163, 113, 247, 0.12) 100%);
+    .orchestrator-card:hover {
+      background: linear-gradient(135deg, rgba(31, 111, 235, 0.14) 0%, rgba(163, 113, 247, 0.11) 100%);
       border-color: var(--blue-border);
     }
 
-    .orchestrator-conductor-card.selected {
+    .orchestrator-card.selected {
       border-color: var(--blue-border);
       box-shadow: 0 0 0 2px var(--blue-border);
-      background: linear-gradient(135deg, rgba(31, 111, 235, 0.20) 0%, rgba(163, 113, 247, 0.15) 100%);
+      background: linear-gradient(135deg, rgba(31, 111, 235, 0.20) 0%, rgba(163, 113, 247, 0.14) 100%);
     }
 
     .orch-left {
@@ -310,30 +287,19 @@
       color: var(--text-muted);
     }
 
-    .orch-select-hint {
-      font-size: 9.5px;
-      color: var(--text-muted);
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      opacity: 0.7;
-    }
-
-    .rail-track {
+    /* 3. 7-Stage Flow Track (Ultra Lean) */
+    .track-container {
       display: flex;
-      align-items: center;
-      gap: 3px;
-      min-width: 620px;
+      flex-direction: column;
+      gap: 4px;
       width: 100%;
     }
 
-    .rail-header-row {
+    .track-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      min-width: 620px;
-      padding: 0 4px 1px 4px;
-    }
-
-    .rail-title {
+      padding: 0 2px;
       font-size: 9px;
       font-family: ui-monospace, SFMono-Regular, monospace;
       font-weight: 700;
@@ -342,22 +308,29 @@
       color: var(--text-muted);
     }
 
-    /* Top Rail: Stage Cards (Lean, Simple, No Icons) */
+    .stages-flow {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
     .stage-card {
       flex: 1 1 0;
-      min-width: 76px;
+      min-width: 80px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 4px 6px;
-      min-height: 42px;
+      padding: 5px 7px;
+      min-height: 48px;
       display: flex;
       flex-direction: column;
       justify-content: center;
       gap: 2px;
       cursor: pointer;
       transition: all 0.15s ease-in-out;
-      position: relative;
     }
 
     .stage-card:hover {
@@ -368,6 +341,29 @@
     .stage-card.selected {
       box-shadow: 0 0 0 2px var(--blue-border);
       border-color: var(--blue-border);
+      background: rgba(56, 139, 253, 0.10);
+    }
+
+    .stage-card.done {
+      border-color: var(--green-border);
+      background: rgba(46, 160, 67, 0.08);
+    }
+    .stage-card.done .stage-name { color: var(--green-text); }
+
+    .stage-card.gate-approved {
+      border-color: var(--amber-border);
+      background: rgba(210, 153, 34, 0.08);
+    }
+    .stage-card.gate-approved .stage-name { color: var(--amber-text); }
+
+    .stage-card.active {
+      border-color: var(--blue-border);
+      background: var(--blue-bg);
+    }
+    .stage-card.active .stage-name { color: var(--blue-text); }
+
+    .stage-card.pending {
+      opacity: 0.65;
     }
 
     .stage-name {
@@ -381,245 +377,38 @@
     }
 
     .stage-metric {
-      font-size: 9.5px;
+      font-size: 9px;
       font-family: ui-monospace, SFMono-Regular, monospace;
       color: var(--text-muted);
       line-height: 1.2;
     }
 
-    /* Directional Arrow Connectors */
-    .stage-connector {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--border);
-      flex-shrink: 0;
-      width: 12px;
-      transition: all 0.2s ease;
-    }
-    .stage-connector.done {
-      color: var(--green-text);
-    }
-    .stage-connector.active {
-      color: var(--blue-text);
-      filter: drop-shadow(0 0 3px var(--blue-border));
-    }
-
-    /* State styles */
-    .stage-card.done {
-      border-color: var(--green-border);
-      background: rgba(46, 160, 67, 0.08);
-    }
-    .stage-card.done .stage-name { color: var(--green-text); }
-    .stage-card.done .stage-metric { color: var(--green-text); opacity: 0.9; }
-
-    .stage-card.gate-approved {
-      border-color: var(--amber-border);
-      background: rgba(210, 153, 34, 0.08);
-    }
-    .stage-card.gate-approved .stage-name { color: var(--amber-text); }
-    .stage-card.gate-approved .stage-metric { color: var(--amber-text); font-weight: 600; }
-
-    .stage-card.active {
-      border-color: var(--blue-border);
-      background: var(--blue-bg);
-      animation: pulse-glow 2s infinite ease-in-out;
-    }
-    .stage-card.active .stage-name { color: var(--blue-text); }
-    .stage-card.active .stage-metric { color: var(--blue-text); font-weight: 600; }
-
-    .stage-card.pending {
-      opacity: 0.65;
-    }
-
-    .stage-card.error {
-      border-color: var(--red-border);
-      background: var(--red-bg);
-    }
-    .stage-card.error .stage-name { color: var(--red-text); }
-    .stage-card.error .stage-metric { color: var(--red-text); font-weight: 600; }
-
-    /* Middle Tether Bridge Track */
-    .tether-track {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      min-width: 620px;
-      width: 100%;
-      height: 8px;
-    }
-
-    .tether-col {
-      flex: 1 1 0;
-      min-width: 76px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-    }
-
-    .tether-line {
-      width: 1px;
-      height: 100%;
-      background: var(--border-muted);
-      transition: background 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .tether-col.done .tether-line {
-      background: var(--green-border);
-    }
-
-    .tether-col.active .tether-line {
-      background: var(--blue-border);
-      box-shadow: 0 0 3px var(--blue-border);
-    }
-
-    .tether-spacer {
-      width: 12px;
-      flex-shrink: 0;
-    }
-
-    /* Bottom Rail: Hook Cards (Deterministic Guardrail Layer) */
-    .hook-card {
-      flex: 1 1 0;
-      min-width: 76px;
-      background: rgba(163, 113, 247, 0.06);
-      border: 1px solid rgba(163, 113, 247, 0.22);
-      border-radius: 6px;
-      padding: 4px 6px;
-      min-height: 38px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      gap: 2px;
-      cursor: pointer;
-      transition: all 0.15s ease-in-out;
-    }
-
-    .hook-card:hover {
-      background: rgba(163, 113, 247, 0.12);
-      border-color: var(--purple-border);
-    }
-
-    .hook-card.selected {
-      box-shadow: 0 0 0 2px var(--purple-border);
-      border-color: var(--purple-text);
-      background: rgba(163, 113, 247, 0.14);
-    }
-
-    .hook-card.done {
-      border-color: rgba(163, 113, 247, 0.4);
-      background: rgba(163, 113, 247, 0.08);
-    }
-
-    .hook-card.gate-approved {
-      border-color: var(--amber-border);
-      background: rgba(210, 153, 34, 0.08);
-    }
-
-    .hook-card.active {
-      border-color: var(--blue-border);
-      background: var(--blue-bg);
-    }
-
-    .hook-card.pending {
-      opacity: 0.65;
-    }
-
-    .hook-name {
-      font-size: 9.5px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-weight: 700;
-      color: var(--purple-text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.2;
-    }
-
-    .hook-desc {
+    .stage-chip {
       font-size: 8.5px;
       font-family: ui-monospace, SFMono-Regular, monospace;
-      color: var(--text-muted);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      line-height: 1.2;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-top: 1px;
     }
+    .stage-chip.chip-green { color: var(--green-text); }
+    .stage-chip.chip-amber { color: var(--amber-text); }
+    .stage-chip.chip-red { color: var(--red-text); font-weight: 700; }
+    .stage-chip.chip-gray { color: var(--text-muted); }
 
-    .hook-connector {
+    .stage-arrow {
+      color: var(--border);
+      flex-shrink: 0;
+      width: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: rgba(163, 113, 247, 0.25);
-      flex-shrink: 0;
-      width: 12px;
-      transition: all 0.2s ease;
     }
-    .hook-connector.done {
-      color: var(--purple-text);
-    }
-    .hook-connector.active {
-      color: var(--blue-text);
-    }
+    .stage-arrow.done { color: var(--green-text); }
+    .stage-arrow.active { color: var(--blue-text); }
 
-    @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 0 6px rgba(56, 139, 253, 0.2); }
-      50% { box-shadow: 0 0 14px rgba(56, 139, 253, 0.45); }
-    }
-
-    /* Section Tabs */
-    .section-tabs {
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid var(--border-muted);
-      margin-bottom: 10px;
-    }
-
-    .tab-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 600;
-      padding: 6px 12px;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s ease;
-    }
-
-    .tab-btn:hover {
-      color: var(--text);
-    }
-
-    .tab-btn.active {
-      color: var(--blue-text);
-      border-bottom-color: var(--blue-text);
-    }
-
-    .badge-count {
-      background: var(--purple-bg);
-      color: var(--purple-text);
-      border: 1px solid var(--purple-border);
-      padding: 0 5px;
-      border-radius: 10px;
-      font-size: 9.5px;
-      font-family: ui-monospace, monospace;
-    }
-
-    /* Content Area */
-    .content-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-height: 0;
-    }
-
-    .panel-box {
+    /* 4. Unified Stage Storyboard & Checkpoints Area */
+    .storyboard-container {
       flex: 1;
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -629,772 +418,725 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      min-height: 0;
     }
 
-    /* Deterministic Governance Cards in Stage Overview */
-    .gov-card {
-      background: var(--bg);
-      border: 1px solid var(--border-muted);
-      border-radius: 6px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: 4px;
-    }
-
-    .gov-header {
+    .story-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       border-bottom: 1px solid var(--border-muted);
-      padding-bottom: 6px;
+      padding-bottom: 8px;
+      flex-wrap: wrap;
     }
 
-    .gov-title {
-      font-size: 10px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-weight: 700;
-      color: var(--purple-text);
-      text-transform: uppercase;
-      letter-spacing: 0.6px;
+    .story-title-row {
       display: flex;
       align-items: center;
-      gap: 6px;
-    }
-
-    .gov-cost {
-      font-size: 9.5px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
-      font-weight: 600;
-      color: var(--green-text);
-      background: rgba(46, 160, 67, 0.12);
-      border: 1px solid rgba(46, 160, 67, 0.35);
-      padding: 1px 6px;
-      border-radius: 4px;
-    }
-
-    .gov-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 8px;
     }
 
-    .gov-pill {
+    .story-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .story-badge {
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: var(--green-bg);
+      color: var(--green-text);
+      border: 1px solid var(--green-border);
+    }
+
+    .story-desc {
+      font-size: 11.5px;
+      color: #c9d1d9;
+      line-height: 1.45;
+    }
+
+    /* Injected Intelligence Banner (Collapsible) */
+    .intel-banner {
+      background: #0d1117;
+      border: 1px solid rgba(163, 113, 247, 0.35);
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .intel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .intel-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--purple-text);
+    }
+
+    .intel-toggle {
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: var(--purple-text);
+    }
+
+    .intel-details {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-muted);
+      font-size: 10.5px;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .intel-box-item {
       background: var(--card-bg);
       border: 1px solid var(--border-muted);
-      border-radius: 6px;
-      padding: 7px 9px;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
+      border-radius: 4px;
+      padding: 6px 8px;
+      line-height: 1.4;
+      color: #c9d1d9;
     }
 
-    .gov-label {
-      font-size: 9px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
+    /* Checkpoints Header & List */
+    .checkpoints-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-
-    .gov-val {
-      font-size: 11px;
-      font-family: ui-monospace, SFMono-Regular, monospace;
       font-weight: 700;
-      line-height: 1.25;
+      letter-spacing: 0.5px;
+      padding-top: 4px;
     }
 
-    .gov-desc {
-      font-size: 10px;
-      color: #8b949e;
-      line-height: 1.35;
-      margin-top: 1px;
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
-    /* Hook Events Stream */
-    .hook-event-list {
+    .flt-btn {
+      background: transparent;
+      border: 1px solid var(--border-muted);
+      color: var(--text-muted);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 9.5px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+    .flt-btn.active {
+      background: rgba(56, 139, 253, 0.15);
+      color: var(--blue-text);
+      border-color: var(--blue-border);
+      font-weight: 700;
+    }
+
+    .checkpoint-list {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      overflow-y: auto;
     }
 
-    .hook-event-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      background: var(--bg);
+    .checkpoint-item {
+      background: #0d1117;
       border: 1px solid var(--border-muted);
       border-radius: 6px;
-      padding: 7px 9px;
-      font-size: 11px;
-    }
-
-    .hook-decision-icon {
-      font-size: 12px;
-      flex-shrink: 0;
-      margin-top: 1px;
-    }
-    .hook-decision-icon.allow { color: var(--green-text); }
-    .hook-decision-icon.deny { color: var(--red-text); }
-
-    .hook-event-body {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .hook-event-top {
+      padding: 7px 10px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2px;
+      flex-direction: column;
+      gap: 4px;
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+    .checkpoint-item:hover {
+      border-color: var(--border);
+    }
+    .checkpoint-item.deny-item {
+      border-color: rgba(248, 81, 73, 0.35);
+      background: rgba(248, 81, 73, 0.05);
+    }
+    .checkpoint-item.deny-item:hover {
+      border-color: var(--red-border);
     }
 
-    .hook-name {
-      font-weight: 600;
-      font-family: ui-monospace, monospace;
-      color: var(--purple-text);
-      font-size: 10.5px;
-    }
-
-    .hook-time {
-      font-size: 9.5px;
-      color: var(--text-muted);
-      font-family: ui-monospace, monospace;
-    }
-
-    .hook-action-desc {
-      color: #c9d1d9;
-      font-size: 11px;
-      line-height: 1.4;
-      word-break: break-word;
-    }
-
-    .hook-action-desc code {
-      background: rgba(110, 118, 129, 0.15);
-      padding: 1px 4px;
-      border-radius: 4px;
-      color: var(--blue-text);
-      font-size: 10px;
-      font-family: ui-monospace, monospace;
-    }
-
-    /* Pull Request Banner */
-    .pr-banner-box {
-      background: rgba(46, 160, 67, 0.12);
-      border: 1px solid var(--green-border);
-      border-radius: 6px;
-      padding: 8px 12px;
+    .checkpoint-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-top: 6px;
+    }
+
+    .checkpoint-title-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .checkpoint-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .checkpoint-icon.allow {
+      background: rgba(46, 160, 67, 0.15);
+      color: var(--green-text);
+      border: 1px solid var(--green-border);
+    }
+    .checkpoint-icon.deny {
+      background: rgba(248, 81, 73, 0.20);
+      color: var(--red-text);
+      border: 1px solid var(--red-border);
+    }
+
+    .checkpoint-hook-tag {
+      font-size: 9.5px;
+      font-family: ui-monospace, monospace;
+      color: var(--purple-text);
+      font-weight: 600;
+    }
+
+    .checkpoint-time {
+      font-size: 9.5px;
+      font-family: ui-monospace, monospace;
+      color: var(--text-muted);
+    }
+
+    .checkpoint-desc {
+      font-size: 11px;
+      color: #c9d1d9;
+      padding-left: 22px;
+      line-height: 1.35;
+    }
+
+    .checkpoint-detail-row {
+      display: none;
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid var(--border-muted);
+      padding-left: 22px;
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: var(--purple-text);
+      line-height: 1.4;
     }
   </style>
 </head>
 <body>
 
-  <!-- Header Bar -->
+  <!-- 1. Header Bar -->
   <div class="header-bar">
     <div class="title-group">
       <span class="status-dot"></span>
-      <span class="pipeline-title">PRSquad</span>
-      <span class="issue-tag" id="issue-tag">Issue</span>
+      <span class="pipeline-title">PRsquad</span>
+      <span class="issue-tag" id="issue-tag">Issue #22</span>
       <a href="#" target="_blank" class="pr-link-badge" id="header-pr-link" style="display:none;">
         🔗 PR Open
       </a>
     </div>
     <div class="meta-metrics">
-      <span class="credit-meter" id="total-credits">⚡ 94.20 AIU</span>
-      <span id="turns-metric">48 turns</span>
-      <span id="duration-metric">279s</span>
+      <span class="credit-meter" id="total-credits">⚡ 0.00 AIU</span>
+      <span id="turns-metric">0 turns</span>
+      <span id="duration-metric">0s</span>
       <button class="refresh-btn" onclick="poll()" title="Refresh status">↻ Refresh</button>
     </div>
   </div>
 
-  <!-- Dual-Rail Pipeline: Option 1 (Overarching Conductor Card + Dual-Rail Specialists) -->
-  <div class="pipeline-dual-rail" id="pipeline-nodes">
-    
-    <!-- Overarching Conductor Card (Option 1) -->
-    <div class="orchestrator-conductor-card" id="orchestrator-card" onclick="selectOrchestrator()" title="Click to view @prsquad Orchestrator & Supervisor details">
-      <div class="orch-left">
-        <div class="orch-avatar">🎮</div>
-        <div class="orch-info">
-          <div class="orch-top-row">
-            <span class="orch-handle">@prsquad</span>
-            <span class="orch-badge">PIPELINE CONDUCTOR</span>
-            <span class="orch-status-pill paused" id="orch-status-pill">● PAUSED AT SCOPE GATE</span>
-          </div>
-          <div class="orch-routing-desc" id="orch-routing-desc">
-            Awaiting maintainer /approve in chat before dispatching @prsquad-dev
-          </div>
+  <!-- 2. Orchestrator Card (Supervisor Layer) -->
+  <div class="orchestrator-card" id="orchestrator-card" onclick="selectOrchestrator()" title="Click to view @prsquad Orchestrator & Supervisor details">
+    <div class="orch-left">
+      <div class="orch-avatar">🎮</div>
+      <div class="orch-info">
+        <div class="orch-top-row">
+          <span class="orch-handle">@prsquad</span>
+          <span class="orch-badge">PIPELINE ORCHESTRATOR</span>
+          <span class="orch-status-pill active" id="orch-status-pill">● ACTIVE ORCHESTRATOR</span>
+        </div>
+        <div class="orch-routing-desc" id="orch-routing-desc">
+          Supervising 7-stage gated pipeline & dynamic specialist delegation
         </div>
       </div>
-      <div class="orch-right">
-        <div class="orch-metrics">
-          <span class="orch-credits-val" id="orch-credits">🎮 10.88 AIU</span>
-          <span class="orch-turns-sub" id="orch-turns-sub">2 turns (56.1%)</span>
-        </div>
-        <span class="orch-select-hint">Supervisor Details ➔</span>
+    </div>
+    <div class="orch-right">
+      <div class="orch-metrics">
+        <span class="orch-credits-val" id="orch-credits">🎮 0.00 AIU</span>
+        <span class="orch-turns-sub" id="orch-turns-sub">0 turns (0%)</span>
       </div>
     </div>
+  </div>
 
-    <!-- Track 1 Header -->
-    <div class="rail-header-row">
-      <span class="rail-title">Specialist Agent Track</span>
-      <span class="rail-title" style="color:var(--blue-text);" id="specialists-credits-header">Specialists: 8.53 AIU</span>
+  <!-- 3. Specialist Track (Single Ultra-Lean Flow) -->
+  <div class="track-container">
+    <div class="track-header">
+      <span>Specialist Execution Track</span>
+      <span style="color:var(--blue-text);" id="specialists-credits-header">Specialists: 0.00 AIU</span>
     </div>
 
-    <!-- Track 1: Agent Pipeline -->
-    <div class="rail-track" id="agent-track">
-      <!-- Triage -->
-      <div class="stage-card done" id="stage-0" onclick="selectStage(0)" title="Issue Triage">
+    <div class="stages-flow" id="stages-flow">
+      <!-- Stage 0: Triage -->
+      <div class="stage-card" id="stage-0" onclick="selectStage(0)" title="Issue Intake">
         <div class="stage-name">Triage</div>
-        <div class="stage-metric" id="metric-0">1.31 AIU</div>
+        <div class="stage-metric" id="metric-0">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-0">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-0">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-0">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- Architect -->
-      <div class="stage-card done" id="stage-1" onclick="selectStage(1)" title="Architect Plan">
+      <!-- Stage 1: Architect -->
+      <div class="stage-card" id="stage-1" onclick="selectStage(1)" title="Architecture Plan">
         <div class="stage-name">Architect</div>
-        <div class="stage-metric" id="metric-1">6.63 AIU</div>
+        <div class="stage-metric" id="metric-1">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-1">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-1">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-1">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- Scope Gate -->
-      <div class="stage-card gate-approved" id="stage-2" onclick="selectStage(2)" title="Scope Approval Gate">
+      <!-- Stage 2: Scope Gate -->
+      <div class="stage-card" id="stage-2" onclick="selectStage(2)" title="Scope Approval Gate">
         <div class="stage-name">Scope Gate</div>
-        <div class="stage-metric" id="metric-2">APPROVED</div>
+        <div class="stage-metric" id="metric-2">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-2">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-2">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-2">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- Developer -->
-      <div class="stage-card done" id="stage-3" onclick="selectStage(3)" title="Developer Implementation">
+      <!-- Stage 3: Developer -->
+      <div class="stage-card" id="stage-3" onclick="selectStage(3)" title="Developer Implementation">
         <div class="stage-name">Developer</div>
-        <div class="stage-metric" id="metric-3">88.54 AIU</div>
+        <div class="stage-metric" id="metric-3">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-3">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-3">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-3">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- QA -->
-      <div class="stage-card done" id="stage-4" onclick="selectStage(4)" title="QA Verification">
+      <!-- Stage 4: QA -->
+      <div class="stage-card" id="stage-4" onclick="selectStage(4)" title="QA Verification">
         <div class="stage-name">QA</div>
-        <div class="stage-metric" id="metric-4">22.64 AIU</div>
+        <div class="stage-metric" id="metric-4">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-4">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-4">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-4">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- Code Review -->
-      <div class="stage-card done" id="stage-5" onclick="selectStage(5)" title="Security & Code Review">
-        <div class="stage-name">Code Review</div>
-        <div class="stage-metric" id="metric-5">8.80 AIU</div>
+      <!-- Stage 5: Reviewer -->
+      <div class="stage-card" id="stage-5" onclick="selectStage(5)" title="Security & Code Review">
+        <div class="stage-name">Reviewer</div>
+        <div class="stage-metric" id="metric-5">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-5">● Queued</div>
       </div>
 
-      <div class="stage-connector done" id="arrow-5">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      <div class="stage-arrow" id="arrow-5">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
       </div>
 
-      <!-- PR -->
-      <div class="stage-card gate-approved selected" id="stage-6" onclick="selectStage(6)" title="Pull Request">
+      <!-- Stage 6: PR -->
+      <div class="stage-card" id="stage-6" onclick="selectStage(6)" title="Pull Request">
         <div class="stage-name">PR</div>
-        <div class="stage-metric" id="metric-6">PR Open</div>
+        <div class="stage-metric" id="metric-6">0.00 AIU</div>
+        <div class="stage-chip chip-gray" id="chip-6">● Queued</div>
       </div>
     </div>
-
-    <!-- Middle Tether Bridges -->
-    <div class="tether-track">
-      <div class="tether-col done" id="tether-0"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done" id="tether-1"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done" id="tether-2"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done" id="tether-3"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done" id="tether-4"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done" id="tether-5"><span class="tether-line"></span></div>
-      <div class="tether-spacer"></div>
-      <div class="tether-col done active" id="tether-6"><span class="tether-line"></span></div>
-    </div>
-
-    <!-- Track 2 Header -->
-    <div class="rail-header-row">
-      <span class="rail-title" style="color:var(--purple-text);">Deterministic Hook Track</span>
-      <span class="rail-title" style="color:var(--green-text);">0.00 AIU Governance</span>
-    </div>
-
-    <!-- Track 2: Deterministic Hooks -->
-    <div class="rail-track" id="hook-track">
-      <!-- Hook 0 -->
-      <div class="hook-card done" id="hook-card-0" onclick="selectStage(0)" title="hook-intake-ingest: Fast-reject closed/invalid issues">
-        <div class="hook-name">hook-intake</div>
-        <div class="hook-desc">Fast-Reject</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-0">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 1 -->
-      <div class="hook-card done" id="hook-card-1" onclick="selectStage(1)" title="makeScopedReadTool: Read-boundary isolation">
-        <div class="hook-name">scopedRead</div>
-        <div class="hook-desc">Read Boundary</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-1">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 2 -->
-      <div class="hook-card done" id="hook-card-2" onclick="selectStage(2)" title="hook-verify-gate: Cryptographic approval.lock verification">
-        <div class="hook-name">verify-gate</div>
-        <div class="hook-desc">SHA256 Lock</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-2">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 3 -->
-      <div class="hook-card done" id="hook-card-3" onclick="selectStage(3)" title="hook-enforce-scope: Write-barrier containment & smart nudge">
-        <div class="hook-name">enforce-scope</div>
-        <div class="hook-desc">Write Barrier</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-3">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 4 -->
-      <div class="hook-card done" id="hook-card-4" onclick="selectStage(4)" title="hook-sandbox-bash: Test runner isolation">
-        <div class="hook-name">sandbox-bash</div>
-        <div class="hook-desc">Cmd Sandbox</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-4">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 5 -->
-      <div class="hook-card done" id="hook-card-5" onclick="selectStage(5)" title="ast-symbol-sweep: Read-only inspection & AST sweep">
-        <div class="hook-name">ast-sweep</div>
-        <div class="hook-desc">Symbol Audit</div>
-      </div>
-
-      <div class="hook-connector done" id="hook-arrow-5">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
-
-      <!-- Hook 6 -->
-      <div class="hook-card done selected" id="hook-card-6" onclick="selectStage(6)" title="prCreator: Bounded PR creation with disabled auto-merge">
-        <div class="hook-name">prCreator</div>
-        <div class="hook-desc">Human Gate</div>
-      </div>
-    </div>
-
   </div>
 
-  <!-- Section Tabs: Stage Overview vs Live Guardrail Hook Feed -->
-  <div class="section-tabs">
-    <button class="tab-btn active" id="tab-btn-details" onclick="switchView('details')">
-      Stage Overview
-    </button>
-    <button class="tab-btn" id="tab-btn-hooks" onclick="switchView('hooks')">
-      Live Audit Feed <span class="badge-count" id="hook-count-badge">0</span>
-    </button>
-  </div>
-
-  <!-- Content Area -->
-  <div class="content-area">
-    <!-- View 1: Stage Details & Deterministic Governance Policy -->
-    <div class="panel-box" id="view-details">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--text-muted); font-weight:600;" id="detail-title">
-          Pull Request
-        </span>
-        <span id="detail-badge" style="font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600; font-family:ui-monospace; background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);">
-          PR OPEN · AWAITING REVIEW
-        </span>
+  <!-- 4. Unified Stage Storyboard & Checkpoints Area -->
+  <div class="storyboard-container" id="storyboard-container">
+    
+    <!-- Stage Header -->
+    <div class="story-header">
+      <div class="story-title-row">
+        <span class="story-title" id="story-title">Stage Details</span>
+        <span class="story-badge" id="story-badge">READY</span>
       </div>
-      <div style="font-size:12px; line-height:1.45; color:#c9d1d9;" id="detail-content">
-        Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.
-      </div>
-
-      <div class="pr-banner-box" id="pr-banner" style="display:none;">
-        <div style="font-size:11.5px; color:var(--green-text); font-weight:600;">
-          Pull Request is open and awaiting human review
-        </div>
-        <a href="https://github.com/vamsicherukuri/gated-fix-pipeline/pull/23" target="_blank" id="pr-banner-link" class="pr-link-badge">
-          View Pull Request on GitHub
-        </a>
-      </div>
-
-      <!-- Dedicated Deterministic Governance Section -->
-      <div id="detail-gov">
-        <!-- Rendered dynamically by renderDetail(index) -->
+      <div class="filter-group">
+        <button class="flt-btn active" id="flt-all" onclick="setFilter('all')">All Checkpoints</button>
+        <button class="flt-btn" id="flt-blocks" onclick="setFilter('blocks')">⛔ Blocked Only</button>
       </div>
     </div>
 
-    <!-- View 2: Live Hook Events Stream -->
-    <div class="panel-box" id="view-hooks" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:11px; font-family:ui-monospace, monospace; text-transform:uppercase; color:var(--purple-text); font-weight:600;">
-          🛡️ Deterministic Hook Invocations (audit.jsonl)
+    <!-- Summary -->
+    <div class="story-desc" id="story-desc">
+      Select a stage above to inspect its execution journey and deterministic guardrail checkpoints.
+    </div>
+
+    <!-- Injected Intelligence Box (Collapsible) -->
+    <div class="intel-banner" id="intel-banner" style="display:none;">
+      <div class="intel-header" onclick="toggleIntel()">
+        <span class="intel-title">
+          <span>💡</span>
+          <span id="intel-title-text">Injected Repository Intelligence</span>
         </span>
-        <span style="font-size:10.5px; color:var(--text-muted); font-family:ui-monospace;">Zero-bypass runtime barriers</span>
+        <span class="intel-toggle" id="intel-toggle-text">View Injected Slices ▾</span>
       </div>
-      <div class="hook-event-list" id="hook-events-container">
-        <!-- Populated dynamically from /api/audit -->
+      <div class="intel-details" id="intel-details">
+        <div class="intel-box-item" id="intel-skill-content"></div>
+        <div class="intel-box-item" id="intel-instruction-content"></div>
       </div>
     </div>
+
+    <!-- Checkpoints Feed -->
+    <div class="checkpoints-header">
+      <span>Deterministic Guardrail Checkpoints</span>
+      <span id="checkpoint-count-text">0 checks</span>
+    </div>
+
+    <div class="checkpoint-list" id="checkpoint-list">
+      <!-- Rendered dynamically -->
+    </div>
+
   </div>
 
   <script>
-    let currentSelected = 6;
+    let currentSelectedStage = 3; // Default Developer
     let userHasManuallySelected = false;
-    let activeTab = 'details';
+    let activeFilter = 'all';
     let cachedAudit = [];
+    let latestDashboardData = null;
+    let lastRenderedHash = '';
 
-    const stageMeta = [
-      {
-        title: "Issue Triage",
-        badge: "READY",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Validates issue completeness, reproducibility, and acceptance criteria before engaging model planning.",
-        gov: {
-          hookName: "hook-intake-ingest.mjs (@prsquad-triage)",
-          hookDesc: "Autonomous gatekeeper validating issue status against GitHub API before invoking any LLM.",
-          triggerName: "preToolUse: fetch_issue",
-          triggerDesc: "Intercepts the initial issue fetch before reasoning tokens are spent.",
-          policyName: "Fast-Fail Inactive / Closed Issues",
-          policyDesc: "Aborts closed, duplicate, or non-bug issues in <2s with 0 tokens spent.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
+    const stageIntelligenceDefaults = {
+      0: null,
+      1: {
+        tokens: 487,
+        skill: "#### 💡 Skill: pr-governance (.prsquad/skills/pr-governance/SKILL.md)\n• Enforce branch naming regex: ^[a-zA-Z0-9/_.-]+$\n• Reject shell command metacharacters (; | & $ ` \\n)",
+        instruction: "## Architectural Boundaries & Pipeline Structure\n• 7-Stage linear workflow: Triage -> Architect -> Scope Gate -> Developer -> QA -> Reviewer -> PR."
       },
-      {
-        title: "Architect Plan",
-        badge: "PLAN_READY",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Diagnoses root cause using read-scoped tools and produces surgical modification boundaries with blast-radius containment.",
-        gov: {
-          hookName: "makeScopedReadTool (@prsquad-architect)",
-          hookDesc: "Filesystem isolation jail restricting file reads strictly to relevant symbol scope.",
-          triggerName: "toolWrap: read_file",
-          triggerDesc: "Wraps file reader to inspect target paths before disk access occurs.",
-          policyName: "Strict Read-Boundary Isolation",
-          policyDesc: "Blocks full repository scanning; prevents context blowout and token drain.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
+      2: null,
+      3: {
+        tokens: 485,
+        skill: "#### 💡 Skill: pr-governance (.prsquad/skills/pr-governance/SKILL.md)\n• Strict alphanumeric allowlist on branch names: ^[a-zA-Z0-9/_.-]+$\n• Prohibit direct commits or pushes to main/master.",
+        instruction: "## TypeScript Coding Standards & Conventions\n• Strict ESM imports (.js specifiers), zero unhandled any casts.\n• Parameterized child_process calls; never interpolate raw input into subshells."
       },
-      {
-        title: "Scope Approval Gate",
-        badge: "APPROVED",
-        badgeStyle: "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);",
-        content: "Human-in-the-loop review barrier. Developer execution remains blocked until PM confirms proposed boundaries in chat.",
-        gov: {
-          hookName: "hook-verify-gate.mjs",
-          hookDesc: "Cryptographic lock verifier enforcing physical human consent before developer invocation.",
-          triggerName: "preAgent: developer",
-          triggerDesc: "Intercepts agent lifecycle before Developer agent process is spawned.",
-          policyName: "Cryptographic Scope Verification",
-          policyDesc: "Hard-stops execution until maintainer signs approval.lock in chat.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
+      4: {
+        tokens: 454,
+        skill: "#### 💡 Skill: pr-governance (.prsquad/skills/pr-governance/SKILL.md)\n• Branch naming sanitization assertions and sandbox test coverage.",
+        instruction: "## Testing & QA Standards\n• Test Runner: Execute verification suites using npm run test:guardrails.\n• Comprehensive regression assertions for accept and reject cases."
       },
-      {
-        title: "Developer Implementation",
-        badge: "IMPLEMENTED",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Developer applies code fix strictly within approved boundary files. Guardrail write barrier and command sandbox active.",
-        gov: {
-          hookName: "hook-enforce-scope.mjs (@prsquad-dev)",
-          hookDesc: "Runtime write barrier and destructive command filter protecting repository integrity.",
-          triggerName: "preToolUse: edit / bash",
-          triggerDesc: "Evaluates every edit path and shell command before execution on disk.",
-          policyName: "Scope Containment & Command Sandbox",
-          policyDesc: "Hard-blocks edits outside approved files with smart nudges; denies branch deletions.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
+      5: {
+        tokens: 136,
+        skill: "#### 💡 Skill: Read-Only Inspection\n• Operates strictly in read-only diff inspection mode.",
+        instruction: "## Security Review & Policy Compliance\n• Zero Shell Injection: Enforce strict alphanumeric allowlists.\n• OWASP Compliance: Verify directory traversal protection (../)."
       },
-      {
-        title: "QA Verification",
-        badge: "PASS",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Fresh independent QA agent runs regression test suites and verifies acceptance criteria in an isolated sandbox.",
-        gov: {
-          hookName: "hook-sandbox-bash.mjs (@prsquad-qa)",
-          hookDesc: "Test-execution sandbox isolating test runners from repository state mutations.",
-          triggerName: "preToolUse: bash (Sandbox)",
-          triggerDesc: "Filters terminal commands in real time during test execution.",
-          policyName: "Test Runner Execution Jail",
-          policyDesc: "Allows test runners (npm test, tsx); strictly denies git push, commit, or file tampering.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
-      },
-      {
-        title: "Security & Code Review",
-        badge: "CLEAR",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Read-only security agent inspects git changes for regressions, leaked secrets, and API contract stability.",
-        gov: {
-          hookName: "ast-symbol-sweep.ts (@prsquad-review)",
-          hookDesc: "AST syntax parser and read-only inspection jail checking API contract stability.",
-          triggerName: "preAgent: review / preToolUse: bash",
-          triggerDesc: "Inspects TypeScript AST and diff output before approving PR creation.",
-          policyName: "AST Symbol Audit & Read-Only Diff",
-          policyDesc: "Denies output redirects ('>'); guarantees zero unintended public symbol drift.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
-      },
-      {
-        title: "Pull Request",
-        badge: "PR OPEN · AWAITING REVIEW",
-        badgeStyle: "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);",
-        content: "Pull Request is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.",
-        gov: {
-          hookName: "prCreator.ts",
-          hookDesc: "Deterministic PR governor enforcing enterprise review policies.",
-          triggerName: "gate: postToolUse (PR)",
-          triggerDesc: "Validates QA and Reviewer audit clearance before creating GitHub pull request.",
-          policyName: "Human Review Required (Auto-Merge Disabled)",
-          policyDesc: "Pipeline stops at PR creation; auto-merge is physically disabled and merging is strictly reserved for human maintainers.",
-          cost: "0.00 AIU · Zero Token Overhead"
-        }
-      }
-    ];
-
-    let latestDashboardData = {
-      issueNumber: 22,
-      issueTitle: "PrCreator fails to sanitize release branch names containing special shell characters",
-      activeBranch: "fix/issue-22",
-      telemetry: {
-        actualAiCredits: 19.41,
-        controllerCredits: 10.88,
-        controllerTurns: 2,
-        turns: 8,
-        cacheHitRatePercent: 59.5,
-        durationSeconds: 36.6
-      },
-      phases: {
-        intake: { credits: 1.33, status: "READY" },
-        architect: { credits: 7.20, status: "PLAN_READY" },
-        scopeGate: { status: "AWAITING" }
-      }
+      6: null
     };
+
+    function toggleIntel() {
+      const details = document.getElementById('intel-details');
+      const text = document.getElementById('intel-toggle-text');
+      if (details.style.display === 'flex') {
+        details.style.display = 'none';
+        text.textContent = 'View Injected Slices ▾';
+      } else {
+        details.style.display = 'flex';
+        text.textContent = 'Hide Injected Slices ▴';
+      }
+    }
+
+    function toggleRow(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    function setFilter(flt) {
+      activeFilter = flt;
+      document.getElementById('flt-all').className = 'flt-btn' + (flt === 'all' ? ' active' : '');
+      document.getElementById('flt-blocks').className = 'flt-btn' + (flt === 'blocks' ? ' active' : '');
+      renderCheckpoints();
+    }
 
     function selectOrchestrator(manual = true) {
       if (manual) userHasManuallySelected = true;
-      currentSelected = 'orchestrator';
+      currentSelectedStage = 'orchestrator';
 
-      // Remove selected/active states from specialist stages & hooks
       for (let i = 0; i < 7; i++) {
-        const stageEl = document.getElementById('stage-' + i);
-        if (stageEl) stageEl.classList.remove('selected');
-        const hookEl = document.getElementById('hook-card-' + i);
-        if (hookEl) hookEl.classList.remove('selected');
-        const tetherEl = document.getElementById('tether-' + i);
-        if (tetherEl) tetherEl.classList.remove('active');
+        const s = document.getElementById('stage-' + i);
+        if (s) s.classList.remove('selected');
       }
 
-      const orchCard = document.getElementById('orchestrator-card');
-      if (orchCard) orchCard.classList.add('selected');
+      const orch = document.getElementById('orchestrator-card');
+      if (orch) orch.classList.add('selected');
 
-      renderDetail('orchestrator');
+      renderOrchestratorStory();
     }
 
     function selectStage(index, manual = true) {
       if (manual) userHasManuallySelected = true;
-      currentSelected = index;
+      currentSelectedStage = index;
 
-      const orchCard = document.getElementById('orchestrator-card');
-      if (orchCard) orchCard.classList.remove('selected');
+      const orch = document.getElementById('orchestrator-card');
+      if (orch) orch.classList.remove('selected');
 
       for (let i = 0; i < 7; i++) {
-        const stageEl = document.getElementById('stage-' + i);
-        if (stageEl) {
-          if (i === index) stageEl.classList.add('selected');
-          else stageEl.classList.remove('selected');
-        }
-        const hookEl = document.getElementById('hook-card-' + i);
-        if (hookEl) {
-          if (i === index) hookEl.classList.add('selected');
-          else hookEl.classList.remove('selected');
-        }
-        const tetherEl = document.getElementById('tether-' + i);
-        if (tetherEl) {
-          if (i === index) tetherEl.classList.add('active');
-          else tetherEl.classList.remove('active');
+        const s = document.getElementById('stage-' + i);
+        if (s) {
+          if (i === index) s.classList.add('selected');
+          else s.classList.remove('selected');
         }
       }
-      renderDetail(index);
+
+      renderStageStory();
     }
 
-    function renderDetail(index) {
-      if (index === 'orchestrator') {
-        renderOrchestratorDetail();
-        return;
-      }
-      const d = stageMeta[index];
-      if (!d) return;
-      document.getElementById('detail-title').textContent = d.title;
-      const bEl = document.getElementById('detail-badge');
-      bEl.textContent = d.badge;
-      bEl.style.cssText = d.badgeStyle;
-      document.getElementById('detail-content').innerHTML = d.content;
-
-      const govEl = document.getElementById('detail-gov');
-      if (govEl && d.gov) {
-        govEl.innerHTML = `
-          <div class="gov-card">
-            <div class="gov-header">
-              <span class="gov-title">Deterministic Governance Policy</span>
-              <span class="gov-cost">${d.gov.cost}</span>
-            </div>
-            <div class="gov-grid">
-              <div class="gov-pill">
-                <div class="gov-label">Active Hook</div>
-                <div class="gov-val" style="color:var(--purple-text);">${d.gov.hookName}</div>
-                <div class="gov-desc">${d.gov.hookDesc}</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Trigger Point</div>
-                <div class="gov-val" style="color:var(--blue-text);">${d.gov.triggerName}</div>
-                <div class="gov-desc">${d.gov.triggerDesc}</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Policy Enforced</div>
-                <div class="gov-val" style="color:var(--amber-text);">${d.gov.policyName}</div>
-                <div class="gov-desc">${d.gov.policyDesc}</div>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-    }
-
-    function renderOrchestratorDetail() {
+    function renderOrchestratorStory() {
       const data = latestDashboardData || {};
       const t = data.telemetry || {};
-      const total = t.actualAiCredits || 19.41;
-      const ctrlCredits = t.controllerCredits || 10.88;
-      const ctrlTurns = t.controllerTurns || 2;
+      const total = t.actualAiCredits || 0;
+      const ctrlCredits = t.controllerCredits || 0;
+      const ctrlTurns = t.controllerTurns || 0;
       const specCredits = Math.max(0, total - ctrlCredits);
-      const specTurns = Math.max(0, (t.turns || 8) - ctrlTurns);
-      const cacheHit = t.cacheHitRatePercent || 59.5;
-      const issueNum = data.issueNumber || 22;
-      const issueTitle = data.issueTitle || 'PrCreator fails to sanitize release branch names containing special shell characters';
+      const specTurns = Math.max(0, (t.turns || 0) - ctrlTurns);
 
-      const p = data.phases || {};
-      const archStatus = p.architect?.status || '';
-      const sgStatus = p.scopeGate?.status || '';
-      const mg = p.mergeGate || {};
-      const prUrl = mg.details?.prUrl || '';
-      const isPrOpen = ['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) && !!prUrl;
+      document.getElementById('story-title').textContent = 'Pipeline Orchestrator (@prsquad)';
+      const badge = document.getElementById('story-badge');
+      badge.textContent = 'SUPERVISOR';
+      badge.style.cssText = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
 
-      let badgeText = 'ACTIVE SUPERVISOR';
-      let badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
-      let statusDesc = 'Supervising active execution across autonomous specialists.';
-
-      if (isPrOpen) {
-        badgeText = 'PIPELINE COMPLETE';
-        badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        statusDesc = 'All 7 stages successfully completed. Pull Request is open on GitHub.';
-      } else if (sgStatus !== 'APPROVED' && ['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
-        badgeText = 'PAUSED AT SCOPE GATE';
-        badgeStyle = 'background:rgba(210,153,34,0.15); color:var(--amber-text); border:1px solid var(--amber-border);';
-        statusDesc = 'The Orchestrator has paused autonomous execution after receiving the technical plan from @prsquad-architect. It is awaiting human approval in chat (/approve) before authorizing @prsquad-dev.';
-      }
-
-      document.getElementById('detail-title').textContent = 'Pipeline Conductor (@prsquad)';
-      const bEl = document.getElementById('detail-badge');
-      bEl.textContent = badgeText;
-      bEl.style.cssText = badgeStyle;
-      document.getElementById('detail-content').innerHTML = `
-        <strong>Issue #${issueNum}:</strong> ${issueTitle}<br/>
-        ${statusDesc}
+      document.getElementById('story-desc').innerHTML = `
+        <strong>Supervising Autonomous Workflow:</strong> The orchestrator dynamically routes tasks between specialists (@prsquad-triage, @prsquad-architect, @prsquad-dev, @prsquad-qa, @prsquad-review), enforces bounded repair loops (0/3), and halts at the human Scope Gate.
+        <br/><br/>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:6px; margin-top:4px;">
+          <div style="background:#0d1117; padding:6px 8px; border-radius:4px; border:1px solid var(--border-muted);">
+            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Orchestrator Burn</div>
+            <div style="font-size:11px; font-weight:700; color:var(--blue-text);">${ctrlCredits.toFixed(2)} AIU (${ctrlTurns} turns)</div>
+          </div>
+          <div style="background:#0d1117; padding:6px 8px; border-radius:4px; border:1px solid var(--border-muted);">
+            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Specialists Burn</div>
+            <div style="font-size:11px; font-weight:700; color:var(--green-text);">${specCredits.toFixed(2)} AIU (${specTurns} turns)</div>
+          </div>
+          <div style="background:#0d1117; padding:6px 8px; border-radius:4px; border:1px solid var(--border-muted);">
+            <div style="font-size:9px; color:var(--text-muted); text-transform:uppercase;">Cache Hit Rate</div>
+            <div style="font-size:11px; font-weight:700; color:var(--amber-text);">${(t.cacheHitRatePercent || 0).toFixed(1)}%</div>
+          </div>
+        </div>
       `;
 
-      const govEl = document.getElementById('detail-gov');
-      if (govEl) {
-        govEl.innerHTML = `
-          <div class="gov-card">
-            <div class="gov-header">
-              <span class="gov-title">Orchestrator Resource Breakdown & Telemetry</span>
-              <span class="gov-cost">Total Session: ${total.toFixed(2)} AIU</span>
+      document.getElementById('intel-banner').style.display = 'none';
+
+      // Orchestrator Checkpoints
+      const container = document.getElementById('checkpoint-list');
+      container.innerHTML = `
+        <div class="checkpoint-item" onclick="toggleRow('orch-row-1')">
+          <div class="checkpoint-top">
+            <div class="checkpoint-title-group">
+              <span class="checkpoint-icon allow">✓</span>
+              <span>Dynamic Delegation & Bounded Loop Guard</span>
+              <span class="checkpoint-hook-tag">(supervisor-loop-guard)</span>
             </div>
-            <div class="gov-grid">
-              <div class="gov-pill">
-                <div class="gov-label">Orchestrator Burn</div>
-                <div class="gov-val" style="color:var(--blue-text);">${ctrlCredits.toFixed(2)} AIU (${ctrlTurns} turns)</div>
-                <div class="gov-desc">Supervision, dynamic specialist dispatch & approval gate mediation</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Autonomous Specialists</div>
-                <div class="gov-val" style="color:var(--green-text);">${specCredits.toFixed(2)} AIU (${specTurns} turns)</div>
-                <div class="gov-desc">Intake, Architect, Developer, QA, Reviewer subagents</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Bounded Loop Guard</div>
-                <div class="gov-val" style="color:var(--purple-text);">0 / 3 Repair Loops</div>
-                <div class="gov-desc">Hard ceiling prevents infinite ping-pong between Dev and QA</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Prompt Cache Hit Rate</div>
-                <div class="gov-val" style="color:var(--amber-text);">${cacheHit.toFixed(1)}% Cached</div>
-                <div class="gov-desc">Reuses static prompt context across multi-agent turns</div>
-              </div>
-            </div>
+            <span class="checkpoint-time">ACTIVE</span>
           </div>
-          <div class="gov-card">
-            <div class="gov-header">
-              <span class="gov-title">Deterministic Governance Policy</span>
-              <span class="gov-cost">0.00 AIU · Zero Token Overhead</span>
+          <div class="checkpoint-desc">Zero infinite repair loops. Hard ceiling caps Dev/QA cycles to a maximum of 3 iterations.</div>
+          <div class="checkpoint-detail-row" id="orch-row-1">
+            ↳ Policy: Prevents runaway token burn. Halts and escalates to human if 3 repair attempts fail.
+          </div>
+        </div>
+        <div class="checkpoint-item" onclick="toggleRow('orch-row-2')">
+          <div class="checkpoint-top">
+            <div class="checkpoint-title-group">
+              <span class="checkpoint-icon allow">✓</span>
+              <span>Zero-Bypass Human Gate Mediation</span>
+              <span class="checkpoint-hook-tag">(hook-verify-gate)</span>
             </div>
-            <div class="gov-grid">
-              <div class="gov-pill">
-                <div class="gov-label">Active Hook</div>
-                <div class="gov-val" style="color:var(--purple-text);">hook-verify-gate.mjs</div>
-                <div class="gov-desc">Enforces human maintainer physical signature check</div>
+            <span class="checkpoint-time">ENFORCED</span>
+          </div>
+          <div class="checkpoint-desc">Physical lock check prevents subagent process dispatch until maintainer explicitly types /approve.</div>
+          <div class="checkpoint-detail-row" id="orch-row-2">
+            ↳ Policy: Cryptographic approval.lock required on disk before developer agent process can spawn.
+          </div>
+        </div>
+      `;
+      document.getElementById('checkpoint-count-text').textContent = '2 supervisor policies';
+    }
+
+    function renderStageStory() {
+      if (currentSelectedStage === 'orchestrator') {
+        renderOrchestratorStory();
+        return;
+      }
+
+      const stageIndex = currentSelectedStage;
+      const data = latestDashboardData || {};
+      const p = data.phases || {};
+
+      let title = "";
+      let badge = "READY";
+      let badgeStyle = "background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);";
+      let summary = "";
+
+      if (stageIndex === 0) {
+        title = "@prsquad-triage · Issue Intake & Reproducibility";
+        badge = p.intake?.status || "READY";
+        summary = p.intake?.summary || "Validated issue status against GitHub API and extracted acceptance criteria in <2s with 0 LLM tokens wasted.";
+      } else if (stageIndex === 1) {
+        title = "@prsquad-architect · Architecture Planning";
+        badge = p.architect?.status || (p.intake ? "PLANNING" : "QUEUED");
+        summary = p.architect?.summary || "Diagnoses root cause, bounds surgical blast-radius, and produces technical modification plan.";
+      } else if (stageIndex === 2) {
+        title = "Scope Approval Gate · Human Authorization Barrier";
+        badge = p.scopeGate?.status || "AWAITING";
+        badgeStyle = "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);";
+        summary = p.scopeGate?.summary || "Cryptographic human-in-the-loop barrier. Developer execution remains blocked until maintainer confirms plan via /approve.";
+      } else if (stageIndex === 3) {
+        title = "@prsquad-dev · Developer Implementation";
+        badge = p.developer?.status || "QUEUED";
+        summary = p.developer?.summary || "Developer implements surgical fix strictly bounded to approved scope files under active write-barrier containment.";
+      } else if (stageIndex === 4) {
+        title = "@prsquad-qa · Independent Verification Sandbox";
+        badge = p.qa?.status || "QUEUED";
+        summary = p.qa?.summary || "Independent QA subagent executes automated regression test suites inside an isolated sandbox worktree.";
+      } else if (stageIndex === 5) {
+        title = "@prsquad-review · Security Audit & AST Sweep";
+        badge = p.reviewer?.status || "QUEUED";
+        summary = p.reviewer?.summary || "Read-only inspection agent verifies AST public API contract stability and checks for leaked secrets or OWASP flaws.";
+      } else if (stageIndex === 6) {
+        title = "Pull Request Gate · Enterprise Delivery Barrier";
+        badge = p.mergeGate?.status || "QUEUED";
+        summary = p.mergeGate?.summary || "Opens GitHub Pull Request with auto-merge physically disabled. Human maintainer review required before merge.";
+      }
+
+      document.getElementById('story-title').textContent = title;
+      const bEl = document.getElementById('story-badge');
+      bEl.textContent = badge;
+      bEl.style.cssText = badgeStyle;
+      document.getElementById('story-desc').textContent = summary;
+
+      // Injected Intelligence
+      const intel = stageIntelligenceDefaults[stageIndex];
+      const intelBanner = document.getElementById('intel-banner');
+      if (intel) {
+        intelBanner.style.display = 'flex';
+        document.getElementById('intel-title-text').textContent = `Injected Repository Intelligence (+${intel.tokens} tokens)`;
+        document.getElementById('intel-skill-content').textContent = intel.skill;
+        document.getElementById('intel-instruction-content').textContent = intel.instruction;
+      } else {
+        intelBanner.style.display = 'none';
+      }
+
+      renderCheckpoints();
+    }
+
+    function renderCheckpoints() {
+      const stageIndex = currentSelectedStage;
+      if (stageIndex === 'orchestrator') return;
+
+      const container = document.getElementById('checkpoint-list');
+      const filteredEvents = cachedAudit.filter(e => {
+        if (stageIndex === 0) return e.action === 'fast_fail_verified' || e.tool === 'fetch_issue';
+        if (stageIndex === 1) return e.agent?.includes('architect') || e.action?.includes('read_allowed');
+        if (stageIndex === 2) return e.action?.includes('scope_gate') || e.action?.includes('approval');
+        if (stageIndex === 3) return e.agent?.includes('developer') || e.agent?.includes('dev') || e.tool === 'edit' || (e.details?.command?.includes('commit'));
+        if (stageIndex === 4) return e.agent?.includes('qa') || (e.details?.command?.includes('test'));
+        if (stageIndex === 5) return e.agent?.includes('review') || (e.tool === 'ast');
+        if (stageIndex === 6) return e.tool?.includes('pr') || e.action?.includes('pr');
+        return true;
+      });
+
+      const displayEvents = filteredEvents.filter(e => {
+        if (activeFilter === 'blocks') return e.decision === 'deny';
+        return true;
+      });
+
+      document.getElementById('checkpoint-count-text').textContent = `${displayEvents.length} checks`;
+
+      if (displayEvents.length === 0) {
+        container.innerHTML = `<div style="font-size:11px; font-family:ui-monospace; color:var(--text-muted); padding:8px;">No checkpoints recorded for this filter in this stage.</div>`;
+        return;
+      }
+
+      container.innerHTML = displayEvents.slice(0, 15).map((e, idx) => {
+        const isAllow = e.decision === 'allow';
+        const icon = isAllow ? '✓' : '⛔';
+        const iconClass = isAllow ? 'allow' : 'deny';
+        const itemClass = isAllow ? 'checkpoint-item' : 'checkpoint-item deny-item';
+
+        let title = e.action || '';
+        let desc = '';
+        let detail = '';
+
+        if (e.action === 'write_allowed_in_scope') {
+          title = `Allowed Edit: ${e.details?.path || ''}`;
+          desc = `Verified file path is within approved scope boundary.`;
+          detail = `Approved Scope: ${e.details?.approvedScope || ''}`;
+        } else if (e.action === 'write_blocked_out_of_scope' || e.action === 'scope_violation_blocked') {
+          const p = e.details?.attemptedPath || e.details?.path || '';
+          title = `Blocked Unauthorized Edit: ${p}`;
+          desc = `Denied out-of-scope write. Smart nudge sent to model to stay within boundary.`;
+          detail = `SCOPE_VIOLATION: ${e.details?.reason || 'File outside approved scope'}`;
+        } else if (e.action === 'command_allowed') {
+          const cmd = String(e.details?.command || '').split(';').pop().trim();
+          title = `Permitted Command: ${cmd.slice(0, 45)}${cmd.length > 45 ? '...' : ''}`;
+          desc = `Verified command complies with sandbox security rules.`;
+          detail = `Full Command: ${e.details?.command || ''}`;
+        } else if (e.action === 'command_blocked_by_sandbox' || e.action === 'disallowed_command_blocked') {
+          title = `Blocked Dangerous Command: ${e.details?.command || ''}`;
+          desc = `Enforced sandbox security policy.`;
+          detail = `POLICY_DENIAL: ${e.details?.reason || 'Disallowed command'}`;
+        } else if (e.action === 'human_scope_gate_auto_signed_from_chat') {
+          title = `Cryptographic Lock Signed: approval.lock`;
+          desc = `Verified maintainer in-chat approval: ${e.details?.approvedScope || ''}`;
+          detail = `Approved By: ${e.details?.approvedBy || 'human-in-chat'}`;
+        } else {
+          title = `${e.tool}: ${e.action}`;
+          desc = e.details?.reason || 'Executed deterministic rule verification.';
+          detail = JSON.stringify(e.details || {});
+        }
+
+        const hookName = e.tool === 'edit' ? 'hook-enforce-scope' 
+          : (e.tool === 'agent' ? 'hook-verify-gate' : 'hook-sandbox-bash');
+
+        return `
+          <div class="${itemClass}" onclick="toggleRow('row-${idx}')">
+            <div class="checkpoint-top">
+              <div class="checkpoint-title-group">
+                <span class="checkpoint-icon ${iconClass}">${icon}</span>
+                <span>${title}</span>
+                <span class="checkpoint-hook-tag">(${hookName})</span>
               </div>
-              <div class="gov-pill">
-                <div class="gov-label">Trigger Point</div>
-                <div class="gov-val" style="color:var(--blue-text);">preAgent: developer dispatch</div>
-                <div class="gov-desc">Intercepts orchestrator before subagent process is spawned</div>
-              </div>
-              <div class="gov-pill">
-                <div class="gov-label">Policy Enforced</div>
-                <div class="gov-val" style="color:var(--amber-text);">Physical Signature Lock</div>
-                <div class="gov-desc">Hard-stops developer dispatch until approval.lock exists on disk</div>
-              </div>
+              <span class="checkpoint-time">${formatTime(e.timestamp)}</span>
+            </div>
+            <div class="checkpoint-desc">${desc}</div>
+            <div class="checkpoint-detail-row" id="row-${idx}">
+              ↳ ${detail}
             </div>
           </div>
         `;
-      }
-    }
-
-    function switchView(tab) {
-      activeTab = tab;
-      document.getElementById('tab-btn-details').className = 'tab-btn' + (tab === 'details' ? ' active' : '');
-      document.getElementById('tab-btn-hooks').className = 'tab-btn' + (tab === 'hooks' ? ' active' : '');
-      document.getElementById('view-details').style.display = tab === 'details' ? 'flex' : 'none';
-      document.getElementById('view-hooks').style.display = tab === 'hooks' ? 'flex' : 'none';
+      }).join('');
     }
 
     function formatTime(iso) {
@@ -1406,69 +1148,11 @@
       }
     }
 
-    let lastRenderedAuditHash = '';
-
-    function renderHookList(events) {
-      const container = document.getElementById('hook-events-container');
-      if (!events || events.length === 0) {
-        if (lastRenderedAuditHash === 'empty') return;
-        lastRenderedAuditHash = 'empty';
-        container.innerHTML = '<div style="font-size:11px; color:var(--text-muted); padding:8px;">No hook events recorded yet.</div>';
-        return;
-      }
-
-      const auditHash = events.length + '-' + (events[0]?.timestamp || '');
-      if (auditHash === lastRenderedAuditHash) return; // Skip DOM rebuild if data unchanged
-      lastRenderedAuditHash = auditHash;
-
-      document.getElementById('hook-count-badge').textContent = events.length;
-
-      container.innerHTML = events.slice(0, 25).map(e => {
-        const isAllow = e.decision === 'allow';
-        const icon = isAllow ? '✓' : '⛔';
-        const iconClass = isAllow ? 'allow' : 'deny';
-        
-        let desc = e.action || '';
-        if (e.action === 'write_allowed_in_scope') {
-          desc = `Allowed edit to <code>${e.details?.path || ''}</code>`;
-        } else if (e.action === 'command_allowed') {
-          const cmd = String(e.details?.command || '').split(';').pop().trim();
-          desc = `Permitted command: <code>${cmd.slice(0, 55)}${cmd.length > 55 ? '...' : ''}</code>`;
-        } else if (e.action === 'human_scope_gate_auto_signed_from_chat') {
-          desc = `Verified PM Scope Approval lock: <code>${e.details?.approvedScope || ''}</code>`;
-        } else if (e.action === 'write_blocked_out_of_scope' || e.action === 'scope_violation_blocked') {
-          const blockedFile = e.details?.attemptedPath || e.details?.path || '';
-          desc = `Blocked unauthorized edit: <code>${blockedFile}</code> (Write barrier active · Smart nudge sent)`;
-        } else if (e.action === 'command_blocked_by_sandbox' || e.action === 'disallowed_command_blocked') {
-          const blockedCmd = e.details?.command || '';
-          desc = `Blocked prohibited command: <code>${blockedCmd}</code>`;
-        }
-
-        const hookName = e.tool === 'edit' ? 'hook-enforce-scope' 
-          : (e.tool === 'agent' ? 'hook-verify-gate' : 'hook-sandbox-bash');
-
-        return `
-          <div class="hook-event-item">
-            <span class="hook-decision-icon ${iconClass}">${icon}</span>
-            <div class="hook-event-body">
-              <div class="hook-event-top">
-                <span class="hook-name">${hookName}</span>
-                <span class="hook-time">${formatTime(e.timestamp)}</span>
-              </div>
-              <div class="hook-action-desc">${desc}</div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
     let isPolling = false;
     let pollIntervalMs = 1200;
     let pollTimer = null;
 
     async function poll() {
-      // Best Practice: Page Visibility API
-      // If the canvas is backgrounded or tab hidden, pause polling to save 100% CPU
       if (document.hidden || isPolling) return;
       isPolling = true;
 
@@ -1480,12 +1164,15 @@
 
         if (dashRes.ok) {
           const dash = await dashRes.json();
-          updateDashboard(dash);
+          latestDashboardData = dash;
         }
         if (auditRes.ok) {
           const audit = await auditRes.json();
           cachedAudit = audit;
-          renderHookList(audit);
+        }
+
+        if (latestDashboardData) {
+          updateDashboard(latestDashboardData);
         }
       } catch (_) {
       } finally {
@@ -1501,7 +1188,6 @@
       }, pollIntervalMs);
     }
 
-    // Wake up immediately when canvas tab becomes visible
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) {
         poll();
@@ -1510,265 +1196,193 @@
 
     function updateDashboard(data) {
       if (!data) return;
-      latestDashboardData = data;
 
+      // 1. Performance: State-hashing check to eliminate DOM reflows if data is unchanged
+      const currentHash = `${data.lastUpdated}-${data.telemetry?.actualAiCredits}-${cachedAudit.length}-${currentSelectedStage}-${activeFilter}`;
+      const stateHasChanged = currentHash !== lastRenderedHash;
+      lastRenderedHash = currentHash;
+
+      // Header Tag
       if (data.issueNumber) {
         document.getElementById('issue-tag').textContent = 'Issue #' + data.issueNumber;
       }
-      if (data.telemetry) {
-        const total = (data.telemetry.actualAiCredits || 0);
-        document.getElementById('total-credits').textContent = '⚡ ' + total.toFixed(2) + ' AIU';
-        document.getElementById('turns-metric').textContent = (data.telemetry.turns || 0) + ' turns';
-        if (data.telemetry.durationSeconds) {
-          document.getElementById('duration-metric').textContent = Math.round(data.telemetry.durationSeconds) + 's';
-        }
 
-        const ctrlCredits = data.telemetry.controllerCredits || 0;
-        const ctrlTurns = data.telemetry.controllerTurns || 0;
-        const specCredits = Math.max(0, total - ctrlCredits);
+      // Telemetry
+      const t = data.telemetry || {};
+      const total = t.actualAiCredits || 0;
+      document.getElementById('total-credits').textContent = '⚡ ' + total.toFixed(2) + ' AIU';
+      document.getElementById('turns-metric').textContent = (t.turns || 0) + ' turns';
+      if (t.durationSeconds) {
+        document.getElementById('duration-metric').textContent = Math.round(t.durationSeconds) + 's';
+      }
 
-        const orchCreditsEl = document.getElementById('orch-credits');
-        if (orchCreditsEl) {
-          orchCreditsEl.textContent = '🎮 ' + ctrlCredits.toFixed(2) + ' AIU';
-        }
+      const ctrlCredits = t.controllerCredits || 0;
+      const ctrlTurns = t.controllerTurns || 0;
+      const specCredits = Math.max(0, total - ctrlCredits);
 
-        const orchTurnsSubEl = document.getElementById('orch-turns-sub');
-        if (orchTurnsSubEl) {
-          const pct = total > 0 ? ((ctrlCredits / total) * 100).toFixed(1) : 0;
-          orchTurnsSubEl.textContent = `${ctrlTurns} turns (${pct}%)`;
-        }
+      document.getElementById('orch-credits').textContent = '🎮 ' + ctrlCredits.toFixed(2) + ' AIU';
+      const pct = total > 0 ? ((ctrlCredits / total) * 100).toFixed(1) : 0;
+      document.getElementById('orch-turns-sub').textContent = `${ctrlTurns} turns (${pct}%)`;
+      document.getElementById('specialists-credits-header').textContent = 'Specialists: ' + specCredits.toFixed(2) + ' AIU';
 
-        const specHeaderEl = document.getElementById('specialists-credits-header');
-        if (specHeaderEl) {
-          specHeaderEl.textContent = 'Specialists: ' + specCredits.toFixed(2) + ' AIU';
+      const p = data.phases || {};
+      const archStatus = p.architect?.status || '';
+      const sgStatus = p.scopeGate?.status || '';
+      const devStatus = p.developer?.status || '';
+      const qaStatus = p.qa?.status || '';
+      const revStatus = p.reviewer?.status || '';
+      const mg = p.mergeGate || {};
+      const prUrl = mg.details?.prUrl || '';
+      const isPrOpen = ['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) && !!prUrl;
+
+      // Orchestrator status pill
+      const orchPill = document.getElementById('orch-status-pill');
+      const orchDesc = document.getElementById('orch-routing-desc');
+
+      if (isPrOpen) {
+        orchPill.className = 'orch-status-pill done';
+        orchPill.textContent = '● PIPELINE COMPLETE';
+        orchDesc.textContent = 'All 7 stages complete. Pull Request is open on GitHub.';
+      } else if (sgStatus !== 'APPROVED' && ['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
+        orchPill.className = 'orch-status-pill paused';
+        orchPill.textContent = '● PAUSED AT SCOPE GATE';
+        orchDesc.textContent = 'Awaiting maintainer /approve in chat before dispatching @prsquad-dev';
+      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING'].includes(devStatus)) {
+        orchPill.className = 'orch-status-pill active';
+        orchPill.textContent = '● SUPERVISING DEVELOPER';
+        orchDesc.textContent = 'Routing changes to @prsquad-dev with active write-barrier containment';
+      } else {
+        orchPill.className = 'orch-status-pill active';
+        orchPill.textContent = '● ACTIVE ORCHESTRATOR';
+        orchDesc.textContent = 'Supervising 7-stage gated pipeline & dynamic specialist delegation';
+      }
+
+      // PR Link Header Badge
+      const headerPr = document.getElementById('header-pr-link');
+      if (headerPr) {
+        if (isPrOpen) {
+          headerPr.style.display = 'inline-flex';
+          headerPr.href = prUrl;
+          headerPr.textContent = '🔗 PR #' + (mg.details?.prNumber || data.issueNumber) + ' Open';
+        } else {
+          headerPr.style.display = 'none';
         }
       }
 
-      const p = data.phases || {};
-
-      // Stage 0: Intake
+      // Stage 0: Triage
       const s0 = document.getElementById('stage-0');
       const m0 = document.getElementById('metric-0');
+      const c0 = document.getElementById('chip-0');
       if (p.intake) {
-        s0.className = 'stage-card done' + (currentSelected === 0 ? ' selected' : '');
-        m0.textContent = (p.intake.credits || 1.24).toFixed(2) + ' AIU';
-        stageMeta[0].badge = p.intake.status || 'READY';
-        if (p.intake.summary) stageMeta[0].content = p.intake.summary;
+        s0.className = 'stage-card done' + (currentSelectedStage === 0 ? ' selected' : '');
+        m0.textContent = (p.intake.credits || 1.33).toFixed(2) + ' AIU';
+        c0.className = 'stage-chip chip-green';
+        c0.textContent = '● Fast-pass';
       }
 
       // Stage 1: Architect
       const s1 = document.getElementById('stage-1');
       const m1 = document.getElementById('metric-1');
-      const archStatus = p.architect?.status || '';
+      const c1 = document.getElementById('chip-1');
       if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
-        s1.className = 'stage-card done' + (currentSelected === 1 ? ' selected' : '');
-        m1.textContent = (p.architect.credits || 6.71).toFixed(2) + ' AIU';
-        stageMeta[1].badge = 'PLAN_READY';
-        stageMeta[1].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        if (p.architect.summary) stageMeta[1].content = p.architect.summary;
+        s1.className = 'stage-card done' + (currentSelectedStage === 1 ? ' selected' : '');
+        m1.textContent = (p.architect.credits || 7.20).toFixed(2) + ' AIU';
+        c1.className = 'stage-chip chip-green';
+        c1.textContent = '● Plan Ready';
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) {
-        s1.className = 'stage-card active' + (currentSelected === 1 ? ' selected' : '');
+        s1.className = 'stage-card active' + (currentSelectedStage === 1 ? ' selected' : '');
         m1.textContent = 'Planning...';
-        stageMeta[1].badge = 'PLANNING';
-        stageMeta[1].badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
-      } else {
-        s1.className = 'stage-card pending' + (currentSelected === 1 ? ' selected' : '');
-        m1.textContent = 'Queued';
+        c1.className = 'stage-chip chip-amber';
+        c1.textContent = '● Planning';
       }
 
       // Stage 2: Scope Gate
       const s2 = document.getElementById('stage-2');
       const m2 = document.getElementById('metric-2');
-      const sgStatus = p.scopeGate?.status || '';
+      const c2 = document.getElementById('chip-2');
       if (sgStatus === 'APPROVED') {
-        s2.className = 'stage-card gate-approved' + (currentSelected === 2 ? ' selected' : '');
+        s2.className = 'stage-card gate-approved' + (currentSelectedStage === 2 ? ' selected' : '');
         m2.textContent = 'APPROVED';
-        stageMeta[2].badge = 'APPROVED';
-        if (p.scopeGate.summary) stageMeta[2].content = p.scopeGate.summary;
+        c2.className = 'stage-chip chip-amber';
+        c2.textContent = '● Locked';
       } else if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
-        s2.className = 'stage-card active' + (currentSelected === 2 ? ' selected' : '');
+        s2.className = 'stage-card active' + (currentSelectedStage === 2 ? ' selected' : '');
         m2.textContent = 'AWAITING';
-        stageMeta[2].badge = 'AWAITING';
-        stageMeta[2].badgeStyle = 'background:rgba(210,153,34,0.15); color:var(--orange-text); border:1px solid var(--orange-border);';
-      } else {
-        s2.className = 'stage-card pending' + (currentSelected === 2 ? ' selected' : '');
-        m2.textContent = 'Queued';
-        stageMeta[2].badge = 'PENDING';
+        c2.className = 'stage-chip chip-amber';
+        c2.textContent = '● Awaiting';
       }
 
       // Stage 3: Developer
       const s3 = document.getElementById('stage-3');
       const m3 = document.getElementById('metric-3');
-      const devStatus = p.developer?.status || '';
+      const c3 = document.getElementById('chip-3');
+      const hasDevBlock = cachedAudit.some(e => e.decision === 'deny' && (e.agent?.includes('developer') || e.tool === 'edit'));
       if (['IMPLEMENTED', 'DONE', 'PASS'].includes(devStatus)) {
-        s3.className = 'stage-card done' + (currentSelected === 3 ? ' selected' : '');
-        m3.textContent = (p.developer.credits || 30.54).toFixed(2) + ' AIU';
-        stageMeta[3].badge = 'IMPLEMENTED';
-        stageMeta[3].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        if (p.developer.summary) stageMeta[3].content = p.developer.summary;
+        s3.className = 'stage-card done' + (currentSelectedStage === 3 ? ' selected' : '');
+        m3.textContent = (p.developer.credits || 25.28).toFixed(2) + ' AIU';
+        c3.className = hasDevBlock ? 'stage-chip chip-red' : 'stage-chip chip-green';
+        c3.textContent = hasDevBlock ? '● 1 Blocked' : '● Implemented';
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING'].includes(devStatus)) {
-        s3.className = 'stage-card active' + (currentSelected === 3 ? ' selected' : '');
+        s3.className = 'stage-card active' + (currentSelectedStage === 3 ? ' selected' : '');
         m3.textContent = 'Active...';
-        stageMeta[3].badge = 'RUNNING';
-        stageMeta[3].badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
-      } else {
-        s3.className = 'stage-card pending' + (currentSelected === 3 ? ' selected' : '');
-        m3.textContent = 'Queued';
+        c3.className = 'stage-chip chip-amber';
+        c3.textContent = '● Coding';
       }
 
       // Stage 4: QA
       const s4 = document.getElementById('stage-4');
       const m4 = document.getElementById('metric-4');
-      const qaStatus = p.qa?.status || '';
+      const c4 = document.getElementById('chip-4');
       if (['PASS', 'DONE'].includes(qaStatus)) {
-        s4.className = 'stage-card done' + (currentSelected === 4 ? ' selected' : '');
-        m4.textContent = (p.qa.credits || 20.31).toFixed(2) + ' AIU';
-        stageMeta[4].badge = 'PASS';
-        stageMeta[4].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        if (p.qa.summary) stageMeta[4].content = p.qa.summary;
+        s4.className = 'stage-card done' + (currentSelectedStage === 4 ? ' selected' : '');
+        m4.textContent = (p.qa.credits || 13.60).toFixed(2) + ' AIU';
+        c4.className = 'stage-chip chip-green';
+        c4.textContent = '● Passed 100%';
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'TESTING'].includes(qaStatus)) {
-        s4.className = 'stage-card active' + (currentSelected === 4 ? ' selected' : '');
+        s4.className = 'stage-card active' + (currentSelectedStage === 4 ? ' selected' : '');
         m4.textContent = 'Testing...';
-        stageMeta[4].badge = 'RUNNING';
-        stageMeta[4].badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
-      } else if (qaStatus === 'FAIL') {
-        s4.className = 'stage-card error' + (currentSelected === 4 ? ' selected' : '');
-        m4.textContent = 'FAIL';
-        stageMeta[4].badge = 'FAIL';
-        stageMeta[4].badgeStyle = 'background:rgba(248,81,73,0.15); color:#f85149; border:1px solid rgba(248,81,73,0.4);';
-      } else {
-        s4.className = 'stage-card pending' + (currentSelected === 4 ? ' selected' : '');
-        m4.textContent = 'Queued';
+        c4.className = 'stage-chip chip-amber';
+        c4.textContent = '● Testing';
       }
 
       // Stage 5: Reviewer
       const s5 = document.getElementById('stage-5');
       const m5 = document.getElementById('metric-5');
-      const revStatus = p.reviewer?.status || '';
+      const c5 = document.getElementById('chip-5');
       if (['CLEAR', 'PASS', 'DONE'].includes(revStatus)) {
-        s5.className = 'stage-card done' + (currentSelected === 5 ? ' selected' : '');
-        m5.textContent = (p.reviewer.credits || 3.97).toFixed(2) + ' AIU';
-        stageMeta[5].badge = 'CLEAR';
-        stageMeta[5].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        if (p.reviewer.summary) stageMeta[5].content = p.reviewer.summary;
+        s5.className = 'stage-card done' + (currentSelectedStage === 5 ? ' selected' : '');
+        m5.textContent = (p.reviewer.credits || 5.27).toFixed(2) + ' AIU';
+        c5.className = 'stage-chip chip-green';
+        c5.textContent = '● CLEAR';
       } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'AUDITING'].includes(revStatus)) {
-        s5.className = 'stage-card active' + (currentSelected === 5 ? ' selected' : '');
+        s5.className = 'stage-card active' + (currentSelectedStage === 5 ? ' selected' : '');
         m5.textContent = 'Auditing...';
-        stageMeta[5].badge = 'RUNNING';
-        stageMeta[5].badgeStyle = 'background:var(--blue-bg); color:var(--blue-text); border:1px solid var(--blue-border);';
-      } else {
-        s5.className = 'stage-card pending' + (currentSelected === 5 ? ' selected' : '');
-        m5.textContent = 'Queued';
+        c5.className = 'stage-chip chip-amber';
+        c5.textContent = '● Auditing';
       }
 
-      // Stage 6: PR Gate
+      // Stage 6: PR
       const s6 = document.getElementById('stage-6');
       const m6 = document.getElementById('metric-6');
-      const mg = p.mergeGate || {};
-      const prUrl = mg.details?.prUrl || '';
-      const prNum = mg.details?.prNumber || (data.issueNumber ? data.issueNumber : null);
-      const isPrOpen = ['READY_FOR_MERGE', 'PR_OPEN', 'OPEN', 'DONE', 'PR_CREATED'].includes(mg.status) && !!prUrl;
-
+      const c6 = document.getElementById('chip-6');
       if (isPrOpen) {
-        s6.className = 'stage-card gate-approved' + (currentSelected === 6 ? ' selected' : '');
-        m6.textContent = 'PR #' + prNum + ' Open';
-        stageMeta[6].badge = 'PR OPEN · AWAITING REVIEW';
-        stageMeta[6].badgeStyle = 'background:var(--green-bg); color:var(--green-text); border:1px solid var(--green-border);';
-        stageMeta[6].content = mg.summary || `Pull Request #${prNum} is officially OPEN on GitHub. Automated QA and Security Audit both passed 100%. Human maintainer review required on GitHub before merging.`;
-
-        // Header and banner buttons
-        const headerPr = document.getElementById('header-pr-link');
-        if (headerPr) {
-          headerPr.style.display = 'inline-flex';
-          headerPr.href = prUrl;
-          headerPr.textContent = '🔗 PR #' + prNum + ' Open';
-        }
-
-        const prBanner = document.getElementById('pr-banner');
-        if (prBanner) {
-          prBanner.style.display = 'flex';
-          document.getElementById('pr-banner-link').href = prUrl;
-          document.getElementById('pr-banner-link').textContent = 'View Pull Request #' + prNum + ' on GitHub';
-        }
-        pollIntervalMs = 6000; // Backoff to 6s when pipeline has reached terminal state
-      } else {
-        s6.className = 'stage-card pending' + (currentSelected === 6 ? ' selected' : '');
-        m6.textContent = 'Queued';
-        const headerPr = document.getElementById('header-pr-link');
-        if (headerPr) headerPr.style.display = 'none';
-        const prBanner = document.getElementById('pr-banner');
-        if (prBanner) prBanner.style.display = 'none';
-        pollIntervalMs = 1500;
+        s6.className = 'stage-card gate-approved' + (currentSelectedStage === 6 ? ' selected' : '');
+        m6.textContent = 'PR Open';
+        c6.className = 'stage-chip chip-green';
+        c6.textContent = '● Open';
       }
 
-      // Update dual-rail connector states, hook cards, and tether lines
-      for (let i = 0; i < 7; i++) {
-        const stageEl = document.getElementById('stage-' + i);
-        const hookEl = document.getElementById('hook-card-' + i);
-        const tether = document.getElementById('tether-' + i);
-
-        const isDone = stageEl && (stageEl.classList.contains('done') || stageEl.classList.contains('gate-approved'));
-        const isActive = stageEl && stageEl.classList.contains('active');
-
-        if (hookEl) {
-          if (isDone) hookEl.className = 'hook-card done' + (currentSelected === i ? ' selected' : '');
-          else if (isActive) hookEl.className = 'hook-card active' + (currentSelected === i ? ' selected' : '');
-          else hookEl.className = 'hook-card pending' + (currentSelected === i ? ' selected' : '');
-        }
-
-        if (tether) {
-          if (isActive || currentSelected === i) tether.className = 'tether-col active';
-          else if (isDone) tether.className = 'tether-col done';
-          else tether.className = 'tether-col';
-        }
-      }
-
+      // Update Arrows
       for (let i = 0; i < 6; i++) {
         const arrow = document.getElementById('arrow-' + i);
-        const hookArrow = document.getElementById('hook-arrow-' + i);
         const nextStage = document.getElementById('stage-' + (i + 1));
-
         const isDone = nextStage && (nextStage.classList.contains('done') || nextStage.classList.contains('gate-approved'));
         const isActive = nextStage && nextStage.classList.contains('active');
-
         if (arrow) {
-          if (isDone) arrow.className = 'stage-connector done';
-          else if (isActive) arrow.className = 'stage-connector active';
-          else arrow.className = 'stage-connector';
+          if (isDone) arrow.className = 'stage-arrow done';
+          else if (isActive) arrow.className = 'stage-arrow active';
+          else arrow.className = 'stage-arrow';
         }
-
-        if (hookArrow) {
-          if (isDone) hookArrow.className = 'hook-connector done';
-          else if (isActive) hookArrow.className = 'hook-connector active';
-          else hookArrow.className = 'hook-connector';
-        }
-      }
-
-      // Update Orchestrator status pill & routing description dynamically
-      const orchPill = document.getElementById('orch-status-pill');
-      const orchDesc = document.getElementById('orch-routing-desc');
-
-      if (isPrOpen) {
-        if (orchPill) { orchPill.className = 'orch-status-pill done'; orchPill.textContent = '● COMPLETED SUPERVISION'; }
-        if (orchDesc) { orchDesc.textContent = 'All 7 stages complete. Pull Request is open on GitHub.'; }
-      } else if (sgStatus !== 'APPROVED' && ['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) {
-        if (orchPill) { orchPill.className = 'orch-status-pill paused'; orchPill.textContent = '● PAUSED AT SCOPE GATE'; }
-        if (orchDesc) { orchDesc.textContent = 'Awaiting maintainer /approve in chat before dispatching @prsquad-dev'; }
-      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING'].includes(devStatus)) {
-        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING DEVELOPER'; }
-        if (orchDesc) { orchDesc.textContent = 'Routing changes to @prsquad-dev with active write-barrier containment'; }
-      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'TESTING'].includes(qaStatus)) {
-        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING QA'; }
-        if (orchDesc) { orchDesc.textContent = 'Routing test execution to @prsquad-qa in isolated sandbox'; }
-      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'AUDITING'].includes(revStatus)) {
-        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING REVIEW'; }
-        if (orchDesc) { orchDesc.textContent = 'Routing code audit to @prsquad-review for AST & secret inspection'; }
-      } else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) {
-        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● SUPERVISING ARCHITECT'; }
-        if (orchDesc) { orchDesc.textContent = 'Routing investigation to @prsquad-architect for root cause analysis'; }
-      } else {
-        if (orchPill) { orchPill.className = 'orch-status-pill active'; orchPill.textContent = '● ACTIVE CONDUCTOR'; }
-        if (orchDesc) { orchDesc.textContent = 'Supervising 7-stage gated pipeline & dynamic specialist delegation'; }
       }
 
       // Compute latest active stage
@@ -1781,20 +1395,23 @@
       else if (devStatus === 'IN_PROGRESS') latestActive = 3;
       else if (['IMPLEMENTED', 'DONE'].includes(devStatus)) latestActive = 4;
       else if (sgStatus === 'APPROVED') latestActive = 3;
-      else if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) latestActive = 2; // Scope Gate
-      else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) latestActive = 1; // Architect
-      else latestActive = 0; // Intake
+      else if (['PLAN_READY', 'DONE', 'READY'].includes(archStatus)) latestActive = 2;
+      else if (['IN_PROGRESS', 'ACTIVE', 'RUNNING', 'PLANNING'].includes(archStatus) || (p.intake && !p.architect)) latestActive = 1;
+      else latestActive = 0;
 
       if (!userHasManuallySelected) {
         selectStage(latestActive, false);
-      } else if (currentSelected === 'orchestrator') {
-        renderOrchestratorDetail();
-      } else {
-        renderDetail(currentSelected);
+      } else if (stateHasChanged) {
+        if (currentSelectedStage === 'orchestrator') {
+          renderOrchestratorStory();
+        } else {
+          renderStageStory();
+        }
       }
     }
 
-    renderDetail(currentSelected);
+    // Default initialization
+    renderStageStory();
     poll().then(() => scheduleNextPoll());
   </script>
 </body>
