@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/"><b>🎮 Live Interactive Simulator</b></a> ·
-  <a href="#-quickstart-install-in-github-copilot-app"><b>⚡ Quickstart</b></a> ·
+  <a href="#-quickstart-github-copilot-app--vs-code"><b>⚡ Quickstart</b></a> ·
   <a href="#-supervised-agentic-workflow-architecture"><b>📐 Architecture</b></a> ·
   <a href="#-token-accounting-by-stage"><b>📊 Token Accounting</b></a> ·
   <a href="#-specialist-agent-contracts"><b>🤖 Specialist Contracts</b></a> ·
@@ -37,50 +37,46 @@ The result is a governed development flow designed to reduce risks such as **age
 
 ---
 
-## ⚡ Quickstart: Install in GitHub Copilot App
+## ⚡ Quickstart: GitHub Copilot App & VS Code
 
 <p align="center">
   <a href="https://github.com/copilot/app/launch?open=ghapp%3A%2F%2Fgithub.com%2Fvamsicherukuri%2Fgated-fix-pipeline">
     <img alt="Launch in GitHub Copilot App" src="https://img.shields.io/badge/Launch%20in-GitHub%20Copilot%20App-0969da?style=for-the-badge&logo=github">
   </a>
   <a href="vscode://vscode.git/clone?url=https://github.com/vamsicherukuri/gated-fix-pipeline.git">
-    <img alt="Open in VS Code" src="https://img.shields.io/badge/Clone%20in-VS%20Code-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white">
+    <img alt="Open in VS Code" src="https://img.shields.io/badge/Open%20in-VS%20Code-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white">
   </a>
   <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/">
     <img alt="Interactive Simulator" src="https://img.shields.io/badge/Preview-Web%20Simulator%20(0--Install)-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white">
   </a>
 </p>
 
-### 3-Step Setup
+### 1. Install Plugin
 
-1. **Add the Marketplace Source**  
-   In GitHub Copilot App settings, add this repository as a custom marketplace source:
-   ```text
-   https://github.com/vamsicherukuri/gated-fix-pipeline
-   ```
+* **GitHub Copilot App**: Go to Settings → **Marketplaces** → Add source: `https://github.com/vamsicherukuri/gated-fix-pipeline` → Install **`prsquad`** (`v0.1.49`).
+* **Visual Studio Code**: Clone and open as workspace, or add the marketplace URL to `github.copilot.chat.pluginMarketplaces` in VS Code Settings (requires GitHub Copilot Chat extension).
 
-2. **Install `prsquad`**  
-   Find `prsquad` in the plugin catalog and install version `v0.1.49`.
+### 2. Run the Supervised Workflow
 
-3. **Run the Supervised Workflow**  
-   Open a GitHub issue in the Copilot App, start a **Plan** session, and invoke:
-   ```text
-   @prsquad resolve issue #22 using the supervised pipeline
-   ```
-   PRsquad then guides the issue through its governed workflow:  
-   `Triage` → `Architecture` → `Scope Approval` → `Development` → `QA` → `Code Review` → `PR Approval`
-   * `@prsquad-architect` analyzes the issue and proposes a scoped implementation plan.
-   * Review the plan and type `/approve` to authorize implementation.
-   * `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute within deterministic policy, scope, and tool guardrails.
-   * After final human approval, PRsquad opens the Pull Request and stops. Merge remains a human-maintainer decision.
+In either **Copilot App** or **VS Code Copilot Chat**, open your repository and invoke:
+
+```text
+@prsquad resolve issue #22 using the supervised pipeline
+```
+
+PRsquad guides the issue through its governed 7-stage pipeline:  
+`Triage` → `Architecture` → `Scope Approval` → `Development` → `QA` → `Code Review` → `PR Approval`
+
+* `@prsquad-architect` analyzes the issue and drafts a scoped fix plan (read-only symbol jail).
+* Maintainer reviews the plan and types `/approve` in chat to cryptographically sign `approval.lock`.
+* `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute under mechanical PreToolUse containment.
+* PRsquad opens the Pull Request on GitHub and halts. Merge remains a human-maintainer decision.
 
 ---
 
-> **Want to explore PRsquad without installing the plugin?**  
-> Try the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)** to walk through the 7-stage workflow, or validate the repository locally with:
-> ```bash
-> npm run check:plugin && npm run test:guardrails
-> ```
+> **Want to test without installing?**  
+> Explore the 7-stage workflow in your browser via the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)**, or validate locally with:  
+> `npm run check:plugin && npm run test:guardrails`
 
 ---
 
