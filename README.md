@@ -27,7 +27,7 @@
 
 **PRsquad** is a supervised agentic software-delivery workflow that turns a GitHub issue into a validated, review-ready pull request through specialized AI agents operating within deterministic governance boundaries.
 
-It separates the lifecycle across **Triage**, **Architect**, **Developer**, **QA**, and **Code Review** agents, coordinated through a defined issue-to-PR workflow.
+It separates the lifecycle across **Triage**, **Architect**, **Developer**, **QA**, and **Code Review** agents, coordinated through a supervised agentic workflow.
 
 The agents handle reasoning and execution within their roles, while deterministic hooks enforce critical controls such as approved scope, branch protection, bounded retries, command restrictions, validation sequencing, and human approval gates.
 
