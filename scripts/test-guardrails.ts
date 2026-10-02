@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
+import { isValidBranchName } from "../src/guardrails/prCreator.js";
 import {
   loadState,
   saveState,
@@ -298,6 +299,17 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
   const devPush = validateCommandForAgent("git push origin branch", "gated-change-developer");
   assert(!devPush.allowed, "Developer blocked from remote git push");
 
+  // Explicit regression coverage for Acceptance Criterion 3: sandbox blocks
+  // any agent attempting to git push to base branches (main/master).
+  const devPushMain = validateCommandForAgent("git push origin main", "gated-change-developer");
+  assert(!devPushMain.allowed, "Developer strictly blocked from git push to main");
+
+  const devPushMaster = validateCommandForAgent("git push origin master", "gated-change-developer");
+  assert(!devPushMaster.allowed, "Developer strictly blocked from git push to master");
+
+  const revPushMain = validateCommandForAgent("git push origin main", "gated-change-reviewer");
+  assert(!revPushMain.allowed, "Reviewer strictly blocked from git push to main");
+
   const devCheckoutMain = validateCommandForAgent("git checkout main", "gated-change-developer");
   assert(!devCheckoutMain.allowed, "Developer strictly blocked from checking out main");
 
@@ -372,6 +384,50 @@ console.log("\nSuite 5: Guardrail 4 — Tier 1 AST Symbol Sweep");
   const report = runSymbolSweep(["src/scopeTool.ts"], "src/services/fake/");
   assert(report.totalSymbolsAnalyzed >= 2, "Analyzed exported symbols count >= 2");
   assert(report.externalReferencesFound.length > 0, "Detects external references in src/actions/architect.ts");
+}
+
+// ---------------------------------------------------------------------------
+// 6. PR Creator Branch Name Sanitization Tests (Issue #22)
+// ---------------------------------------------------------------------------
+console.log("\nSuite 6: Guardrail 5 — PR Creator Branch Name Sanitization");
+{
+  // Acceptance Criterion 1: accepts conventional branch names matching
+  // ^[a-zA-Z0-9/_.-]+$
+  assert(
+    isValidBranchName("fix/issue-22-sanitize-branch"),
+    "Accepts conventional branch name 'fix/issue-22-sanitize-branch'"
+  );
+  assert(
+    isValidBranchName("feature/My_Branch.1"),
+    "Accepts conventional branch name 'feature/My_Branch.1'"
+  );
+  assert(isValidBranchName("main"), "Accepts plain alphanumeric branch name 'main'");
+
+  // Acceptance Criterion 2: rejects branch names containing shell command
+  // separators and metacharacters (;, |, &, $, `)
+  assert(
+    !isValidBranchName("fix/issue-22; rm -rf /"),
+    "Rejects branch name containing ';' command separator"
+  );
+  assert(!isValidBranchName("fix|whoami"), "Rejects branch name containing '|' pipe");
+  assert(!isValidBranchName("fix&&ls"), "Rejects branch name containing '&' operator");
+  assert(!isValidBranchName("fix$(whoami)"), "Rejects branch name containing '$' substitution");
+  assert(
+    !isValidBranchName("fix`whoami`"),
+    "Rejects branch name containing backtick command substitution"
+  );
+  assert(!isValidBranchName(""), "Rejects empty branch name");
+
+  // Acceptance Criterion 3: sandbox blocks any agent attempting git push to
+  // base branches (main/master), formalized here alongside Suite 4 coverage.
+  const pushMainDeveloper = validateCommandForAgent("git push origin main", "gated-change-developer");
+  assert(!pushMainDeveloper.allowed, "Sandbox blocks Developer agent git push to base branch 'main'");
+
+  const pushMasterDeveloper = validateCommandForAgent("git push origin master", "gated-change-developer");
+  assert(!pushMasterDeveloper.allowed, "Sandbox blocks Developer agent git push to base branch 'master'");
+
+  const pushMainQa = validateCommandForAgent("git push origin main", "gated-change-qa");
+  assert(!pushMainQa.allowed, "Sandbox blocks QA agent git push to base branch 'main'");
 }
 
 console.log("\n=======================================================");

@@ -19,6 +19,25 @@ export interface PRResult {
   error?: string;
 }
 
+// Strict allow-list pattern for git/gh branch name arguments. Rejects shell
+// command separators and metacharacters (`;`, `|`, `&`, `$`, backtick, etc.)
+// to prevent unsanitized branch names from reaching execFileSync/gh CLI calls.
+const VALID_BRANCH_NAME_PATTERN = /^[a-zA-Z0-9/_.-]+$/;
+
+/**
+ * Validates that a branch name is safe to use as a git/gh CLI argument.
+ * Enforces a strict alphanumeric/hyphen/slash/underscore/dot allow-list and
+ * explicitly rejects shell command separators and metacharacters.
+ */
+export function isValidBranchName(name: string): boolean {
+  if (!name || typeof name !== "string") return false;
+  if (!VALID_BRANCH_NAME_PATTERN.test(name)) return false;
+  // Defense-in-depth: explicitly reject known shell metacharacters even if
+  // the allow-list pattern above is ever loosened.
+  if (/[;|&$`]/.test(name)) return false;
+  return true;
+}
+
 /**
  * Deterministically creates a GitHub Pull Request for the active feature branch.
  * Zero LLM token cost: extracts evidence from local state and executes via gh CLI.
@@ -50,6 +69,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       };
     }
 
+    // Reject unsafe/unsanitized branch names before they reach any git/gh CLI call.
+    if (!isValidBranchName(activeBranch)) {
+      return {
+        success: false,
+        error: `Invalid or unsafe branch name: ${activeBranch}`,
+      };
+    }
+
     // 2. Resolve target base branch (default to copilot-app-plugin-alignment or main)
     let baseBranch = options.baseBranch;
     if (!baseBranch) {
@@ -63,6 +90,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       } catch {
         baseBranch = "copilot-app-plugin-alignment";
       }
+    }
+
+    // Reject unsafe/unsanitized base branch names (interpolated into gh pr create --base and PR body).
+    if (!isValidBranchName(baseBranch)) {
+      return {
+        success: false,
+        error: `Invalid or unsafe branch name: ${baseBranch}`,
+      };
     }
 
     // Deterministically resolve issue number from:
