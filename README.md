@@ -84,49 +84,36 @@ PRsquad guides the issue through its governed 7-stage pipeline:
 
 Unlike unconstrained multi-agent frameworks, PRsquad enforces physical separation between **investigation**, **planning**, **human authorization**, **containment implementation**, **isolated verification**, and **review**.
 
+<p align="center">
+  <img src="docs/images/prsquad-architecture.svg" alt="PRsquad Supervised Agentic Workflow Architecture" width="100%">
+</p>
+
+<details>
+<summary><b>View Text-Based Mermaid Sequence</b></summary>
+
 ```mermaid
-flowchart TD
-    subgraph Supervisor["🎮 Pipeline Supervisor Layer (@prsquad)"]
-        Orch["@prsquad (Conductor)<br/>• Dynamic specialist routing • Bounded retry ceilings (max 3)<br/>• Halts at Scope Gate • 0 code tools"]
-    end
+flowchart LR
+    classDef gate fill:#FFF8C5,stroke:#9A6700,stroke-width:2px,color:#1A1F2C
+    classDef agent fill:#DDF4FF,stroke:#0969DA,stroke-width:1.5px,color:#1A1F2C
 
-    subgraph Phase1["🔍 Phase 1: Ingestion & Fast-Fail"]
-        S0["Stage 0: Triage Specialist<br/>(@prsquad-triage)<br/>• Deterministic criteria extraction<br/>• Fast-fail in under 2s (0 LLM tokens)"]
-    end
+    S0["<b>0. Triage</b><br/>@prsquad-triage<br/><i>&lt;2s Fast-Fail</i>"]:::agent
+    S1["<b>1. Architect</b><br/>@prsquad-architect<br/><i>Blast Radius</i>"]:::agent
+    S2{{"<b>2. Scope Gate</b><br/>Human Approval<br/><i>approval.lock</i>"}}:::gate
+    S3["<b>3. Developer</b><br/>@prsquad-dev<br/><i>Write Barrier</i>"]:::agent
+    S4["<b>4. QA</b><br/>@prsquad-qa<br/><i>Worktree Test</i>"]:::agent
+    S5["<b>5. Reviewer</b><br/>@prsquad-review<br/><i>AST Sweep</i>"]:::agent
+    S6{{"<b>6. PR Gate</b><br/>Human Merge<br/><i>Review Diff</i>"}}:::gate
 
-    subgraph Phase2["📐 Phase 2: Diagnostic Blast-Radius Planning"]
-        S1["Stage 1: Architect Specialist<br/>(@prsquad-architect)<br/>• Read-only symbol jail<br/>• 1-hop caller/importer blast radius"]
-    end
-
-    subgraph Gate1["🔑 Phase 3: Cryptographic Scope Gate"]
-        S2["Stage 2: Scope Approval Gate<br/>(Human Maintainer Review)<br/>• Cryptographic approval.lock on disk<br/>• Developer agent process physically blocked"]
-    end
-
-    subgraph Phase4["🔨 Phase 4: Contained Implementation"]
-        S3["Stage 3: Developer Specialist<br/>(@prsquad-dev)<br/>• Isolated feature branch: fix/issue-N<br/>• Active write-barrier & smart nudges"]
-    end
-
-    subgraph Phase5["🧪 Phase 5: Independent Verification"]
-        S4["Stage 4: QA Specialist<br/>(@prsquad-qa)<br/>• Isolated worktree test sandbox<br/>• 0 git mutation permissions"]
-    end
-
-    subgraph Phase6["🛡️ Phase 6: Contract & Security Sweep"]
-        S5["Stage 5: Reviewer Specialist<br/>(@prsquad-review)<br/>• Read-only AST symbol contract sweep<br/>• OWASP & credential flaw check"]
-    end
-
-    subgraph Gate2["🚀 Phase 7: Governed Enterprise Delivery"]
-        S6["Stage 6: PR Gate<br/>(Human Merge Gate)<br/>• Pull Request opened on GitHub<br/>• Auto-merge physically disabled"]
-    end
-
-    Orch --> S0
     S0 --> S1
     S1 --> S2
     S2 -->|"Maintainer /approve"| S3
     S3 --> S4
-    S4 -->|"Tests Pass 100%"| S5
-    S4 -.->|"Fail: Max 3 Rework Cycles"| S3
+    S4 -->|"Tests Pass"| S5
+    S4 -.->|"Fail: Repair (≤3x)"| S3
     S5 --> S6
 ```
+
+</details>
 
 ---
 

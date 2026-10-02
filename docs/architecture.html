@@ -366,110 +366,127 @@
 
   <figure id="diagram">
     <div class="diagram-wrap">
-      <svg viewBox="0 0 920 480" role="img" aria-label="PRsquad 7-stage supervised workflow diagram: Stage 0 Triage fast-fails or validates issue, Stage 1 Architect drafts blast-radius plan, Stage 2 Scope Gate enforces cryptographic approval lock, Stage 3 Developer implements in isolated branch, Stage 4 QA tests in worktree sandbox with max 3 retry loops back to Developer, Stage 5 Reviewer sweeps AST contracts, and Stage 6 PR Gate delivers human-approved Pull Request.">
+      <svg viewBox="0 0 960 480" width="100%" height="auto" role="img" aria-label="PRsquad Supervised Agentic Workflow Architecture Diagram">
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,1 L8,5 L0,9 z" fill="var(--text-muted)"></path>
           </marker>
-          <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+          <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M0,1 L8,5 L0,9 z" fill="var(--accent)"></path>
           </marker>
         </defs>
 
-        <!-- ROW 1 (L to R): S0 Triage -> S1 Architect -> S2 Scope Gate -->
-        <g stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75">
-          <line x1="250" y1="110" x2="310" y2="110" marker-end="url(#arrow)"></line>
-          <line x1="530" y1="110" x2="590" y2="110" marker-end="url(#arrow)"></line>
+        <!-- ================= ROW 1 CONNECTORS ================= -->
+        <g stroke="var(--text-muted)" stroke-width="1.6" fill="none" opacity="0.75">
+          <line x1="230" y1="120" x2="260" y2="120" marker-end="url(#arrow)"></line>
+          <line x1="465" y1="120" x2="495" y2="120" marker-end="url(#arrow)"></line>
+          <line x1="700" y1="120" x2="730" y2="120" marker-end="url(#arrow)"></line>
         </g>
 
-        <!-- Vertical Connector: S2 Scope Gate (Row 1) -> S3 Developer (Row 2) -->
-        <path d="M700,160 L700,240" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75" marker-end="url(#arrow)"></path>
-        <text x="712" y="205" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">Maintainer /approve</text>
-
-        <!-- ROW 2 (R to L): S3 Dev -> S4 QA -> S5 Review -> S6 PR Gate -->
-        <g stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75">
-          <line x1="590" y1="290" x2="530" y2="290" marker-end="url(#arrow)"></line>
-          <line x1="310" y1="290" x2="250" y2="290" marker-end="url(#arrow)"></line>
-        </g>
-        <path d="M140,340 L140,390 L310,390" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75" marker-end="url(#arrow)"></path>
-
-        <!-- Retry Loop: QA (S4) back to Developer (S3) -->
-        <path d="M420,240 C 470,205 600,205 650,240" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="4 4" marker-end="url(#arrowAccent)"></path>
-        <text x="535" y="200" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">Tests Fail (≤3 repair cycles)</text>
-        <text x="535" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--text-muted)">4th failure halts pipeline &amp; escalates</text>
-
-        <!-- Scope Amendment Loop: Dev (S3) back to Architect (S1) -->
-        <path d="M750,240 C 790,130 500,40 450,60" stroke="var(--warn)" stroke-width="1.4" fill="none" stroke-dasharray="3 3" marker-end="url(#arrow)"></path>
-        <text x="640" y="55" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--warn)">Out-of-scope edit needed → Scope Amendment</text>
-
-        <!-- ===== STAGE 0: Triage Specialist ===== -->
-        <g transform="translate(30,65)">
-          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 00 · FAST-FAIL</text>
+        <!-- ================= ROW 1 NODES ================= -->
+        <g transform="translate(30, 75)">
+          <rect width="200" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">00 · INTAKE TRIAGE</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Triage Specialist</text>
           <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-triage · &lt;2s fast-fail</text>
           <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">1.33 AIU (0 if cached)</text>
         </g>
 
-        <!-- ===== STAGE 1: Architect Specialist ===== -->
-        <g transform="translate(310,65)">
-          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 01 · BLAST RADIUS</text>
+        <g transform="translate(265, 75)">
+          <rect width="200" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">01 · BLAST RADIUS</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Architect Specialist</text>
-          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-architect · Read-only jail</text>
-          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-muted)">9.85 AIU (6 turns)</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-architect · Read-only</text>
+          <g transform="translate(14, 69)">
+            <rect x="0" y="4" width="3" height="6" fill="var(--text)"></rect>
+            <rect x="5" y="2" width="3" height="8" fill="var(--text)"></rect>
+            <rect x="10" y="6" width="3" height="4" fill="var(--border)"></rect>
+          </g>
+          <text x="34" y="79" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--text)">9.85 AIU (6 turns)</text>
         </g>
 
-        <!-- ===== STAGE 2: Scope Approval Gate ===== -->
-        <g transform="translate(590,65)">
-          <rect width="220" height="90" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 02 · HARD GATE</text>
+        <g transform="translate(500, 75)">
+          <rect width="200" height="90" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
+          <text x="14" y="23" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">02 · HARD BLOCK GATE</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Scope Approval Gate</text>
-          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Human Maintainer · approval.lock</text>
-          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Mechanical lock)</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Human signs approval.lock</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Mechanical)</text>
         </g>
 
-        <!-- ===== STAGE 3: Developer Specialist ===== -->
-        <g transform="translate(590,245)">
-          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 03 · CONTAINMENT</text>
+        <g transform="translate(735, 75)">
+          <rect width="195" height="90" rx="8" fill="var(--surface)" stroke="var(--text-muted)" stroke-width="1.3" stroke-dasharray="4 3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-muted)">02.5 · ISOLATION</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Branch Isolated</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">fix/issue-N · push locks</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— zero tokens (Native)</text>
+        </g>
+
+        <!-- ================= ROW TRANSITION ================= -->
+        <path d="M 832,165 L 832,205 C 832,225 810,230 780,230 L 160,230 C 130,230 130,240 130,265" 
+              stroke="var(--text-muted)" stroke-width="1.6" fill="none" opacity="0.65" marker-end="url(#arrow)"></path>
+        <text x="480" y="224" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">
+          Maintainer /approve signs lock → Developer process unblocked
+        </text>
+
+        <!-- ================= RETRY LOOP ================= -->
+        <path d="M 365,265 C 330,240 200,240 165,265" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="4 4" marker-end="url(#arrowAccent)"></path>
+        <text x="265" y="248" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--accent-text)" font-weight="500">retry on fail (≤3×)</text>
+
+        <!-- ================= ROW 2 CONNECTORS ================= -->
+        <g stroke="var(--text-muted)" stroke-width="1.6" fill="none" opacity="0.75">
+          <line x1="230" y1="310" x2="260" y2="310" marker-end="url(#arrow)"></line>
+          <line x1="465" y1="310" x2="495" y2="310" marker-end="url(#arrow)"></line>
+          <line x1="700" y1="310" x2="730" y2="310" marker-end="url(#arrow)"></line>
+        </g>
+
+        <!-- ================= ROW 2 NODES ================= -->
+        <g transform="translate(30, 265)">
+          <rect width="200" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">03 · CONTAINED FIX</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Developer Specialist</text>
           <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-dev · Write barrier</text>
-          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text)">25.28 AIU (16 turns)</text>
+          <g transform="translate(14, 69)">
+            <rect x="0" y="0" width="3" height="10" fill="var(--text)"></rect>
+            <rect x="5" y="0" width="3" height="10" fill="var(--text)"></rect>
+            <rect x="10" y="0" width="3" height="10" fill="var(--text)"></rect>
+          </g>
+          <text x="34" y="79" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--text)">25.28 AIU (16 turns)</text>
         </g>
 
-        <!-- ===== STAGE 4: QA Specialist ===== -->
-        <g transform="translate(310,245)">
-          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 04 · VERIFICATION</text>
+        <g transform="translate(265, 265)">
+          <rect width="200" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">04 · VERIFICATION</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">QA Specialist</text>
-          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-qa · Worktree sandbox</text>
-          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text)">13.60 AIU (55/55 passed)</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-qa · Worktree tests</text>
+          <g transform="translate(14, 69)">
+            <rect x="0" y="4" width="3" height="6" fill="var(--text)"></rect>
+            <rect x="5" y="2" width="3" height="8" fill="var(--text)"></rect>
+            <rect x="10" y="6" width="3" height="4" fill="var(--border)"></rect>
+          </g>
+          <text x="34" y="79" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="var(--text)">13.60 AIU (55/55 PASS)</text>
         </g>
 
-        <!-- ===== STAGE 5: Reviewer Specialist ===== -->
-        <g transform="translate(30,245)">
-          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
-          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 05 · CONTRACT SWEEP</text>
+        <g transform="translate(500, 265)">
+          <rect width="200" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">05 · CONTRACT SWEEP</text>
           <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Reviewer Specialist</text>
           <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-review · AST sweep</text>
-          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">5.27 AIU (0-token AST engine)</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">5.27 AIU (0-token engine)</text>
         </g>
 
-        <!-- ===== STAGE 6: PR Gate ===== -->
-        <g transform="translate(310,360)">
-          <rect width="300" height="85" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
-          <text x="16" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 06 · DELIVERY &amp; MERGE GATE</text>
-          <text x="16" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">PR Gate (Human Maintainer)</text>
-          <text x="16" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Pull Request opened · Auto-merge disabled</text>
-          <text x="16" y="78" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Dual-approval checkpoint)</text>
+        <g transform="translate(735, 265)">
+          <rect width="195" height="90" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
+          <text x="14" y="23" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent)">06 · DUAL REVIEW GATE</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">PR Merge Gate</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Maintainer checks diff &amp; logs</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Human merge)</text>
         </g>
       </svg>
     </div>
     <figcaption>
-      Reading order: Stage 0 (Triage) → Stage 1 (Architect) → Stage 2 (Scope Gate) → Stage 3 (Developer) → Stage 4 (QA) → Stage 5 (Reviewer) → Stage 6 (PR Gate). 
-      Amber/accent double-bordered nodes are mandatory human approval checkpoints. Dashed accent line denotes the Developer↔QA retry loop (capped at ≤3 repair cycles). 
-      Dotted warning line denotes out-of-scope write deflection into Scope Amendment.
+      Reading order: Row 1 (Intake, Architecture &amp; Scope Gate) → Row 2 (Implementation, Verification &amp; Delivery Gate). 
+      Amber/accent double-bordered nodes are mandatory human approval checkpoints (Scope Gate and PR Merge Gate). 
+      Dashed accent loop is the bounded Developer ↔ QA repair cycle (hard-capped at ≤3 attempts; 4th failure pauses the pipeline and escalates to maintainer).
     </figcaption>
   </figure>
 
