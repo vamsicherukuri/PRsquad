@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRsquad · Supervised Agentic Workflow Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <style>
+    :root {
+      --bg: #F5F6F8;
+      --surface: #FFFFFF;
+      --surface-2: #EBEDF2;
+      --border: #D3D7E0;
+      --text: #1B2030;
+      --text-muted: #5B6274;
+      --accent: #2F5FA3;
+      --accent-soft: #E4ECF7;
+      --accent-text: #1E4A82;
+      --good: #3D7A54;
+      --warn: #A6672B;
+      --bad: #A6473A;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #12151C;
+        --surface: #181C26;
+        --surface-2: #1F2430;
+        --border: #2C3242;
+        --text: #E7E9F0;
+        --text-muted: #9AA1B4;
+        --accent: #6E9EE0;
+        --accent-soft: #1E2E45;
+        --accent-text: #8FB4E8;
+        --good: #5FAE79;
+        --warn: #D89A55;
+        --bad: #D9776A;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #12151C;
+      --surface: #181C26;
+      --surface-2: #1F2430;
+      --border: #2C3242;
+      --text: #E7E9F0;
+      --text-muted: #9AA1B4;
+      --accent: #6E9EE0;
+      --accent-soft: #1E2E45;
+      --accent-text: #8FB4E8;
+      --good: #5FAE79;
+      --warn: #D89A55;
+      --bad: #D9776A;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      line-height: 1.55;
+      margin: 0;
+      padding: 0;
+    }
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 56px 28px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+    }
+    .eyebrow {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-text);
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-pill {
+      background: var(--accent-soft);
+      color: var(--accent-text);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 700;
+      margin: 0 0 14px;
+      text-wrap: balance;
+      letter-spacing: -0.01em;
+    }
+    .intro {
+      max-width: 72ch;
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+    .intro strong { color: var(--text); font-weight: 600; }
+
+    .nav-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding: 12px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 13.5px;
+    }
+    .nav-bar a {
+      color: var(--accent-text);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .nav-bar a:hover { text-decoration: underline; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 22px;
+      padding: 14px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .swatch { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+    .swatch.agent { background: var(--surface-2); border: 1.5px solid var(--text-muted); }
+    .swatch.gate { background: var(--accent-soft); border: 1.5px solid var(--accent); }
+    .swatch.native { background: transparent; border: 1.5px dashed var(--text-muted); }
+    .bars-mini { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+    .bars-mini i { display: block; width: 4px; background: var(--text-muted); }
+
+    figure { margin: 0; }
+    .diagram-wrap {
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 12px;
+    }
+    .diagram-wrap svg { display: block; width: 100%; height: auto; min-width: 860px; }
+    figcaption {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    section h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+    section .section-sub {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin: 0 0 16px;
+      max-width: 74ch;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      font-size: 14px;
+      min-width: 800px;
+    }
+    thead th {
+      text-align: left;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 500;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface-2);
+    }
+    tbody td {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr.gate-row td { background: var(--accent-soft); }
+    .stage-name { font-weight: 600; }
+    .stage-actor { color: var(--text-muted); font-size: 12px; margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
+    .tier {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+    }
+    .tier-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+    .tier-bars i { display: block; width: 4px; border-radius: 1px; background: var(--border); }
+    .tier-bars i.on { background: var(--text); }
+    .tier-zero { color: var(--good); font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 500; }
+    .metric-val { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; font-weight: 600; }
+
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+      gap: 16px;
+    }
+    .agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .agent-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .agent-card h3 { margin: 0; font-size: 16px; font-weight: 600; }
+    .agent-handle {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--accent-text);
+      background: var(--accent-soft);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .agent-card .mandate { font-size: 13px; color: var(--text-muted); margin: -4px 0 2px; }
+    .agent-row { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+    .agent-row svg { flex-shrink: 0; margin-top: 2px; color: var(--text-muted); }
+    .agent-row .rlabel { color: var(--text-muted); flex-shrink: 0; width: 62px; font-weight: 500; }
+    .agent-row .rval { color: var(--text); }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 18px;
+    }
+    .decision-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px 18px;
+    }
+    .decision-card .dtitle {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--accent-text);
+      margin: 0 0 10px;
+    }
+    .decision-card svg { display: block; width: 100%; height: auto; }
+    .dkey {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 10px;
+    }
+    .dkey span { display: inline-flex; align-items: center; gap: 6px; }
+    .dkey i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+    .callouts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    @media (max-width: 720px) { .callouts { grid-template-columns: 1fr; } }
+    .callout {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3.5px solid var(--accent);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+    .callout h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .callout p {
+      margin: 0;
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+    .callout code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      background: var(--surface-2);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--text);
+    }
+
+    footer {
+      font-size: 13px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 22px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    footer a { color: var(--accent-text); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <header>
+    <div class="eyebrow">
+      <span>GitHub Copilot App Enterprise Challenge</span>
+      <span class="badge-pill">Production Architecture</span>
+      <span class="badge-pill">v0.1.49</span>
+    </div>
+    <h1>PRsquad: Supervised Agentic Workflow</h1>
+    <p class="intro">
+      A 7-stage supervised multi-agent engineering workflow built natively for the <strong>GitHub Copilot App</strong>. 
+      <strong>Four deterministic mechanisms enforce safety and governance:</strong> Triage intercepts issues in &lt;2s without burning LLM tokens; 
+      the <strong>Scope Gate</strong> physically blocks the Developer agent from starting until a maintainer signs <code>approval.lock</code>; 
+      the <strong>Write-Scope Barrier</strong> rejects out-of-scope mutations; and the <strong>Bounded Repair Loop</strong> hard-caps Developer↔QA fix iterations at 3 attempts.
+      Cross-file symbol contracts are verified with a zero-token AST sweep before human merge review.
+    </p>
+
+    <div class="nav-bar">
+      <a href="index.html">🎮 Live Interactive Simulator</a>
+      <a href="#diagram">📐 Workflow Diagram</a>
+      <a href="#token-accounting">📊 Telemetry &amp; Accounting</a>
+      <a href="#agent-roles">🤖 Specialist Contracts</a>
+      <a href="#decision-playbook">🚦 Decision Playbook</a>
+      <a href="#efficiency">🛡️ Governance Mechanisms</a>
+    </div>
+  </header>
+
+  <div class="legend">
+    <span class="legend-item"><span class="swatch agent"></span>Specialist Agent (scoped tools)</span>
+    <span class="legend-item"><span class="swatch gate"></span>Cryptographic Human Gate (blocks pipeline)</span>
+    <span class="legend-item"><span class="swatch native"></span>Deterministic PreToolUse Hook / Native Action</span>
+    <span class="legend-item">
+      <span class="bars-mini"><i style="height:4px"></i><i style="height:8px"></i><i style="height:14px"></i></span>
+      Relative token cost (low → high)
+    </span>
+  </div>
+
+  <figure id="diagram">
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 920 480" role="img" aria-label="PRsquad 7-stage supervised workflow diagram: Stage 0 Triage fast-fails or validates issue, Stage 1 Architect drafts blast-radius plan, Stage 2 Scope Gate enforces cryptographic approval lock, Stage 3 Developer implements in isolated branch, Stage 4 QA tests in worktree sandbox with max 3 retry loops back to Developer, Stage 5 Reviewer sweeps AST contracts, and Stage 6 PR Gate delivers human-approved Pull Request.">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          </marker>
+          <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- ROW 1 (L to R): S0 Triage -> S1 Architect -> S2 Scope Gate -->
+        <g stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75">
+          <line x1="250" y1="110" x2="310" y2="110" marker-end="url(#arrow)"></line>
+          <line x1="530" y1="110" x2="590" y2="110" marker-end="url(#arrow)"></line>
+        </g>
+
+        <!-- Vertical Connector: S2 Scope Gate (Row 1) -> S3 Developer (Row 2) -->
+        <path d="M700,160 L700,240" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75" marker-end="url(#arrow)"></path>
+        <text x="712" y="205" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">Maintainer /approve</text>
+
+        <!-- ROW 2 (R to L): S3 Dev -> S4 QA -> S5 Review -> S6 PR Gate -->
+        <g stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75">
+          <line x1="590" y1="290" x2="530" y2="290" marker-end="url(#arrow)"></line>
+          <line x1="310" y1="290" x2="250" y2="290" marker-end="url(#arrow)"></line>
+        </g>
+        <path d="M140,340 L140,390 L310,390" stroke="currentColor" stroke-width="1.6" fill="none" opacity="0.75" marker-end="url(#arrow)"></path>
+
+        <!-- Retry Loop: QA (S4) back to Developer (S3) -->
+        <path d="M420,240 C 470,205 600,205 650,240" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-dasharray="4 4" marker-end="url(#arrowAccent)"></path>
+        <text x="535" y="200" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">Tests Fail (≤3 repair cycles)</text>
+        <text x="535" y="214" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--text-muted)">4th failure halts pipeline &amp; escalates</text>
+
+        <!-- Scope Amendment Loop: Dev (S3) back to Architect (S1) -->
+        <path d="M750,240 C 790,130 500,40 450,60" stroke="var(--warn)" stroke-width="1.4" fill="none" stroke-dasharray="3 3" marker-end="url(#arrow)"></path>
+        <text x="640" y="55" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--warn)">Out-of-scope edit needed → Scope Amendment</text>
+
+        <!-- ===== STAGE 0: Triage Specialist ===== -->
+        <g transform="translate(30,65)">
+          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 00 · FAST-FAIL</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Triage Specialist</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-triage · &lt;2s fast-fail</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">1.33 AIU (0 if cached)</text>
+        </g>
+
+        <!-- ===== STAGE 1: Architect Specialist ===== -->
+        <g transform="translate(310,65)">
+          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 01 · BLAST RADIUS</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Architect Specialist</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-architect · Read-only jail</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text-muted)">9.85 AIU (6 turns)</text>
+        </g>
+
+        <!-- ===== STAGE 2: Scope Approval Gate ===== -->
+        <g transform="translate(590,65)">
+          <rect width="220" height="90" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 02 · HARD GATE</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Scope Approval Gate</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Human Maintainer · approval.lock</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Mechanical lock)</text>
+        </g>
+
+        <!-- ===== STAGE 3: Developer Specialist ===== -->
+        <g transform="translate(590,245)">
+          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 03 · CONTAINMENT</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Developer Specialist</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-dev · Write barrier</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text)">25.28 AIU (16 turns)</text>
+        </g>
+
+        <!-- ===== STAGE 4: QA Specialist ===== -->
+        <g transform="translate(310,245)">
+          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 04 · VERIFICATION</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">QA Specialist</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-qa · Worktree sandbox</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--text)">13.60 AIU (55/55 passed)</text>
+        </g>
+
+        <!-- ===== STAGE 5: Reviewer Specialist ===== -->
+        <g transform="translate(30,245)">
+          <rect width="220" height="90" rx="8" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="14" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 05 · CONTRACT SWEEP</text>
+          <text x="14" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">Reviewer Specialist</text>
+          <text x="14" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">@prsquad-review · AST sweep</text>
+          <text x="14" y="80" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">5.27 AIU (0-token AST engine)</text>
+        </g>
+
+        <!-- ===== STAGE 6: PR Gate ===== -->
+        <g transform="translate(310,360)">
+          <rect width="300" height="85" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"></rect>
+          <text x="16" y="24" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--accent-text)">STAGE 06 · DELIVERY &amp; MERGE GATE</text>
+          <text x="16" y="46" font-family="IBM Plex Sans" font-size="14" font-weight="600" fill="var(--text)">PR Gate (Human Maintainer)</text>
+          <text x="16" y="64" font-family="IBM Plex Sans" font-size="11.5" fill="var(--text-muted)">Pull Request opened · Auto-merge disabled</text>
+          <text x="16" y="78" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--good)">— 0.00 AIU (Dual-approval checkpoint)</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      Reading order: Stage 0 (Triage) → Stage 1 (Architect) → Stage 2 (Scope Gate) → Stage 3 (Developer) → Stage 4 (QA) → Stage 5 (Reviewer) → Stage 6 (PR Gate). 
+      Amber/accent double-bordered nodes are mandatory human approval checkpoints. Dashed accent line denotes the Developer↔QA retry loop (capped at ≤3 repair cycles). 
+      Dotted warning line denotes out-of-scope write deflection into Scope Amendment.
+    </figcaption>
+  </figure>
+
+  <section id="token-accounting">
+    <h2>Verified Token Accounting by Stage</h2>
+    <p class="section-sub">
+      Production telemetry measured from resolving Issue #22 (PR #24 baseline). Both human approval gates cost 0 LLM tokens, 
+      the Triage fast-fail consumes 0 tokens on invalid issues, and the repair loop is hard-capped at 3 cycles.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Stage</th>
+            <th>Specialist / Actor</th>
+            <th>Primary Driver &amp; Tools</th>
+            <th>Measured AIU</th>
+            <th>Governance &amp; Bounds</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="stage-name">Stage 00 · Intake Triage</div></td>
+            <td><div class="stage-actor">@prsquad-triage</div></td>
+            <td>GitHub issue validation, acceptance criteria extraction</td>
+            <td><span class="metric-val">1.33 AIU</span> <span class="tier-zero">(0 if cached)</span></td>
+            <td><strong>Fast-fails in &lt;2s</strong>; capped at 2 clarification rounds</td>
+          </tr>
+          <tr>
+            <td><div class="stage-name">Stage 01 · Blast-Radius Plan</div></td>
+            <td><div class="stage-actor">@prsquad-architect</div></td>
+            <td>Read-only AST search, 1-hop caller/importer graph analysis</td>
+            <td><span class="metric-val">9.85 AIU</span> (6 turns)</td>
+            <td>Read-only jail; single pass without self-loops; feeds Scope Gate</td>
+          </tr>
+          <tr class="gate-row">
+            <td><div class="stage-name">Stage 02 · Scope Gate</div></td>
+            <td><div class="stage-actor">Human Maintainer</div></td>
+            <td>Plain language plan review; issues <code>/approve</code> or <code>/reject</code></td>
+            <td><span class="tier-zero">— 0.00 AIU</span></td>
+            <td><strong>Cryptographic lock</strong> (<code>approval.lock</code>); physically blocks Dev spawn</td>
+          </tr>
+          <tr>
+            <td><div class="stage-name">Stage 03 · Contained Fix</div></td>
+            <td><div class="stage-actor">@prsquad-dev</div></td>
+            <td>Code generation, test additions on feature branch <code>fix/issue-N</code></td>
+            <td><span class="metric-val">25.28 AIU</span> (16 turns)</td>
+            <td><strong>Write barrier</strong> (<code>hook-enforce-scope.mjs</code>); push locks</td>
+          </tr>
+          <tr>
+            <td><div class="stage-name">Stage 04 · Verification Sandbox</div></td>
+            <td><div class="stage-actor">@prsquad-qa</div></td>
+            <td>Test runner execution (<code>npm test</code>) in worktree sandbox</td>
+            <td><span class="metric-val">13.60 AIU</span> (13 turns)</td>
+            <td>55/55 checks passed; <strong>0 git mutations</strong>; capped at 3 retries</td>
+          </tr>
+          <tr>
+            <td><div class="stage-name">Stage 05 · Contract Sweep</div></td>
+            <td><div class="stage-actor">@prsquad-review</div></td>
+            <td>AST exported symbol sweep, credential audit, diff inspection</td>
+            <td><span class="metric-val">5.27 AIU</span> (2 turns)</td>
+            <td><strong>0-token TS Compiler AST engine</strong>; flags only, cannot self-trigger</td>
+          </tr>
+          <tr class="gate-row">
+            <td><div class="stage-name">Stage 06 · PR Gate &amp; Merge</div></td>
+            <td><div class="stage-actor">Human Maintainer</div></td>
+            <td>Dual-review of Pull Request diff, verification logs, and release note</td>
+            <td><span class="tier-zero">— 0.00 AIU</span></td>
+            <td>Auto-merge physically disabled; human clicks merge button</td>
+          </tr>
+          <tr style="background: var(--surface-2); font-weight: 600;">
+            <td><div>Supervisor Orchestration</div></td>
+            <td><div class="stage-actor">@prsquad</div></td>
+            <td>Dynamic routing, state maintenance, repair count enforcement</td>
+            <td><span class="metric-val">38.33 AIU</span> (9 turns)</td>
+            <td>Supervision cost: 40.9% of budget; 0 code edit tools</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="agent-roles">
+    <h2>Specialist Agent Contracts</h2>
+    <p class="section-sub">
+      Each specialist consumes the prior specialist's structured JSON output, never re-reading raw chat transcripts. 
+      Physical PreToolUse hooks enforce tool permissions at the operating system level.
+    </p>
+    <div class="agent-grid">
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>Triage Specialist</h3>
+          <span class="agent-handle">@prsquad-triage</span>
+        </div>
+        <p class="mandate">Validates issue completeness and reproducibility before spending LLM tokens.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Issue title &amp; body only (GitHub API)</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.3"></circle><line x1="3" y1="11" x2="11" y2="3"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Structured triage status (READY / NOT_READY)</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Maintainer after 2 clarification rounds</span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>Architect Specialist</h3>
+          <span class="agent-handle">@prsquad-architect</span>
+        </div>
+        <p class="mandate">Maps 1-hop caller/importer blast radius and drafts surgical fix plan — zero code edits.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Repo symbols bounded to declared scope + 1 hop</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.3"></circle><line x1="3" y1="11" x2="11" y2="3"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Technical plan JSON (PLAN_READY) — 0 code edits</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Feeds Stage 2 Scope Gate for human maintainer approval</span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>Developer Specialist</h3>
+          <span class="agent-handle">@prsquad-dev</span>
+        </div>
+        <p class="mandate">Implements contained code fix strictly on isolated feature branch <code>fix/issue-N</code>.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Approved plan, feature branch context</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 12 L3 9 L9 3 L11 5 L5 11 Z"></path><line x1="9" y1="3" x2="11" y2="5"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Code edits bounded by <code>hook-enforce-scope.mjs</code></span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Maintainer after 3 repair attempts; requests Scope Amendment</span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>QA Specialist</h3>
+          <span class="agent-handle">@prsquad-qa</span>
+        </div>
+        <p class="mandate">Validates fix correctness in an isolated worktree test sandbox with 0 git mutations.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Feature branch diff, test suites</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 12 L3 9 L9 3 L11 5 L5 11 Z"></path><line x1="9" y1="3" x2="11" y2="5"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Test execution logs only — <strong>0 git push/commit permissions</strong></span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Feeds Developer repair loop on failure (≤3 cycles)</span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>Reviewer Specialist</h3>
+          <span class="agent-handle">@prsquad-review</span>
+        </div>
+        <p class="mandate">Performs read-only AST symbol contract sweep and security review — flags only.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Diff, AST symbol references across repo</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.3"></circle><line x1="3" y1="11" x2="11" y2="3"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Review report (CLEAR / CONCERNS) — 0 code edits</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Stage 6 PR Gate — humans review flags</span>
+        </div>
+      </div>
+
+      <div class="agent-card">
+        <div class="agent-card-header">
+          <h3>Supervisor Conductor</h3>
+          <span class="agent-handle">@prsquad</span>
+        </div>
+        <p class="mandate">Orchestrates specialist lifecycle, maintains state, and enforces retry ceilings.</p>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
+          <span class="rlabel">Reads</span><span class="rval">Chat commands, specialist return envelopes</span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="1" x2="7" y2="13"></line><line x1="1" y1="7" x2="13" y2="7"></line></svg>
+          <span class="rlabel">Writes</span><span class="rval">Specialist delegations — <strong>0 code edit / search tools</strong></span>
+        </div>
+        <div class="agent-row">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="7" y1="12" x2="7" y2="3"></line><polyline points="3,7 7,3 11,7"></polyline></svg>
+          <span class="rlabel">Escalates</span><span class="rval">Human maintainer at Scope Gate and on retry exhaustion</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="decision-playbook">
+    <h2>Deterministic Decision Playbook</h2>
+    <p class="section-sub">
+      How the pipeline responds when operations encounter issues. Green paths consume 0 retries; 
+      amber paths consume a bounded retry or revision round; red paths hand control directly to the maintainer.
+    </p>
+    <div class="decision-grid">
+
+      <!-- Playbook Card 1: Stage 0 Triage -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 00 · Intake Triage Fast-Fail</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="Triage decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">Issue Ingested by Hook</text>
+          <path d="M200,50 L200,72 M200,72 L55,90 M200,72 L200,90 M200,72 L345,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+          
+          <rect x="10" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="10" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="22" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Criteria Valid</text>
+          <text x="22" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">proceeds to</text>
+          <text x="22" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">Architect</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Scope Vague</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">clarify prompt,</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">round ≤2</text>
+
+          <rect x="280" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="280" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="292" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Closed / Dup</text>
+          <text x="292" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">fast-fail &lt;2s,</text>
+          <text x="292" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">0 tokens spent</text>
+        </svg>
+      </div>
+
+      <!-- Playbook Card 2: Stage 2 Scope Gate -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 02 · Cryptographic Scope Gate</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="Scope gate decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">Maintainer Reviews Plan</text>
+          <path d="M200,50 L200,72 M200,72 L55,90 M200,72 L200,90 M200,72 L345,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+
+          <rect x="10" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="10" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="22" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">/approve</text>
+          <text x="22" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">signs approval.lock</text>
+          <text x="22" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ Dev unblocked</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Amend Scope</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">Architect re-plans</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">(1 pass, ≤2 rds)</text>
+
+          <rect x="280" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="280" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="292" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">/reject</text>
+          <text x="292" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">lock revoked,</text>
+          <text x="292" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">clean abort</text>
+        </svg>
+      </div>
+
+      <!-- Playbook Card 3: Stage 3 Write Barrier -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 03 · Write-Scope Barrier</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="Write barrier decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">Developer File Mutation</text>
+          <path d="M200,50 L200,72 M200,72 L80,90 M200,72 L200,90 M200,72 L320,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+
+          <rect x="20" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="20" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="32" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">In Scope</text>
+          <text x="32" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">prefix matches</text>
+          <text x="32" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ write allowed</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Out-of-Scope</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">smart nudge injected</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ self-corrects</text>
+
+          <rect x="270" y="90" width="120" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="270" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="282" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Protected Path</text>
+          <text x="282" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">.github / .gated-change</text>
+          <text x="282" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ HARD BLOCK</text>
+        </svg>
+      </div>
+
+      <!-- Playbook Card 4: Stage 4 QA Retry Loop -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 04 · QA Verification &amp; Retry Loop</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="QA retry decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">QA Test Runner Result</text>
+          <path d="M200,50 L200,72 M200,72 L55,90 M200,72 L200,90 M200,72 L345,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+
+          <rect x="10" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="10" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="22" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">100% Pass</text>
+          <text x="22" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">55/55 passed</text>
+          <text x="22" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ Reviewer</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Regression</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">rework cycle</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">(attempt ≤3)</text>
+
+          <rect x="280" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="280" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="292" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Ceiling Hit</text>
+          <text x="292" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">4th failure pauses;</text>
+          <text x="292" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">escalates to PM</text>
+        </svg>
+      </div>
+
+      <!-- Playbook Card 5: Stage 5 AST Symbol Sweep -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 05 · AST Symbol Contract Sweep</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="AST sweep decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">AST Cross-File Analysis</text>
+          <path d="M200,50 L200,72 M200,72 L80,90 M200,72 L200,90 M200,72 L320,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+
+          <rect x="20" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="20" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="32" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Contract Clear</text>
+          <text x="32" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">0 symbol drift</text>
+          <text x="32" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ opens PR</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Call Drift</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">caller updated</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">in repair budget</text>
+
+          <rect x="270" y="90" width="120" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="270" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="282" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Flaw Flagged</text>
+          <text x="282" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">OWASP / leak risk</text>
+          <text x="282" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ flagged in PR</text>
+        </svg>
+      </div>
+
+      <!-- Playbook Card 6: Stage 6 PR Merge Gate -->
+      <div class="decision-card">
+        <p class="dtitle">Stage 06 · PR Gate &amp; Merge Delivery</p>
+        <svg viewBox="0 0 400 230" role="img" aria-label="PR gate decision tree">
+          <rect x="100" y="10" width="200" height="40" rx="7" fill="var(--surface-2)" stroke="var(--text-muted)" stroke-width="1.3"></rect>
+          <text x="200" y="34" text-anchor="middle" font-family="IBM Plex Sans" font-size="12" fill="var(--text)">Maintainer GitHub Review</text>
+          <path d="M200,50 L200,72 M200,72 L80,90 M200,72 L200,90 M200,72 L320,90" stroke="currentColor" stroke-width="1.3" fill="none" opacity="0.7" marker-end="url(#arrow)"></path>
+
+          <rect x="20" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="20" y="90" width="4" height="52" fill="var(--good)"></rect>
+          <text x="32" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Approved</text>
+          <text x="32" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">human merges PR</text>
+          <text x="32" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">→ issue closed</text>
+
+          <rect x="145" y="90" width="110" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="145" y="90" width="4" height="52" fill="var(--warn)"></rect>
+          <text x="157" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Changes Req</text>
+          <text x="157" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">clarified criteria</text>
+          <text x="157" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">re-enters Step 1</text>
+
+          <rect x="270" y="90" width="120" height="52" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="1.2"></rect>
+          <rect x="270" y="90" width="4" height="52" fill="var(--bad)"></rect>
+          <text x="282" y="110" font-family="IBM Plex Sans" font-size="11.5" font-weight="600" fill="var(--text)">Closed PR</text>
+          <text x="282" y="125" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">branch pruned,</text>
+          <text x="282" y="137" font-family="IBM Plex Sans" font-size="10" fill="var(--text-muted)">0 main impact</text>
+        </svg>
+      </div>
+
+    </div>
+    <div class="dkey">
+      <span><i style="background:var(--good)"></i>No retry consumed — proceeds to next stage</span>
+      <span><i style="background:var(--accent)"></i>Pauses for human action, then resumes (zero retry cost)</span>
+      <span><i style="background:var(--warn)"></i>Consumes a bounded retry or clarification round</span>
+      <span><i style="background:var(--bad)"></i>Escalates directly to maintainer, no automated retry</span>
+    </div>
+  </section>
+
+  <section id="efficiency">
+    <h2>Enterprise Governance &amp; Efficiency Mechanisms</h2>
+    <div class="callouts">
+      <div class="callout">
+        <h3>Bounded Retry Ceilings (No Runaway Loops)</h3>
+        <p>
+          The Developer↔QA repair loop is hard-capped at <code>3</code> attempts. A 4th consecutive failure does not spend 
+          further LLM tokens — the pipeline pauses and notifies the maintainer. This eliminates the catastrophic multi-agent token bleed common in unconstrained loops.
+        </p>
+      </div>
+      <div class="callout">
+        <h3>Cryptographic Scope Lock (<code>approval.lock</code>)</h3>
+        <p>
+          Unlike prompt-based suggestions that models routinely bypass, the Scope Gate is enforced by a physical PreToolUse hook (<code>hook-verify-gate.mjs</code>). 
+          The Developer agent process is physically aborted at the operating system level unless a verified <code>approval.lock</code> signed by a maintainer exists on disk.
+        </p>
+      </div>
+      <div class="callout">
+        <h3>Zero-Token Deterministic AST Sweep</h3>
+        <p>
+          Cross-file caller impact is verified using the TypeScript compiler API (<code>ast-symbol-sweep.ts</code>), not an expensive LLM subagent. 
+          The sweep analyzes exported symbols and caller references in milliseconds with <strong>0 LLM tokens</strong>, surfacing warnings directly to the Reviewer.
+        </p>
+      </div>
+      <div class="callout">
+        <h3>Semantic Instruction Slicing &amp; Proximity Skills</h3>
+        <p>
+          Instead of dumping a monolithic repository instruction file into every agent prompt, PRsquad dynamically extracts only the sections relevant to the active specialist's role. 
+          Combined with directory-proximity skills (<code>.prsquad/skills/</code>), this reduces prompt token burn by <strong>60% to 80%</strong>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <strong>PRsquad</strong> · Built for the <strong>GitHub Copilot App Enterprise Challenge</strong>.
+    </div>
+    <div>
+      <a href="https://github.com/vamsicherukuri/gated-fix-pipeline">Repository</a> · 
+      <a href="index.html">Live Simulator</a> · 
+      Licensed under MIT
+    </div>
+  </footer>
+
+</div>
+
+</body>
+</html>
