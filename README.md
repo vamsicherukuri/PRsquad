@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/"><b>🎮 Live Interactive Simulator</b></a> ·
-  <a href="#-quickstart-choose-your-path"><b>⚡ 30-Sec Quickstart</b></a> ·
+  <a href="#-quickstart-install-in-github-copilot-app"><b>⚡ Quickstart</b></a> ·
   <a href="#-supervised-agentic-workflow-architecture"><b>📐 Architecture</b></a> ·
   <a href="#-token-accounting-by-stage"><b>📊 Token Accounting</b></a> ·
   <a href="#-specialist-agent-contracts"><b>🤖 Specialist Contracts</b></a> ·
@@ -37,42 +37,36 @@ The result is a governed development flow designed to reduce risks such as **age
 
 ---
 
-## ⚡ Quickstart: Choose Your Path
+## ⚡ Quickstart: Install in GitHub Copilot App
 
-### Path A: Instant Browser Simulator (0 Setup, 1-Click)
-Step through all 7 stages, inspect real issue simulations, and trigger mechanical security hooks in your browser:
-👉 **[Launch the Interactive PRsquad Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)** *(or run locally via `npx tsx scripts/guardrails/visualizer-server.ts`)*
+<p align="center">
+  <a href="https://github.com/copilot/app/launch?open=ghapp%3A%2F%2Fgithub.com%2Fvamsicherukuri%2Fgated-fix-pipeline">
+    <img alt="Launch in GitHub Copilot App" src="https://img.shields.io/badge/Launch%20in-GitHub%20Copilot%20App-0969da?style=for-the-badge&logo=github">
+  </a>
+  <a href="vscode://vscode.git/clone?url=https://github.com/vamsicherukuri/gated-fix-pipeline.git">
+    <img alt="Open in VS Code" src="https://img.shields.io/badge/Clone%20in-VS%20Code-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white">
+  </a>
+  <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/">
+    <img alt="Interactive Simulator" src="https://img.shields.io/badge/Preview-Web%20Simulator%20(0--Install)-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white">
+  </a>
+</p>
 
-### Path B: Install in GitHub Copilot App
-1. In the GitHub Copilot App, add this repository as a custom plugin marketplace (`.github/plugin/marketplace.json`).
-2. Install **`prsquad`** (`v0.1.49`).
-3. Open any GitHub issue or task in the App and start a **Plan** session.
-4. In chat, invoke `@prsquad`:
+### 3-Step Setup
+
+1. **Add Marketplace Source**: In the GitHub Copilot App settings, add this repository as a custom marketplace:
+   ```text
+   https://github.com/vamsicherukuri/gated-fix-pipeline
+   ```
+2. **Install `prsquad`**: Select and install **`prsquad`** (`v0.1.49`) from the plugin catalog.
+3. **Execute Supervised Workflow**: Open any GitHub issue in the App, start a **Plan** session, and invoke:
    ```text
    @prsquad resolve issue #22 using the supervised pipeline
    ```
-5. Review the plan produced by `@prsquad-architect`.
-6. Type `/approve` in chat to cryptographically sign `approval.lock`.
-7. Watch `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute under active hook containment, delivering a verified Pull Request stopping at the human Merge Gate.
+   * `@prsquad-architect` drafts a surgical blast-radius plan (read-only symbol jail).
+   * Type `/approve` in chat to cryptographically sign `approval.lock`.
+   * Specialists `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute under active PreToolUse containment, delivering a verified Pull Request stopping at the human Merge Gate.
 
-### Path C: Run Local Verification Suite
-```bash
-# 1. Clone repository
-git clone https://github.com/vamsicherukuri/gated-fix-pipeline.git
-cd gated-fix-pipeline && npm install
-
-# 2. Run the 78-point Copilot App plugin consistency check
-npm run check:plugin
-
-# 3. Verify all 55 mechanical guardrail and security policies
-npm run test:guardrails
-
-# 4. Verify semantic instruction slicing and dynamic tooling detection
-npm run test:skills
-
-# 5. Run complete 7-stage end-to-end workflow simulation (100% pass)
-npm run test:e2e
-```
+> **Evaluating without the Copilot App?** You can test the 7-stage workflow immediately in the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)** (zero install required) or run the local test suite via `npm run check:plugin && npm run test:guardrails`.
 
 ---
 
