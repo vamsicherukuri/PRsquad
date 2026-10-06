@@ -88,6 +88,9 @@ async function main() {
     if (!state?.sessionId) {
       const home = homedir();
       const candidates = [
+        join(home, "factory/sample repos/copilot-worktrees/prsquad"),
+        join(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
+        join(home, "factory/sample repos/prsquad"),
         join(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
         join(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
         join(home, "factory/sample repos/gated-fix-pipeline"),
@@ -347,7 +350,7 @@ async function main() {
     state.implementationAttempt = lock.currentAttempt;
     state.activeBranch = branchName;
     if (!state.issue) {
-      state.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: resolvedIssue };
+      state.issue = { owner: "vamsicherukuri", repo: "prsquad", number: resolvedIssue };
     } else {
       state.issue.number = resolvedIssue;
     }
@@ -363,7 +366,7 @@ async function main() {
 
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       activeBranch: branchName,
@@ -684,7 +687,7 @@ async function main() {
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const dashIntake = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "gated-fix-pipeline",
+        repo: state.issue?.repo || "prsquad",
         issueNumber: resolvedIssue,
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
@@ -707,7 +710,7 @@ async function main() {
 
       const dashArch = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "gated-fix-pipeline",
+        repo: state.issue?.repo || "prsquad",
         issueNumber: resolvedIssue,
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
@@ -742,7 +745,7 @@ async function main() {
 
       const dashDev = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "gated-fix-pipeline",
+        repo: state.issue?.repo || "prsquad",
         issueNumber: resolvedIssue,
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
@@ -767,7 +770,7 @@ async function main() {
 
       const dashQA = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "gated-fix-pipeline",
+        repo: state.issue?.repo || "prsquad",
         issueNumber: resolvedIssue,
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
@@ -793,7 +796,7 @@ async function main() {
 
       syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "gated-fix-pipeline",
+        repo: state.issue?.repo || "prsquad",
         issueNumber: resolvedIssue,
         sessionId: input.sessionId || state.sessionId,
         phase: "reviewer",
@@ -863,7 +866,7 @@ async function main() {
 
     const dashArch = syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,
@@ -940,7 +943,7 @@ async function main() {
 
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,
@@ -1033,7 +1036,7 @@ async function main() {
 
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,

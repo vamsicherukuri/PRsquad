@@ -33,7 +33,7 @@ try {
       "issue",
       "create",
       "--repo",
-      "vamsicherukuri/gated-fix-pipeline",
+      "vamsicherukuri/prsquad",
       "--title",
       title,
       "--body-file",

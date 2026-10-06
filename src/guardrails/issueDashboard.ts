@@ -378,7 +378,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   const p = data.phases || {};
   const currentBranch = data.activeBranch || (p.scopeGate?.details?.activeBranch) || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
-  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "gated-fix-pipeline"}`;
+  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "prsquad"}`;
   const t = data.telemetry;
 
   const mg = (p.mergeGate || {}) as any;
@@ -604,7 +604,7 @@ export function syncWorkflowDashboard(
       issueNumber: update.issueNumber || 0,
       issueTitle: update.issueTitle,
       owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "gated-fix-pipeline",
+      repo: update.repo || "prsquad",
       activeBranch: update.activeBranch,
       sessionId: update.sessionId,
       lastUpdated: new Date().toISOString(),

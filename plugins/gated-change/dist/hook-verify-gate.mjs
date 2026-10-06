@@ -452,7 +452,7 @@ function renderDashboardMarkdown(data) {
   const p = data.phases || {};
   const currentBranch = data.activeBranch || p.scopeGate?.details?.activeBranch || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
-  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "gated-fix-pipeline"}`;
+  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "prsquad"}`;
   const t = data.telemetry;
   const mg = p.mergeGate || {};
   const prNum = mg.details?.prNumber || 17;
@@ -748,7 +748,7 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       issueNumber: update.issueNumber || 0,
       issueTitle: update.issueTitle,
       owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "gated-fix-pipeline",
+      repo: update.repo || "prsquad",
       activeBranch: update.activeBranch,
       sessionId: update.sessionId,
       lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1328,7 +1328,7 @@ function createPullRequest(options = {}) {
     }
     const remoteInfo = getRepoOwnerAndName(rootDir);
     const owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    const repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
+    const repo = state.issue?.repo || remoteInfo.repo || "prsquad";
     let issueTitle = state.issue?.title;
     if (!issueTitle || state.issue?.number && state.issue.number !== issueNum || issueTitle === "Multi-path scope enforcer alignment") {
       try {
@@ -1873,6 +1873,9 @@ async function main() {
     if (!state2?.sessionId) {
       const home = homedir2();
       const candidates = [
+        join7(home, "factory/sample repos/copilot-worktrees/prsquad"),
+        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
+        join7(home, "factory/sample repos/prsquad"),
         join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
         join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
         join7(home, "factory/sample repos/gated-fix-pipeline")
@@ -2085,7 +2088,7 @@ async function main() {
     state2.implementationAttempt = lock2.currentAttempt;
     state2.activeBranch = branchName;
     if (!state2.issue) {
-      state2.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: resolvedIssue2 };
+      state2.issue = { owner: "vamsicherukuri", repo: "prsquad", number: resolvedIssue2 };
     } else {
       state2.issue.number = resolvedIssue2;
     }
@@ -2098,7 +2101,7 @@ async function main() {
     }
     syncWorkflowDashboard(repoRoot2, {
       owner: state2.issue?.owner || "vamsicherukuri",
-      repo: state2.issue?.repo || "gated-fix-pipeline",
+      repo: state2.issue?.repo || "prsquad",
       issueNumber: resolvedIssue2,
       issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
       activeBranch: branchName,
@@ -2405,7 +2408,7 @@ ${stateObj.issue.body.trim()}`);
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "gated-fix-pipeline",
+        repo: state2.issue?.repo || "prsquad",
         issueNumber: resolvedIssue2,
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
@@ -2422,7 +2425,7 @@ ${stateObj.issue.body.trim()}`);
       const planMarkdown = extractPlanMarkdown(rawText);
       const dashArch = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "gated-fix-pipeline",
+        repo: state2.issue?.repo || "prsquad",
         issueNumber: resolvedIssue2,
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
@@ -2452,7 +2455,7 @@ ${stateObj.issue.body.trim()}`);
       const devDetails = extractDeveloperDetails(input.toolResult, repoRoot2);
       const dashDev = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "gated-fix-pipeline",
+        repo: state2.issue?.repo || "prsquad",
         issueNumber: resolvedIssue2,
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
@@ -2473,7 +2476,7 @@ ${stateObj.issue.body.trim()}`);
       const qaDetails = extractQADetails(input.toolResult);
       const dashQA = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "gated-fix-pipeline",
+        repo: state2.issue?.repo || "prsquad",
         issueNumber: resolvedIssue2,
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
@@ -2495,7 +2498,7 @@ ${stateObj.issue.body.trim()}`);
       const verdict = revDetails.verdict || "CONCERNS";
       syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "gated-fix-pipeline",
+        repo: state2.issue?.repo || "prsquad",
         issueNumber: resolvedIssue2,
         sessionId: input.sessionId || state2.sessionId,
         phase: "reviewer",
@@ -2550,7 +2553,7 @@ ${stateObj.issue.body.trim()}`);
     const astMap = generateAstPreFetchMap(declaredScope, repoRoot);
     const dashArch = syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,
@@ -2632,7 +2635,7 @@ ${failureLines.join("\n")}
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,
@@ -2726,7 +2729,7 @@ ${truncatedDiff}
     const qaHandoff = buildQAHandoffPayload(repoRoot, state, prompt);
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "gated-fix-pipeline",
+      repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
       sessionId: input.sessionId || state.sessionId,

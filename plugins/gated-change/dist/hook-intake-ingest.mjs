@@ -402,7 +402,7 @@ function renderDashboardMarkdown(data) {
   const p = data.phases || {};
   const currentBranch = data.activeBranch || p.scopeGate?.details?.activeBranch || "Pending Scope Approval Gate";
   const updatedIso = new Date(data.lastUpdated || Date.now()).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
-  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "gated-fix-pipeline"}`;
+  const repoSlug = `${data.owner || "vamsicherukuri"}/${data.repo || "prsquad"}`;
   const t = data.telemetry;
   const mg = p.mergeGate || {};
   const prNum = mg.details?.prNumber || 17;
@@ -698,7 +698,7 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
       issueNumber: update.issueNumber || 0,
       issueTitle: update.issueTitle,
       owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "gated-fix-pipeline",
+      repo: update.repo || "prsquad",
       activeBranch: update.activeBranch,
       sessionId: update.sessionId,
       lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
@@ -936,7 +936,7 @@ async function main() {
     }
     const remoteInfo = getRepoOwnerAndName(repoRoot);
     let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
+    let repo = state.issue?.repo || remoteInfo.repo || "prsquad";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {

@@ -27,6 +27,9 @@ function getLatestWorktreeDir() {
 	lastWorktreeScan = now;
 
 	const candidates = [
+		join(userHome, "factory", "sample repos", "copilot-worktrees", "prsquad"),
+		join(userHome, "copilot-worktrees", "prsquad"),
+		resolve(process.cwd(), "..", "copilot-worktrees", "prsquad"),
 		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline"),
 		join(userHome, "copilot-worktrees", "gated-fix-pipeline"),
 		resolve(process.cwd(), "..", "copilot-worktrees", "gated-fix-pipeline")
@@ -59,6 +62,9 @@ function findDashboardJson() {
 		latestWorktree ? join(latestWorktree, ".gated-change", "dashboard.json") : null,
 		resolve(process.cwd(), ".gated-change", "dashboard.json"),
 		resolve(process.cwd(), "..", ".gated-change", "dashboard.json"),
+		join(userHome, "factory", "sample repos", "prsquad", ".gated-change", "dashboard.json"),
+		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "dashboard.json"),
+		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "dashboard.json"),
 		join(userHome, "factory", "sample repos", "gated-fix-pipeline", ".gated-change", "dashboard.json"),
 		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "dashboard.json"),
 		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "dashboard.json")
@@ -86,6 +92,9 @@ function findAuditJsonl() {
 		latestWorktree ? join(latestWorktree, ".gated-change", "audit.jsonl") : null,
 		resolve(process.cwd(), ".gated-change", "audit.jsonl"),
 		resolve(process.cwd(), "..", ".gated-change", "audit.jsonl"),
+		join(userHome, "factory", "sample repos", "prsquad", ".gated-change", "audit.jsonl"),
+		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "audit.jsonl"),
+		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "audit.jsonl"),
 		join(userHome, "factory", "sample repos", "gated-fix-pipeline", ".gated-change", "audit.jsonl"),
 		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "audit.jsonl"),
 		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "audit.jsonl")
@@ -112,6 +121,7 @@ function getHtmlContent() {
 	const candidates = [
 		resolve(__dirname, "canvas.html"),
 		resolve(process.cwd(), ".github", "extensions", "gated-change-pipeline", "canvas.html"),
+		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline", "vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8", ".github", "extensions", "gated-change-pipeline", "canvas.html")
 	];

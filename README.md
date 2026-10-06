@@ -3,7 +3,7 @@
 > **"Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates."**
 
 <p align="center">
-  <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/"><b>🎮 Live Interactive Simulator</b></a> ·
+  <a href="https://vamsicherukuri.github.io/prsquad/"><b>🎮 Live Interactive Simulator</b></a> ·
   <a href="#-quickstart-github-copilot-app--vs-code"><b>⚡ Quickstart</b></a> ·
   <a href="#-supervised-agentic-workflow-architecture"><b>📐 Architecture</b></a> ·
   <a href="#-token-accounting-by-stage"><b>📊 Token Accounting</b></a> ·
@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/"><img alt="Live Demo" src="https://img.shields.io/badge/Live%20Demo-Interactive%20Simulator-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white"></a>
+  <a href="https://vamsicherukuri.github.io/prsquad/"><img alt="Live Demo" src="https://img.shields.io/badge/Live%20Demo-Interactive%20Simulator-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white"></a>
   <a href="scripts/check-plugin-consistency.ts"><img alt="Plugin Checks" src="https://img.shields.io/badge/Plugin%20Consistency-78%2F78%20PASS-brightgreen?style=for-the-badge"></a>
   <a href="scripts/test-guardrails.ts"><img alt="Verification Tests" src="https://img.shields.io/badge/Automated%20Tests-277%2F277%20PASS%20(100%25)-brightgreen?style=for-the-badge"></a>
   <a href="https://github.com/features/copilot"><img alt="Platform" src="https://img.shields.io/badge/Platform-GitHub%20Copilot%20App-0969da?style=for-the-badge&logo=github"></a>
@@ -40,20 +40,20 @@ The result is a governed development flow designed to reduce risks such as **age
 ## ⚡ Quickstart: GitHub Copilot App & VS Code
 
 <p align="center">
-  <a href="https://github.com/copilot/app/launch?open=ghapp%3A%2F%2Fgithub.com%2Fvamsicherukuri%2Fgated-fix-pipeline">
+  <a href="https://github.com/copilot/app/launch?open=ghapp%3A%2F%2Fgithub.com%2Fvamsicherukuri%2Fprsquad">
     <img alt="Launch in GitHub Copilot App" src="https://img.shields.io/badge/Launch%20in-GitHub%20Copilot%20App-0969da?style=for-the-badge&logo=github">
   </a>
-  <a href="vscode://vscode.git/clone?url=https://github.com/vamsicherukuri/gated-fix-pipeline.git">
+  <a href="vscode://vscode.git/clone?url=https://github.com/vamsicherukuri/prsquad.git">
     <img alt="Open in VS Code" src="https://img.shields.io/badge/Open%20in-VS%20Code-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white">
   </a>
-  <a href="https://vamsicherukuri.github.io/gated-fix-pipeline/">
+  <a href="https://vamsicherukuri.github.io/prsquad/">
     <img alt="Interactive Simulator" src="https://img.shields.io/badge/Preview-Web%20Simulator%20(0--Install)-2ea043?style=for-the-badge&logo=googlechrome&logoColor=white">
   </a>
 </p>
 
 ### 1. Install Plugin
 
-* **GitHub Copilot App**: Go to Settings → **Marketplaces** → Add source: `https://github.com/vamsicherukuri/gated-fix-pipeline` → Install **`prsquad`** (`v0.1.49`).
+* **GitHub Copilot App**: Go to Settings → **Marketplaces** → Add source: `https://github.com/vamsicherukuri/prsquad` → Install **`prsquad`** (`v0.1.49`).
 * **Visual Studio Code**: Clone and open as workspace, or add the marketplace URL to `github.copilot.chat.pluginMarketplaces` in VS Code Settings (requires GitHub Copilot Chat extension).
 
 ### 2. Run the Supervised Workflow
@@ -75,7 +75,7 @@ PRsquad guides the issue through its governed 7-stage pipeline:
 ---
 
 > **Want to test without installing?**  
-> Explore the 7-stage workflow in your browser via the **[Live Interactive Simulator](https://vamsicherukuri.github.io/gated-fix-pipeline/)**, or validate locally with:  
+> Explore the 7-stage workflow in your browser via the **[Live Interactive Simulator](https://vamsicherukuri.github.io/prsquad/)**, or validate locally with:  
 > `npm run check:plugin && npm run test:guardrails`
 
 ---
@@ -268,22 +268,22 @@ scripts/
 
 If you find PRsquad useful for supervised agentic workflows and deterministic policy enforcement, please star this repository!
 
-<a href="https://star-history.com/#vamsicherukuri/gated-fix-pipeline&Date">
+<a href="https://star-history.com/#vamsicherukuri/prsquad&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=vamsicherukuri/gated-fix-pipeline&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=vamsicherukuri/gated-fix-pipeline&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=vamsicherukuri/gated-fix-pipeline&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=vamsicherukuri/prsquad&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=vamsicherukuri/prsquad&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=vamsicherukuri/prsquad&type=Date" />
  </picture>
 </a>
 
 ### Community & Feedback
-* **Issues**: Report reproducible bugs or request enhancements via [GitHub Issues](https://github.com/vamsicherukuri/gated-fix-pipeline/issues).
-* **Discussions**: Discuss workflow patterns and governance hooks on [GitHub Discussions](https://github.com/vamsicherukuri/gated-fix-pipeline/discussions).
+* **Issues**: Report reproducible bugs or request enhancements via [GitHub Issues](https://github.com/vamsicherukuri/prsquad/issues).
+* **Discussions**: Discuss workflow patterns and governance hooks on [GitHub Discussions](https://github.com/vamsicherukuri/prsquad/discussions).
 
 ---
 
 ## 🔒 Security Disclosure
-Security vulnerabilities should be reported privately via [GitHub Security Advisories](https://github.com/vamsicherukuri/gated-fix-pipeline/security/advisories) rather than public issues.
+Security vulnerabilities should be reported privately via [GitHub Security Advisories](https://github.com/vamsicherukuri/prsquad/security/advisories) rather than public issues.
 
 ---
 

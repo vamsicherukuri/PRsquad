@@ -63,7 +63,7 @@ async function runLiveBranchTest() {
     const stateBefore = loadState();
     stateBefore.issue = {
       owner: "vamsicherukuri",
-      repo: "gated-fix-pipeline",
+      repo: "prsquad",
       number: TEST_ISSUE,
       title: "Automated Live Branch Test Issue",
     };

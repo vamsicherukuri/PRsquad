@@ -257,7 +257,7 @@ async function runLayerB() {
       }, REPO_ROOT);
 
       const state = loadState(REPO_ROOT);
-      state.issue = { owner: "vamsicherukuri", repo: "gated-fix-pipeline", number: 9 };
+      state.issue = { owner: "vamsicherukuri", repo: "prsquad", number: 9 };
       state.approvedScope = multiScope;
       state.phase = "DEVELOPING";
       saveState(state, REPO_ROOT);

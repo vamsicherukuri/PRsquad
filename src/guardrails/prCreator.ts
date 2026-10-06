@@ -90,7 +90,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
 
     const remoteInfo = getRepoOwnerAndName(rootDir);
     const owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    const repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
+    const repo = state.issue?.repo || remoteInfo.repo || "prsquad";
 
     let issueTitle = state.issue?.title;
     if (!issueTitle || (state.issue?.number && state.issue.number !== issueNum) || issueTitle === "Multi-path scope enforcer alignment") {

@@ -62,7 +62,7 @@ async function main() {
     // Extract owner and repo dynamically from remote origin or prompt
     const remoteInfo = getRepoOwnerAndName(repoRoot);
     let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || remoteInfo.repo || "gated-fix-pipeline";
+    let repo = state.issue?.repo || remoteInfo.repo || "prsquad";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {

@@ -42,7 +42,7 @@ const state = {
   issueNumber: 9,
   issueTitle: "Scope enforcer fails to match multi-path approved scopes separated by semicolons",
   owner: "vamsicherukuri",
-  repo: "gated-fix-pipeline",
+  repo: "prsquad",
   activeBranch: "vamsicherukuri-issue-9-scope-enforcer-fails-to-match-multi-path-fc980a",
   commentId: null,
   lastUpdated: new Date().toISOString(),
@@ -153,11 +153,11 @@ const state = {
     },
     mergeGate: {
       status: "PR_OPEN",
-      summary: "Pull Request #10 is officially OPEN on GitHub: https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10. Merging is reserved for human maintainers on GitHub after PR review.",
+      summary: "Pull Request #10 is officially OPEN on GitHub: https://github.com/vamsicherukuri/prsquad/pull/10. Merging is reserved for human maintainers on GitHub after PR review.",
       updatedAt: "2026-09-30T21:50:36.000Z",
       details: {
         prNumber: 10,
-        prUrl: "https://github.com/vamsicherukuri/gated-fix-pipeline/pull/10",
+        prUrl: "https://github.com/vamsicherukuri/prsquad/pull/10",
         baseBranch: "copilot-app-plugin-alignment",
         headBranch: "vamsicherukuri-issue-9-scope-enforcer-fails-to-match-multi-path-fc980a",
         prOpen: true,

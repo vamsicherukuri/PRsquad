@@ -1,5 +1,5 @@
 {
-  "name": "gated-fix-pipeline",
+  "name": "prsquad",
   "version": "0.2.8",
   "private": true,
   "description": "GitHub Copilot App Enterprise Challenge submission - narrow slice: Issue -> Intake Triage -> Architect -> Scope gate",
