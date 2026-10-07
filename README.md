@@ -97,7 +97,7 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 | 5 | **Reviewer Read-Only Sandbox** | Reviewer Agent | `preToolUse` on `bash` / `powershell` (strictly allowlists `git diff`, blocks `>` redirects). |
 | 6 | **State & AI-Credit Telemetry Hook** | Orchestrator Level | `postToolUse` on `agent` (executes whenever *any* specialist finishes and returns). |
 
-The two gates are human steps. Only a maintainer can approve scope (`node .gated-change/bin/gate-approve.mjs`) or open the pull request (`node .gated-change/bin/pr-create.mjs`), and merging stays with humans.
+Both gates are strictly human-governed. Only a maintainer can authorize the implementation plan at the **Scope Gate** before code can be written, and approve opening the pull request at the **PR Gate** once independent verification is complete. Final code review and merging always remain with humans.
 
 ### The Two Layers
 
