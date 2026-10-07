@@ -88,14 +88,14 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 
 4 Deterministic Hook Engines enforcing 6 Specialized Guardrails across the lifecycle.
 
-| # | Hook Interception | Hook Script File | Deployed At Which Agent? | Trigger Event |
-|:---:|---|---|---|---|
-| 1 | **Deterministic Ingest Hook** | `hook-intake-ingest.mjs` | Orchestrator → Intake Agent | `preToolUse` on `agent` (quarantines issue before Intake starts). |
-| 2 | **Mechanical Scope Gate Hook** | `hook-verify-gate.mjs` | Orchestrator → Developer Agent | `preToolUse` on `agent` (blocks Developer dispatch if `.approval.lock` is missing). |
-| 3 | **Write-Scope Barrier Hook** | `hook-enforce-scope.mjs` | Developer Agent | `preToolUse` on `edit_file`, `write_to_file`, `create_file` (blocks out-of-scope edits). |
-| 4 | **QA Bash Sandbox Hook** | `hook-sandbox-bash.mjs` | QA Specialist Agent | `preToolUse` on `bash` / `powershell` (permits test runners, but blocks `git push` & `commits`). |
-| 5 | **Reviewer Read-Only Sandbox** | `hook-sandbox-bash.mjs` | Reviewer Agent | `preToolUse` on `bash` / `powershell` (strictly allowlists `git diff`, blocks `>` redirects). |
-| 6 | **State & AI-Credit Telemetry Hook** | `hook-verify-gate.mjs` | Orchestrator Level | `postToolUse` on `agent` (executes whenever *any* specialist finishes and returns). |
+| # | Hook Interception | Deployed At Which Agent? | Trigger Event |
+|:---:|---|---|---|
+| 1 | **Deterministic Ingest Hook** | Orchestrator → Intake Agent | `preToolUse` on `agent` (quarantines issue before Intake starts). |
+| 2 | **Mechanical Scope Gate Hook** | Orchestrator → Developer Agent | `preToolUse` on `agent` (blocks Developer dispatch if `.approval.lock` is missing). |
+| 3 | **Write-Scope Barrier Hook** | Developer Agent | `preToolUse` on `edit_file`, `write_to_file`, `create_file` (blocks out-of-scope edits). |
+| 4 | **QA Bash Sandbox Hook** | QA Specialist Agent | `preToolUse` on `bash` / `powershell` (permits test runners, but blocks `git push` & `commits`). |
+| 5 | **Reviewer Read-Only Sandbox** | Reviewer Agent | `preToolUse` on `bash` / `powershell` (strictly allowlists `git diff`, blocks `>` redirects). |
+| 6 | **State & AI-Credit Telemetry Hook** | Orchestrator Level | `postToolUse` on `agent` (executes whenever *any* specialist finishes and returns). |
 
 The two gates are human steps. Only a maintainer can approve scope (`node .gated-change/bin/gate-approve.mjs`) or open the pull request (`node .gated-change/bin/pr-create.mjs`), and merging stays with humans.
 
