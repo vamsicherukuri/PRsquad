@@ -43,7 +43,7 @@ Issue -> Triage -> Architect -> Scope Gate -> Developer -> QA -> Code Review -> 
 The Orchestrator coordinates the pipeline while deterministic guardrails enforce safety boundaries:
 - Durable workflow state is maintained on disk (`.gated-change/state.json`) and synchronized across hook invocations.
 - Scope enforcement is guarded deterministically by pre-tool hooks (`hook-enforce-scope.ts`) and machine-readable locks (`.gated-change/approval.lock`).
-- Cross-package call/import impact is deterministically audited using the AST symbol sweep (`ast-symbol-sweep.ts`).
+- Cross-package call/import impact is deterministically audited using the deterministic symbol & reference sweep (`ast-symbol-sweep.ts`).
 - Canvas control surface / interactive dashboard rendered in the dedicated Canvas panel (`🔲 Canvas > PRSquad`).
 - Automated baseline/flaky failure classification and deterministic test pre-execution.
 - Token/cost telemetry instrumentation with live ground-truth AI credit meter.

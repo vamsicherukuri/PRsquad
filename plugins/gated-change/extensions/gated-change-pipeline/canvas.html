@@ -1207,7 +1207,7 @@
           desc = `Deterministic intake halted execution: issue is marked CLOSED on GitHub.`;
           detail = `Policy: Closed issues cannot be modified. State: ${e.details?.state || 'CLOSED'}`;
         } else if (e.action === 'ast_symbol_sweep_completed') {
-          title = `AST Symbol Sweep Completed`;
+          title = `Deterministic Symbol Sweep Completed`;
           desc = `Verified public API surface and external references. Risk: ${e.details?.riskAssessment || 'LOW'}.`;
           detail = `Total Symbols: ${e.details?.totalSymbols || 0} · External References: ${e.details?.externalReferences || 0}`;
         } else {

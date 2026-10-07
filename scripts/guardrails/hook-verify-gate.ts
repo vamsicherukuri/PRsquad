@@ -1098,10 +1098,10 @@ async function main() {
 
       diffReport = `### 🔍 Deterministic Diff & Security Pre-Injection (0 AI Credits)\n` +
         `> **Base Ref:** \`${base}\` | **Changed Files:** \`${changedFiles.join("`, `") || "detected in git"}\`\n` +
-        `> **AST Symbol Sweep:** ${sweep.summary}\n` +
+        `> **Deterministic Symbol Sweep:** ${sweep.summary}\n` +
         `> **External Package References:** ${sweep.externalReferencesFound.length} call-site(s) found\n\n` +
         `\`\`\`diff\n${truncatedDiff}\n\`\`\`\n` +
-        `*(Note for Reviewer: Full unified diff and cross-package symbol sweep are pre-computed above. Perform your read-only security review in 1 turn.)*`;
+        `*(Note for Reviewer: Full unified diff and cross-package deterministic symbol sweep are pre-computed above. Perform your read-only security review in 1 turn.)*`;
     } catch {}
 
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);

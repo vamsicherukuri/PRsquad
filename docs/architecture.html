@@ -546,9 +546,9 @@
           <tr>
             <td><div class="stage-name">Stage 05 · Contract Sweep</div></td>
             <td><div class="stage-actor">@prsquad-review</div></td>
-            <td>AST exported symbol sweep, credential audit, diff inspection</td>
+            <td>Exported symbol reference sweep, credential audit, diff inspection</td>
             <td><span class="metric-val">5.27 AIU</span> (2 turns)</td>
-            <td><strong>0-token TS Compiler AST engine</strong>; flags only, cannot self-trigger</td>
+            <td><strong>0-token Deterministic Symbol &amp; Reference Sweep</strong>; flags only, cannot self-trigger</td>
           </tr>
           <tr class="gate-row">
             <td><div class="stage-name">Stage 06 · PR Gate &amp; Merge</div></td>
@@ -662,10 +662,10 @@
           <h3>Reviewer Specialist</h3>
           <span class="agent-handle">@prsquad-review</span>
         </div>
-        <p class="mandate">Performs read-only AST symbol contract sweep and security review — flags only.</p>
+        <p class="mandate">Performs read-only deterministic symbol contract sweep and security review — flags only.</p>
         <div class="agent-row">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 7 Q7 2 13 7 Q7 12 1 7 Z"></path><circle cx="7" cy="7" r="1.8" fill="currentColor" stroke="none"></circle></svg>
-          <span class="rlabel">Reads</span><span class="rval">Diff, AST symbol references across repo</span>
+          <span class="rlabel">Reads</span><span class="rval">Diff, exported symbol references across repo</span>
         </div>
         <div class="agent-row">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="5.3"></circle><line x1="3" y1="11" x2="11" y2="3"></line></svg>
@@ -903,10 +903,10 @@
         </p>
       </div>
       <div class="callout">
-        <h3>Zero-Token Deterministic AST Sweep</h3>
+        <h3>Zero-Token Deterministic Symbol &amp; Reference Sweep</h3>
         <p>
-          Cross-file caller impact is verified using the TypeScript compiler API (<code>ast-symbol-sweep.ts</code>), not an expensive LLM subagent. 
-          The sweep analyzes exported symbols and caller references in milliseconds with <strong>0 LLM tokens</strong>, surfacing warnings directly to the Reviewer.
+          Cross-file symbol impact is mapped deterministically using symbol extraction and repository reference sweeping (<code>ast-symbol-sweep.ts</code>), not an expensive LLM subagent. 
+          The sweep analyzes exported symbols and repository references in milliseconds with <strong>0 LLM tokens</strong>, surfacing warnings directly to the Reviewer.
         </p>
       </div>
       <div class="callout">

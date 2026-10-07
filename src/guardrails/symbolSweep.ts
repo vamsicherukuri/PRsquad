@@ -171,7 +171,13 @@ function getAllSourceFiles(dir: string, rootDir: string): string[] {
 }
 
 /**
- * Sweeps the codebase to find external references to exported symbols modified in changed files.
+ * Deterministic Symbol & Reference Sweep:
+ * 1. AST Symbol Extraction: Parses modified files using TypeScript AST (ts.createSourceFile)
+ *    to discover exported functions, classes, variables, types, interfaces, and default exports.
+ * 2. Cross-File Reference Sweep: Scans external repository source files for identifier occurrences
+ *    to estimate cross-package blast radius and surface potential external call sites to Code Review.
+ * Note: Performs deterministic lexical symbol occurrence sweeping across files (not a full semantic
+ * type-checker reference graph).
  */
 export function runSymbolSweep(
   changedFiles: string[],

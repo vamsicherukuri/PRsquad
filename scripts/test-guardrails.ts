@@ -5,7 +5,7 @@
  *   2. Mechanical Scope Gate (preToolUse agent verification)
  *   3. Write-Scope Barrier & Developer Smart Nudge (preToolUse edit)
  *   4. Shell Command Sandboxing by Agent Role (preToolUse bash)
- *   5. Tier 1 AST Symbol Sweep across package boundaries
+ *   5. Deterministic Symbol & Reference Sweep across package boundaries
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
@@ -415,9 +415,9 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
 }
 
 // ---------------------------------------------------------------------------
-// 5. Tier 1 AST Symbol Sweep Tests
+// 5. Deterministic Symbol & Reference Sweep Tests
 // ---------------------------------------------------------------------------
-console.log("\nSuite 5: Guardrail 4 — Tier 1 AST Symbol Sweep");
+console.log("\nSuite 5: Guardrail 4 — Deterministic Symbol & Reference Sweep");
 {
   const symbols = extractExportedSymbols("src/scopeTool.ts");
   assert(symbols.includes("isWithinScope"), "Extracts exported function 'isWithinScope'");

@@ -138,7 +138,7 @@ The following figures represent **measured production telemetry** from resolving
 | **02 · Scope Gate** | **Human Maintainer** | Plain-language plan review; issues `/approve` | **0.00 AIU** *(zero tokens)* | **Deterministic lock** (`approval.lock`); blocks Dev process |
 | **03 · Contained Fix** | `@prsquad-dev` | Code generation & tests on `fix/issue-N` | **25.28 AIU** *(16 turns)* | **Write barrier** (`hook-enforce-scope.mjs`); branch push locks |
 | **04 · Verification** | `@prsquad-qa` | Test runner execution (`npm test`, 55/55 passed) | **13.60 AIU** *(13 turns)* | Isolated worktree; **0 git mutations**; capped at 3 retries |
-| **05 · Contract Sweep** | `@prsquad-review` | AST symbol contract sweep, OWASP audit | **5.27 AIU** *(2 turns)* | **0-token TS Compiler AST engine**; flags only |
+| **05 · Contract Sweep** | `@prsquad-review` | Deterministic symbol contract sweep, OWASP audit | **5.27 AIU** *(2 turns)* | **0-token Deterministic Symbol & Reference Sweep**; flags only |
 | **06 · PR Gate & Merge** | **Human Maintainer** | Dual-review of PR diff, verification logs & notes | **0.00 AIU** *(zero tokens)* | Auto-merge physically disabled; human clicks merge |
 | **Pipeline Conductor** | `@prsquad` | Dynamic routing, state store, loop enforcement | **38.33 AIU** *(9 turns)* | Supervision cost: 40.9% of budget; **0 code tools** |
 
@@ -173,8 +173,8 @@ Each stage's input is the prior specialist's structured JSON envelope, never the
 * **Escalates**: Feeds the bounded retry loop back to `@prsquad-dev` on failure (max 3 cycles).
 
 ### `@prsquad-review` · Reviewer Specialist
-* **Mandate**: Performs read-only AST symbol contract sweep and security review — flags only.
-* **Reads**: Feature branch diff, AST symbol references across repository.
+* **Mandate**: Performs read-only deterministic symbol contract sweep and security review — flags only.
+* **Reads**: Feature branch diff, exported symbol references across repository.
 * **Writes**: Review report (`CLEAR`, `CONCERNS`) — **flags only, 0 code edits**.
 * **Escalates**: Stage 6 PR Gate (human maintainers decide whether to merge).
 
@@ -236,8 +236,8 @@ The `hook-enforce-scope.mjs` hook intercepts all file-writing tools (`edit`, `ed
 ### 4. Shell Command Sandboxing & Base-Branch Lockdown
 The `hook-sandbox-bash.mjs` hook strictly forbids destructive commands (`git push origin main`, direct checkouts of `main`/`master`, branch deletions). It enforces role-based command restrictions: QA can only execute test runners (`npm test`, `pytest`, `go test`); Reviewer is limited to non-mutating inspections (`git diff`, `git status`).
 
-### 5. Zero-Token Deterministic AST Sweep
-Cross-package caller impact is verified using the TypeScript compiler API (`ast-symbol-sweep.ts`), not an expensive dedicated LLM agent. The sweep analyzes exported symbols and caller references in milliseconds with **0 LLM tokens**, surfacing warnings directly to the Reviewer.
+### 5. Zero-Token Deterministic Symbol & Reference Sweep
+Cross-package symbol touchpoints are mapped deterministically via symbol extraction and repository reference sweeping (`ast-symbol-sweep.ts`), not an expensive dedicated LLM agent. The sweep extracts exported symbols and scans cross-package references in milliseconds with **0 LLM tokens**, surfacing warnings directly to the Reviewer.
 
 ### 6. Semantic Instruction Slicing & Proximity Skills
 Instead of dumping monolithic instructions into every prompt, PRsquad dynamically extracts only the sections relevant to the active specialist's role. Combined with directory-proximity skills (`.prsquad/skills/`), this cuts token overhead by **60% to 80%**.

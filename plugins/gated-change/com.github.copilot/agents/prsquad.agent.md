@@ -107,7 +107,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 6. **Code Review**
    - Delegate to `prsquad-review` only after QA returns a valid `PASS`.
-   - Use a concise delegation prompt (e.g. `@prsquad-review Perform read-only security diff audit for issue #<issueNumber> on branch <branch>`). The guardrail hook automatically injects the unified diff, AST symbol sweep, approved scope, Developer handoff, and QA verification evidence directly into Code Review's context. Do not copy-paste raw logs or diffs.
+   - Use a concise delegation prompt (e.g. `@prsquad-review Perform read-only security diff audit for issue #<issueNumber> on branch <branch>`). The guardrail hook automatically injects the unified diff, deterministic symbol sweep, approved scope, Developer handoff, and QA verification evidence directly into Code Review's context. Do not copy-paste raw logs or diffs.
    - Code Review reads and reviews the actual final diff. Code Review is read-only, does not re-run QA tests, does not fix code, and does not autonomously consume retry budget.
    - Route both `CLEAR` and `CONCERNS` to the PR Approval Gate. `CONCERNS` are informational flags and never trigger an automatic retry.
    - Done when: Code Review has returned `CLEAR` or `CONCERNS`, both routed to the PR Approval Gate.
@@ -141,4 +141,4 @@ Display the clean, compact credit indicator provided by the hook. The live 7-sta
 ## Governance rules
 
 - Branch/worktree isolation is not a substitute for write-scope enforcement.
-- Deterministic write-scope enforcement hooks, mechanical approval lock verification, and AST symbol sweeps are active guardrails. Follow their decisions and guidance strictly.
+- Deterministic write-scope enforcement hooks, mechanical approval lock verification, and deterministic symbol sweeps are active guardrails. Follow their decisions and guidance strictly.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CLI Tool: Tier 1 AST Symbol Sweep
+ * CLI Tool: Deterministic Symbol & Reference Sweep
  * Sweeps for external references to modified symbols across package boundaries.
  * Usage:
  *   npx tsx scripts/guardrails/ast-symbol-sweep.ts [--files src/services/auth/service.ts] [--scope src/services/auth/]
@@ -34,7 +34,7 @@ function main() {
     files = getChangedFilesFromGit(state.baseRef || "HEAD");
   }
 
-  console.log(`[Symbol Sweep] Running Tier 1 AST Reference Sweep...`);
+  console.log(`[Symbol Sweep] Running Deterministic Symbol & Reference Sweep...`);
   console.log(`  Scope Boundary: ${scope}`);
   console.log(`  Target Files: ${files.length > 0 ? files.join(", ") : "(Scanning all exported files in scope)"}`);
 
