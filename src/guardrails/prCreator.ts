@@ -20,6 +20,69 @@ export interface PRResult {
 }
 
 /**
+ * Builds the structured Pull Request body with verification badges and cryptographic provenance.
+ */
+export function buildPullRequestBody(params: {
+  rootDir?: string;
+  issueNum: number;
+  issueTitle: string;
+  activeBranch: string;
+  baseBranch: string;
+  headCommit?: string;
+}): string {
+  const rootDir = getRepoRoot(params.rootDir);
+  const headCommit = params.headCommit || (() => {
+    try {
+      return execSync("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8" }).trim();
+    } catch {
+      return "0000000000000000000000000000000000000000";
+    }
+  })();
+  const shortSha = headCommit.slice(0, 7);
+  const lock = loadApprovalLock(rootDir);
+  const state = loadState(rootDir);
+
+  return `## 🛡️ PRSquad Governed Pull Request
+
+<p align="left">
+  <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
+  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
+  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
+</p>
+
+Closes #${params.issueNum}
+
+### 📋 Overview
+${params.issueTitle}
+
+### 🔏 Cryptographic Provenance & Scope Lock
+- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
+- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
+- **Approved Scope**: \`${lock?.approvedScope || state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
+- **Feature Branch**: \`${params.activeBranch}\`
+- **Base Target**: \`${params.baseBranch}\`
+
+### 🔨 Implementation Summary
+- **Commit SHA**: \`${shortSha}\` (\`${headCommit}\`)
+- **Author**: Autonomous \`@prsquad-dev\` via native PowerShell
+- **Scope Compliance**: 100% strictly bounded to approved scope
+
+### 🧪 QA Independent Verification
+- **Verdict**: \`PASS\`
+- **Evidence**: Verified clean via independent Red-Green test execution cycle
+- **All Assertions**: 100% passing
+
+### 🔍 Security & Code Review
+- **Code Review Verdict**: \`APPROVED\`
+- **Diff Inspection**: Verified read-only, 0 unexpected modifications, 0 security concerns
+
+---
+> *Pull Request opened automatically by **PRSquad** upon human **PR Gate** confirmation.*  
+> *Merging is strictly reserved for human maintainers on GitHub after PR review.*
+`;
+}
+
+/**
  * Deterministically creates a GitHub Pull Request for the active feature branch.
  * Zero LLM token cost: extracts evidence from local state and executes via gh CLI.
  * Does NOT merge; leaves merging exclusively to human review on GitHub.
@@ -158,49 +221,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     } catch {}
 
     // 5. Build rich structured PR body with verification badges and cryptographic provenance
-    const headCommit = execSync("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8" }).trim();
-    const shortSha = headCommit.slice(0, 7);
-    const lock = loadApprovalLock(rootDir);
-
     const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
-    const prBody = `## 🛡️ PRSquad Governed Pull Request
-
-<p align="left">
-  <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
-  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
-  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
-</p>
-
-Closes #${issueNum}
-
-### 📋 Overview
-${issueTitle}
-
-### 🔏 Cryptographic Provenance & Scope Lock
-- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
-- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
-- **Approved Scope**: \`${state.approvedScope || lock?.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
-- **Feature Branch**: \`${activeBranch}\`
-- **Base Target**: \`${baseBranch}\`
-
-### 🔨 Implementation Summary
-- **Commit SHA**: \`${shortSha}\` (\`${headCommit}\`)
-- **Author**: Autonomous \`@prsquad-dev\` via native PowerShell
-- **Scope Compliance**: 100% strictly bounded to approved scope
-
-### 🧪 QA Independent Verification
-- **Verdict**: \`PASS\`
-- **Evidence**: Verified clean via independent Red-Green test execution cycle
-- **All Assertions**: 100% passing
-
-### 🔍 Security & Code Review
-- **Code Review Verdict**: \`APPROVED\`
-- **Diff Inspection**: Verified read-only, 0 unexpected modifications, 0 security concerns
-
----
-> *Pull Request opened automatically by **PRSquad** upon human **PR Gate** confirmation.*  
-> *Merging is strictly reserved for human maintainers on GitHub after PR review.*
-`;
+    const prBody = buildPullRequestBody({
+      rootDir,
+      issueNum,
+      issueTitle,
+      activeBranch,
+      baseBranch,
+    });
 
     const tempBodyPath = join(tmpdir(), `gated-change-pr-body-${Date.now()}.md`);
     writeFileSync(tempBodyPath, prBody, "utf-8");

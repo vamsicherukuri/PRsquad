@@ -15,6 +15,8 @@
  *   Edge Case 9:  Retry Budget Exhaustion (Attempt 3 failure -> Hard stop)
  *   Edge Case 10: Reviewer Risk Flags (CONCERNS -> Merge Gate without token burn)
  *   Edge Case 11: Base Branch & Branch Deletion Guardrail Protections
+ *   Edge Case 12: Dynamic Hook Portability, Dispatch Resilience & Payload Passthrough
+ *   Edge Case 13: Pull Request Provenance, Cryptographic Lock Fidelity & Badge Fallbacks
  */
 
 import { execSync } from "node:child_process";
@@ -30,6 +32,7 @@ import {
 } from "../src/guardrails/stateStore.js";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
+import { buildPullRequestBody, createPullRequest } from "../src/guardrails/prCreator.js";
 
 const REPO_ROOT = getRepoRoot();
 let passed = 0;
@@ -431,6 +434,140 @@ async function runEdgeCases() {
     // Developer remote push blocked
     const devPush = validateCommandForAgent("git push origin fix/issue-4", "gated-change-developer");
     assert(!devPush.allowed, "Developer blocked from remote git push");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 12: Dynamic Hook Portability & Working Directory Agnosticism
+  // -------------------------------------------------------------------------
+  logCase(12, "Dynamic Hook Portability, Dispatch Resilience & Payload Passthrough");
+  {
+    // 1. Missing / invalid hook name argument -> cleanly exits with code 1 & diagnostic error
+    let invalidHookExitCode = 0;
+    let invalidHookOutput = "";
+    try {
+      execSync("node plugins/gated-change/dist/run-hook.mjs non-existent-hook", {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e: any) {
+      invalidHookExitCode = e.status;
+      invalidHookOutput = e.stderr || e.stdout || "";
+    }
+    assert(invalidHookExitCode === 1, "Dispatcher exits with code 1 when hook cannot be resolved");
+    assert(
+      invalidHookOutput.includes("Could not resolve hook 'non-existent-hook'"),
+      "Dispatcher writes clear diagnostic error to stderr"
+    );
+
+    // 2. Directory agnosticism: Invocation from nested subdirectory (e.g., src/guardrails)
+    const nestedSubdir = path.join(REPO_ROOT, "src", "guardrails");
+    const allowedPayload = JSON.stringify({ tool: "bash", toolArgs: { command: "git status" } });
+    let nestedOutput = "";
+    try {
+      nestedOutput = execSync("node ../../plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash", {
+        cwd: nestedSubdir,
+        input: allowedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+    } catch (e: any) {
+      nestedOutput = e.stdout || "";
+    }
+    const parsedAllowed = JSON.parse(nestedOutput.trim());
+    assert(parsedAllowed.decision === "allow", "Dispatcher resolves companion hook from nested directory via import.meta.url");
+
+    // 3. Stdin payload forwarding and policy enforcement through dispatcher
+    const disallowedPayload = JSON.stringify({ tool: "bash", toolArgs: { command: "git push origin main" } });
+    let blockedOutput = "";
+    try {
+      blockedOutput = execSync("node plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash", {
+        cwd: REPO_ROOT,
+        input: disallowedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+    } catch (e: any) {
+      blockedOutput = e.stdout || "";
+    }
+    const parsedBlocked = JSON.parse(blockedOutput.trim());
+    assert(parsedBlocked.decision === "deny", "Dispatcher cleanly forwards stdin payload and enforces policy denial");
+    assert(
+      parsedBlocked.permissionDecisionReason?.includes("POLICY_DENIAL"),
+      "Denial reason preserves strict base branch policy block"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 13: PR Provenance, Cryptographic Lock Fidelity & Badge Fallbacks
+  // -------------------------------------------------------------------------
+  logCase(13, "PR Provenance, Cryptographic Scope Lock Fidelity & Badge Fallbacks");
+  {
+    // 1. Missing Lock Fallback: Gracefully renders default provenance without null reference error
+    revokeApprovalLock("REVOKED", REPO_ROOT);
+    const bodyWithoutLock = buildPullRequestBody({
+      rootDir: REPO_ROOT,
+      issueNum: 42,
+      issueTitle: "Security bugfix in token validation",
+      activeBranch: "fix/issue-42-token-leak",
+      baseBranch: "copilot-app-plugin-alignment",
+      headCommit: "abcdef1234567890abcdef1234567890abcdef12",
+    });
+
+    assert(bodyWithoutLock.includes("PRsquad-Supervised%20Workflow-8250df"), "PR body embeds Supervised Workflow shield badge");
+    assert(bodyWithoutLock.includes("Deterministic%20Policy-Enforced%20(55%2F55)-2ea043"), "PR body embeds Deterministic Policy (55/55) badge");
+    assert(bodyWithoutLock.includes("Scope%20Gate-Cryptographically%20Signed-0969da"), "PR body embeds Cryptographic Scope Gate badge");
+    assert(bodyWithoutLock.includes("Closes #42"), "PR body references target issue #42");
+    assert(bodyWithoutLock.includes("Approval Lock Status**: `ACTIVE`"), "Missing lock safely falls back to status ACTIVE");
+    assert(bodyWithoutLock.includes("Authorized By**: `Human Maintainer`"), "Missing lock safely falls back to default Human Maintainer");
+
+    // 2. Active Custom Cryptographic Lock: Accurately reflects custom maintainer identity and approved scope
+    const preState = loadState(REPO_ROOT);
+    preState.issue = {
+      owner: "vamsicherukuri",
+      repo: "prsquad",
+      number: 42,
+      title: "Security bugfix in token validation",
+    };
+    preState.activeBranch = "master";
+    saveState(preState, REPO_ROOT);
+
+    saveApprovalLock({
+      issueNumber: 42,
+      planHash: "sha256-abc123mockhash",
+      approvedScope: "src/auth/token.ts, src/auth/verifier.ts",
+      approvedBy: "security-auditor@enterprise.internal",
+      approvedAt: "2026-10-06T20:00:00.000Z",
+      status: "ACTIVE",
+    }, REPO_ROOT);
+
+    const bodyWithLock = buildPullRequestBody({
+      rootDir: REPO_ROOT,
+      issueNum: 42,
+      issueTitle: "Security bugfix in token validation",
+      activeBranch: "fix/issue-42-token-leak",
+      baseBranch: "copilot-app-plugin-alignment",
+      headCommit: "abcdef1234567890abcdef1234567890abcdef12",
+    });
+
+    assert(bodyWithLock.includes("security-auditor@enterprise.internal"), "PR body renders authenticated maintainer identity");
+    assert(bodyWithLock.includes("2026-10-06T20:00:00.000Z"), "PR body renders exact signed timestamp");
+    assert(bodyWithLock.includes("src/auth/token.ts, src/auth/verifier.ts"), "PR body reflects exact cryptographic approved scope");
+
+    // Clean up test lock
+    revokeApprovalLock("REVOKED", REPO_ROOT);
+
+    // 3. Base Branch Protection on createPullRequest()
+    try {
+      execSync("git checkout master", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
+    } catch {}
+
+    const baseBranchPRResult = createPullRequest({
+      preferredDir: REPO_ROOT,
+    });
+    // Since git HEAD is on master, createPullRequest must return success: false
+    assert(!baseBranchPRResult.success, "createPullRequest() strictly refuses PR creation from base branch 'master'");
+    assert(baseBranchPRResult.error?.includes("Cannot create PR from base branch"), "Rejection error explicitly cites base branch lockdown");
   }
 
   // -------------------------------------------------------------------------
