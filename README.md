@@ -86,12 +86,16 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
-| Hook | Trigger Point | Deterministic Guardrail |
-|---|---|---|
-| `hook-verify-gate` | `[preToolUse]` & `[postToolUse]` on every agent dispatch | Verifies stage order, enforces active cryptographic `approval.lock` before Developer, and provides unified diff + symbol sweep |
-| `hook-intake-ingest` | `[preToolUse]` dispatch to Triage | Fetches ground-truth issue via `gh issue view` and verifies status is `OPEN` (no mock fixture fallbacks) |
-| `hook-enforce-scope` | `[preToolUse]` on Developer file edits | Confines edits strictly to approved file paths (`isEditAllowed`), preventing scope creep |
-| `hook-sandbox-bash` | `[preToolUse]` on shell commands | Role-based limits: no pushes, script write blocks (`node -e`, `python -c`), read-only git for Reviewer |
+In our Copilot App configuration (`hooks.json` and agent definitions), the 6 hooks are deployed across the agents as follows:
+
+| # | Hook Interception | Hook Script File | Deployed At Which Agent? | Trigger Event |
+|:---:|---|---|---|---|
+| 1 | **Deterministic Ingest Hook** | `hook-intake-ingest.mjs` | Orchestrator → Intake Agent | `preToolUse` on `agent` (quarantines issue before Intake starts). |
+| 2 | **Mechanical Scope Gate Hook** | `hook-verify-gate.mjs` | Orchestrator → Developer Agent | `preToolUse` on `agent` (blocks Developer dispatch if `.approval.lock` is missing). |
+| 3 | **Write-Scope Barrier Hook** | `hook-enforce-scope.mjs` | Developer Agent | `preToolUse` on `edit_file`, `write_to_file`, `create_file` (blocks out-of-scope edits). |
+| 4 | **QA Bash Sandbox Hook** | `hook-sandbox-bash.mjs` | QA Specialist Agent | `preToolUse` on `bash` / `powershell` (permits test runners, but blocks `git push` & `commits`). |
+| 5 | **Reviewer Read-Only Sandbox** | `hook-sandbox-bash.mjs` | Reviewer Agent | `preToolUse` on `bash` / `powershell` (strictly allowlists `git diff`, blocks `>` redirects). |
+| 6 | **State & AI-Credit Telemetry Hook** | `hook-verify-gate.mjs` | Orchestrator Level | `postToolUse` on `agent` (executes whenever *any* specialist finishes and returns). |
 
 The two gates are human steps. Only a maintainer can approve scope (`node .gated-change/bin/gate-approve.mjs`) or open the pull request (`node .gated-change/bin/pr-create.mjs`), and merging stays with humans.
 
