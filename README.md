@@ -1,9 +1,8 @@
 # PR Squad: Supervised Agentic Workflow
 
-<p align="center">
-  <a href="https://github.com/vamsicherukuri/PRsquad"><img src="https://img.shields.io/badge/GitHub%20Copilot%20App-Plugin-6f42c1?logo=githubcopilot&logoColor=white" alt="GitHub Copilot App Plugin" /></a>
-  <a href="https://github.com/vamsicherukuri/PRsquad/releases"><img src="https://img.shields.io/badge/releases-v0.2.8-blue" alt="Releases" /></a>
-</p>
+[![GitHub Copilot App Plugin](https://img.shields.io/badge/GitHub%20Copilot%20App-Plugin-6f42c1?logo=githubcopilot&logoColor=white)](https://github.com/vamsicherukuri/PRsquad)
+[![Releases](https://img.shields.io/badge/releases-v0.2.8-blue)](https://github.com/vamsicherukuri/PRsquad/releases)
+
 
 **Probabilistic agents · Deterministic control plane · Human-in-the-loop control.**
 
