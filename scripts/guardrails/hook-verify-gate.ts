@@ -459,6 +459,28 @@ async function main() {
       ? `\n\n### 📋 Verified Issue Specification & Acceptance Criteria\n${specBody.trim()}`
       : "";
 
+    // Deterministic QA Rework Diagnostics (Attempt 2+ following a failed QA verification)
+    // Ephemeral per-invocation: only injected for Developer rework, never leaks to QA or Reviewer
+    let reworkSection = "";
+    const prevQA = dashDev?.phases?.qa;
+    if (lock.currentAttempt > 1 && prevQA?.status === "FAIL") {
+      const qaDetails = prevQA.details || {};
+      const findings = qaDetails.blockingFindings?.length
+        ? `\n#### 🔍 Blocking Findings:\n` + qaDetails.blockingFindings.map((f: string) => `- ❌ ${f}`).join("\n")
+        : "";
+      const failures = qaDetails.failureClassification?.length
+        ? `\n#### 🚩 Failure Classifications:\n` + qaDetails.failureClassification.map((f: any) => `- ⚠️ [${f.classification}] ${f.failure}${f.evidence ? ` (${f.evidence})` : ""}`).join("\n")
+        : "";
+
+      reworkSection =
+        `\n\n### 🔧 Previous QA Verification Failure Report (Rework Attempt ${lock.currentAttempt}/${lock.maxAttempts})\n` +
+        `> **Previous QA Verdict:** ❌ \`FAIL\`\n` +
+        (prevQA.summary ? `> **QA Summary:** ${prevQA.summary}\n` : "") +
+        (qaDetails.testNotes ? `> **QA Notes:** ${qaDetails.testNotes}\n` : "") +
+        failures +
+        findings;
+    }
+
     const addCtx =
       `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
       `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
@@ -466,6 +488,7 @@ async function main() {
       "Developer write actions are strictly bounded to this prefix and branch." +
       planSection +
       specSection +
+      reworkSection +
       (chatMeter ? `\n\n${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Include this ⚡ AI Credit Meter status in your implementation handoff summary.` : "") +
       (repoIntel ? `\n\n${repoIntel}` : "");
 

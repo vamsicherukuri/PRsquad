@@ -353,6 +353,12 @@ async function runEdgeCases() {
   logCase(8, "QA Validation Failure & Developer Rework Cycle (verdict: FAIL)");
   {
     const state = loadState();
+    state.issue = {
+      owner: "vamsicherukuri",
+      repo: "prsquad",
+      number: 42,
+      title: "Scoped read allows path traversal outside declared scope",
+    };
     state.phase = "QA_VALIDATING";
     state.implementationAttempt = 1;
     state.maxImplementationAttempts = 3;
@@ -382,6 +388,43 @@ async function runEdgeCases() {
     const reloaded = loadState();
     assert(reloaded.phase === "DEVELOPING", "Workflow returns to DEVELOPING phase for rework pass");
     assert(reloaded.implementationAttempt === 2, "Implementation attempt counter incremented from 1 to 2");
+
+    // Verify hook injects previous QA failure diagnostics on Developer attempt 2
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "qa",
+      status: "FAIL",
+      summary: "Regression test failed: Path normalization missing",
+      details: qaFailureHandoff,
+    });
+    saveApprovalLock({
+      issueNumber: 42,
+      approvedScope: "src/",
+      status: "ACTIVE",
+      maxAttempts: 3,
+      currentAttempt: 2,
+      approvedBy: "Maintainer",
+    }, REPO_ROOT);
+
+    const devReworkInput = JSON.stringify({
+      tool: "agent",
+      toolArgs: { name: "gated-change-developer" },
+    });
+    const reworkStdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      cwd: REPO_ROOT,
+      input: devReworkInput,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const reworkParsed = JSON.parse(reworkStdout);
+    assert(
+      reworkParsed.additionalContext?.includes("Previous QA Verification Failure Report"),
+      "Hook injects QA failure diagnostics on rework pass"
+    );
+    assert(
+      reworkParsed.additionalContext?.includes("GENUINE_FIX_CAUSED"),
+      "Hook preserves failure classification in rework context"
+    );
   }
 
   // -------------------------------------------------------------------------

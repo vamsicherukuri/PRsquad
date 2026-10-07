@@ -2345,10 +2345,28 @@ ${canonicalPlan.trim()}` : "";
 
 ### \u{1F4CB} Verified Issue Specification & Acceptance Criteria
 ${specBody.trim()}` : "";
+    let reworkSection = "";
+    const prevQA = dashDev?.phases?.qa;
+    if (lock2.currentAttempt > 1 && prevQA?.status === "FAIL") {
+      const qaDetails = prevQA.details || {};
+      const findings = qaDetails.blockingFindings?.length ? `
+#### \u{1F50D} Blocking Findings:
+` + qaDetails.blockingFindings.map((f) => `- \u274C ${f}`).join("\n") : "";
+      const failures = qaDetails.failureClassification?.length ? `
+#### \u{1F6A9} Failure Classifications:
+` + qaDetails.failureClassification.map((f) => `- \u26A0\uFE0F [${f.classification}] ${f.failure}${f.evidence ? ` (${f.evidence})` : ""}`).join("\n") : "";
+      reworkSection = `
+
+### \u{1F527} Previous QA Verification Failure Report (Rework Attempt ${lock2.currentAttempt}/${lock2.maxAttempts})
+> **Previous QA Verdict:** \u274C \`FAIL\`
+` + (prevQA.summary ? `> **QA Summary:** ${prevQA.summary}
+` : "") + (qaDetails.testNotes ? `> **QA Notes:** ${qaDetails.testNotes}
+` : "") + failures + findings;
+    }
     const addCtx = `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
 APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
 ACTIVE_FEATURE_BRANCH: "${branchName}"
-Developer write actions are strictly bounded to this prefix and branch.` + planSection + specSection + (chatMeter ? `
+Developer write actions are strictly bounded to this prefix and branch.` + planSection + specSection + reworkSection + (chatMeter ? `
 
 ${chatMeter}
 
