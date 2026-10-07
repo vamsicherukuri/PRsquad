@@ -4,13 +4,13 @@
 [![Releases](https://img.shields.io/badge/releases-v0.2.8-blue)](https://github.com/vamsicherukuri/PRsquad/releases)
 
 
-**Probabilistic agents · Deterministic control plane · Human-in-the-loop control.**
+**Probabilistic reasoning · Deterministic control · Human-in-the-loop governance.**
 
 PR Squad is a GitHub Copilot App/VS Code plugin that takes a GitHub issue through planning, implementation, independent QA, code review, and pull-request creation using specialized AI agents.
 
 The agents remain probabilistic and isolated: they reason, plan, write code, validate behavior, and review changes. PR Squad adds a **deterministic control plane** around that reasoning to enforce critical workflow boundaries such as human approvals, scope containment, branch isolation, command restrictions, stage ordering, bounded retries, evidence integrity, and PR eligibility.
 
-> **PR Squad does not make LLM reasoning deterministic. It makes the critical boundaries around agent autonomy deterministic.**
+> **PR Squad does not make LLM reasoning deterministic. It applies policy-as-code to deterministically enforce the boundaries, permissions, and controls around agent autonomy.**
 
 ---
 
@@ -99,14 +99,8 @@ The two gates are human steps. Only a maintainer can approve scope (`node .gated
 
 ### The Two Layers
 
-```mermaid
-flowchart TB
-    CP["DETERMINISTIC CONTROL PLANE<br/><br/>Human authorization<br/>Stage transitions<br/>Scope + branch boundaries<br/>Command policy<br/>Retry limits<br/>Evidence integrity<br/>Audit + telemetry"]
+![The Two Layers: Probabilistic Coding Agents + Deterministic Control Plane](docs/images/prsquad-two-layers.svg)
 
-    AI["PROBABILISTIC AI AGENTS<br/><br/>Triage · Architecture · Implementation · QA · Review"]
-
-    CP -->|"constrains and verifies"| AI
-```
 
 **Agents decide how to solve the problem. The control plane decides what they are allowed to do and when they are allowed to proceed.**
 
