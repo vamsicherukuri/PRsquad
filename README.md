@@ -4,7 +4,24 @@
 
 # PR Squad: Supervised Agentic Workflow
 
-**Probabilistic agents - Deterministic control Plane - Human-in-the-loop control.**
+<p align="center">
+  <a href="#readme"><strong>📖 README</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="CODE_OF_CONDUCT.md"><strong>🤝 Code of Conduct</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="CONTRIBUTING.md"><strong>🛠️ Contributing</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="LICENSE"><strong>⚖️ License</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="SECURITY.md"><strong>🔒 Security</strong></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/vamsicherukuri/PRsquad/actions/workflows/ci-security-invariants.yml"><img src="https://github.com/vamsicherukuri/PRsquad/actions/workflows/ci-security-invariants.yml/badge.svg" alt="CI Security Invariants" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?logo=open-source-initiative&logoColor=white" alt="License: MIT" /></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security-Invariant%20Enforced-success.svg?logo=securityscorecard&logoColor=white" alt="Security Policy" /></a>
+  <a href="https://github.com/features/copilot"><img src="https://img.shields.io/badge/GitHub%20Copilot-Plugin-6f42c1.svg?logo=githubcopilot&logoColor=white" alt="GitHub Copilot Plugin" /></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node-%3E%3D20.0.0-339933.svg?logo=node.js&logoColor=white" alt="Node.js Version" /></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?logo=github&logoColor=white" alt="PRs Welcome" /></a>
+</p>
+
+**Probabilistic agents · Deterministic control plane · Human-in-the-loop control.**
 
 PR Squad is a GitHub Copilot App/VS Code plugin that takes a GitHub issue through planning, implementation, independent QA, code review, and pull-request creation using specialized AI agents.
 
@@ -16,7 +33,7 @@ The agents remain probabilistic and isolated: they reason, plan, write code, val
 
 ## ⚡ Quick Setup
 
-> **Current build note:** PR Squad's hook runtime currently uses repository-relative paths. Validate installation in the target repository before treating the current build as fully portable across arbitrary repositories.
+> **Portable runtime bundle:** PR Squad hooks are bundled into self-contained ESM artifacts (`${PLUGIN_ROOT}/dist/run-hook.mjs`) and automatically provision local human-gate binaries into `.gated-change/bin/`. No runtime `npm install`, `tsx`, or repository source dependency is required.
 
 ### GitHub Copilot App
 
@@ -231,8 +248,8 @@ Repository instructions and skills are selected by specialist role and approved 
 
 Implementation cannot begin until the maintainer explicitly authorizes the proposed plan by executing:
 
-```text
-npx -y tsx scripts/guardrails/scope-approve.ts
+```bash
+node .gated-change/bin/gate-approve.mjs
 ```
 
 This creates `.gated-change/approval.lock`, which the control plane verifies before Developer delegation is allowed.
@@ -241,8 +258,8 @@ This creates `.gated-change/approval.lock`, which the control plane verifies bef
 
 After QA and Review complete, the maintainer explicitly authorizes pull-request creation by executing:
 
-```text
-npx -y tsx scripts/guardrails/pr-create.ts
+```bash
+node .gated-change/bin/pr-create.mjs
 ```
 
 PRSquad opens the pull request but never performs the final merge.
@@ -257,6 +274,13 @@ PRSquad opens the pull request but never performs the final merge.
 
 ---
 
-## License
+## 🤝 Community & Governance
 
-See [LICENSE](LICENSE).
+PRSquad follows standard GitHub community guidelines:
+
+- 📖 **[README](README.md)**: Architectural overview, setup, and guardrail specifications.
+- 🤝 **[Code of Conduct](CODE_OF_CONDUCT.md)**: Contributor Covenant v2.1 standards and pledge.
+- 🛠️ **[Contributing Guide](CONTRIBUTING.md)**: Development setup, local CI gates, and security invariant rules.
+- ⚖️ **[License](LICENSE)**: Licensed under the [MIT License](LICENSE).
+- 🔒 **[Security Policy](SECURITY.md)**: Threat model, responsible disclosure, and deterministic guardrail guarantees.
+
