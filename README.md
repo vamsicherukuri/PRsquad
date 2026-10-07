@@ -12,7 +12,6 @@ The agents remain probabilistic and isolated: they reason, plan, write code, val
 
 > **PR Squad does not make LLM reasoning deterministic. It applies policy-as-code to deterministically enforce the boundaries, permissions, and controls around agent autonomy.**
 
----
 
 ## ⚡ Quick Setup
 
@@ -28,7 +27,7 @@ The agents remain probabilistic and isolated: they reason, plan, write code, val
 3. Find **`prsquad`** in the marketplace and click **Install**.
 4. Open the repository and GitHub issue you want PR Squad to work on.
 
----
+
 
 ## 🚀 Run Your First Workflow
 
@@ -46,7 +45,7 @@ Issue → Triage → Plan → Human Scope Approval → Implementation → QA →
 
 The specialists do **not** directly delegate work to one another. Every specialist returns a structured handoff to `@prsquad`, which validates the result and determines the next allowed action.
 
----
+
 
 ## Why PR Squad (Goverened Agentic workflow)?
 
@@ -78,13 +77,12 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 
 > **Agents reason. The orchestrator coordinates. The control plane enforces. Humans approve. Execution remains observable.**
 
----
 
-## Agentic Workflow. Deterministic Control Plane.
 
-### Architecture
+## Architecture at a Glance
 
-`@prsquad` is the supervisor and routing authority. It delegates each stage, receives the specialist's structured handoff, validates the result, and determines the next action. Specialists do not bypass the orchestrator to hand work directly to one another.
+
+`@prsquad` is an orchestrator which coordinates the workflow, routes work to specialist's agents, validates their handoffs, and selects the next stage. All specialist agents result return through the orchestrator, while deterministic hooks independently enforce whether each transition is allowed.
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
