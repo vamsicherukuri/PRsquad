@@ -5,7 +5,7 @@
  * automatic fallback detection across major ecosystems (Maven, Gradle, npm, Pytest, Cargo, Go, .NET).
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { getRepoRoot } from "./stateStore.js";
 
@@ -143,15 +143,18 @@ export function detectRepoStack(rootDir: string = getRepoRoot()): ToolingConfig 
   }
 
   // .NET (C# / F#)
-  if (existsSync(join(rootDir, "*.sln")) || existsSync(join(rootDir, "*.csproj"))) {
-    return {
-      stack: "dotnet",
-      testCommand: "dotnet test",
-      testFileCommand: "dotnet test --filter ${file}",
-      buildCommand: "dotnet build",
-      isExplicitConfig: false,
-    };
-  }
+  try {
+    const entries = readdirSync(rootDir);
+    if (entries.some((f) => f.endsWith(".sln") || f.endsWith(".csproj") || f.endsWith(".fsproj"))) {
+      return {
+        stack: "dotnet",
+        testCommand: "dotnet test",
+        testFileCommand: "dotnet test --filter ${file}",
+        buildCommand: "dotnet build",
+        isExplicitConfig: false,
+      };
+    }
+  } catch {}
 
   // Default fallback (generic npm runner)
   return {

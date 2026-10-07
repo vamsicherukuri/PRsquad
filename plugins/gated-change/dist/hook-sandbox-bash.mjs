@@ -157,7 +157,7 @@ function isAgentMatch(targetAgent, expectedName) {
 }
 
 // src/guardrails/toolingBridge.ts
-import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { existsSync as existsSync2, readFileSync as readFileSync2, readdirSync } from "node:fs";
 import { join as join2 } from "node:path";
 function detectRepoStack(rootDir = getRepoRoot()) {
   const explicitPaths = [
@@ -249,14 +249,18 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync2(join2(rootDir, "*.sln")) || existsSync2(join2(rootDir, "*.csproj"))) {
-    return {
-      stack: "dotnet",
-      testCommand: "dotnet test",
-      testFileCommand: "dotnet test --filter ${file}",
-      buildCommand: "dotnet build",
-      isExplicitConfig: false
-    };
+  try {
+    const entries = readdirSync(rootDir);
+    if (entries.some((f) => f.endsWith(".sln") || f.endsWith(".csproj") || f.endsWith(".fsproj"))) {
+      return {
+        stack: "dotnet",
+        testCommand: "dotnet test",
+        testFileCommand: "dotnet test --filter ${file}",
+        buildCommand: "dotnet build",
+        isExplicitConfig: false
+      };
+    }
+  } catch {
   }
   return {
     stack: "unknown",

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
+    "test": "tsx scripts/test-guardrails.ts",
     "check:plugin": "tsx scripts/check-plugin-consistency.ts",
     "gate:approve": "tsx scripts/guardrails/gate-approve.ts",
     "gate:reject": "tsx scripts/guardrails/gate-approve.ts --reject",

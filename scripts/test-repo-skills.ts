@@ -73,7 +73,36 @@ function runTests() {
     assert(isCommandAllowedByTooling("go test -v ./services/billing", tooling), "Allows targeted Go test");
     rmSync(join(testDir, "go.mod"));
 
-    // 1.5 Explicit Config override via .prsquad/config.json
+    // 1.5 Zero-config Rust / Cargo
+    writeFileSync(join(testDir, "Cargo.toml"), "[package]\nname = \"service\"");
+    tooling = detectRepoStack(testDir);
+    assert(tooling.stack === "cargo", "Detects Cargo stack from Cargo.toml");
+    assert(tooling.testCommand === "cargo test", "Sets testCommand to 'cargo test'");
+    assert(isCommandAllowedByTooling("cargo test --test integration", tooling), "Allows targeted Cargo test");
+    rmSync(join(testDir, "Cargo.toml"));
+
+    // 1.6 Zero-config .NET (.sln / .csproj)
+    writeFileSync(join(testDir, "EnterpriseBackend.sln"), "# Visual Studio Solution File");
+    tooling = detectRepoStack(testDir);
+    assert(tooling.stack === "dotnet", "Detects .NET stack from EnterpriseBackend.sln");
+    assert(tooling.testCommand === "dotnet test", "Sets testCommand to 'dotnet test'");
+    assert(isCommandAllowedByTooling("dotnet test --filter UnitTests", tooling), "Allows targeted dotnet test");
+    rmSync(join(testDir, "EnterpriseBackend.sln"));
+
+    writeFileSync(join(testDir, "ApiGateway.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+    tooling = detectRepoStack(testDir);
+    assert(tooling.stack === "dotnet", "Detects .NET stack from ApiGateway.csproj");
+    assert(isCommandAllowedByTooling("dotnet build", tooling), "Allows dotnet build");
+    rmSync(join(testDir, "ApiGateway.csproj"));
+
+    // 1.7 Zero-config Gradle
+    writeFileSync(join(testDir, "build.gradle"), "plugins { id 'java' }");
+    tooling = detectRepoStack(testDir);
+    assert(tooling.stack === "gradle", "Detects Gradle stack from build.gradle");
+    assert(tooling.testCommand === "gradle test", "Sets testCommand to 'gradle test'");
+    rmSync(join(testDir, "build.gradle"));
+
+    // 1.8 Explicit Config override via .prsquad/config.json
     mkdirSync(join(testDir, ".prsquad"), { recursive: true });
     writeFileSync(
       join(testDir, ".prsquad", "config.json"),

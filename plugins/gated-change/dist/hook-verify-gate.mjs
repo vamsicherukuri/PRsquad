@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync6, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync3 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
 import { join as join6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
 import { execSync as execSync3 } from "node:child_process";
@@ -1509,7 +1509,7 @@ ${skill.content}`);
 }
 
 // src/guardrails/toolingBridge.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync5, readdirSync as readdirSync3 } from "node:fs";
 import { join as join5 } from "node:path";
 function detectRepoStack(rootDir = getRepoRoot()) {
   const explicitPaths = [
@@ -1601,14 +1601,18 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "*.sln")) || existsSync5(join5(rootDir, "*.csproj"))) {
-    return {
-      stack: "dotnet",
-      testCommand: "dotnet test",
-      testFileCommand: "dotnet test --filter ${file}",
-      buildCommand: "dotnet build",
-      isExplicitConfig: false
-    };
+  try {
+    const entries = readdirSync3(rootDir);
+    if (entries.some((f) => f.endsWith(".sln") || f.endsWith(".csproj") || f.endsWith(".fsproj"))) {
+      return {
+        stack: "dotnet",
+        testCommand: "dotnet test",
+        testFileCommand: "dotnet test --filter ${file}",
+        buildCommand: "dotnet build",
+        isExplicitConfig: false
+      };
+    }
+  } catch {
   }
   return {
     stack: "unknown",
@@ -1956,7 +1960,7 @@ async function main() {
       for (const parent of candidates) {
         if (existsSync6(parent)) {
           try {
-            const entries = readdirSync3(parent, { withFileTypes: true });
+            const entries = readdirSync4(parent, { withFileTypes: true });
             const dirs = entries.filter((d) => d.isDirectory()).map((d) => join6(parent, d.name));
             dirs.push(parent);
             for (const d of dirs) {
@@ -2688,8 +2692,8 @@ ${prompt}` : prompt;
     ensureNodeModulesInWorktree(repoRoot);
     let testReport = "";
     try {
-      const testFile = join6(repoRoot, "scripts", "test-guardrails.ts");
-      const testCmd = existsSync6(testFile) ? "npx -y tsx scripts/test-guardrails.ts" : "npm test";
+      const tooling2 = detectRepoStack(repoRoot);
+      const testCmd = tooling2.testCommand;
       const testStdout = execSync3(testCmd, {
         cwd: repoRoot,
         encoding: "utf-8",
@@ -2697,25 +2701,29 @@ ${prompt}` : prompt;
         stdio: ["ignore", "pipe", "pipe"]
       });
       const lines = testStdout.split("\n");
-      const summaryLines = lines.filter((l) => l.includes("[PASS]") || l.includes("checks passed") || l.includes("VERIFICATION")).slice(-8);
+      const summaryLines = lines.filter((l) => l.includes("[PASS]") || l.includes("checks passed") || l.includes("VERIFICATION") || l.includes("Passed") || l.includes("passed") || l.includes("PASS")).slice(-8);
+      const displayLines = summaryLines.length > 0 ? summaryLines : lines.filter((l) => l.trim().length > 0).slice(-8);
       testReport = `### \u{1F9EA} Deterministic Test Pre-Execution Report (0 AI Credits)
-> **Command:** \`${testCmd}\` (executed automatically by guardrail hook)
+> **Command:** \`${testCmd}\` (executed automatically via Tooling Bridge: ${tooling2.stack})
 > **Execution Status:** \u2705 **ALL CHECKS PASSED**
 
 \`\`\`
-${summaryLines.join("\n")}
+${displayLines.join("\n")}
 \`\`\`
 *(Note for QA: The local regression suite was pre-executed above. Verify against issue acceptance criteria without re-running terminal commands unless needed.)*`;
     } catch (testErr) {
+      const tooling2 = detectRepoStack(repoRoot);
+      const testCmd = tooling2.testCommand;
       const errOut = String(testErr?.stdout || testErr?.message || "");
       const lines = errOut.split("\n");
-      const failureLines = lines.filter((l) => l.includes("[FAIL]") || l.includes("Error:")).slice(0, 8);
+      const failureLines = lines.filter((l) => l.includes("[FAIL]") || l.includes("Error:") || l.includes("FAILED") || l.includes("failed")).slice(0, 8);
+      const displayFailures = failureLines.length > 0 ? failureLines : lines.filter((l) => l.trim().length > 0).slice(0, 8);
       testReport = `### \u{1F9EA} Deterministic Test Pre-Execution Report (0 AI Credits)
-> **Command:** \`npx -y tsx scripts/test-guardrails.ts\`
+> **Command:** \`${testCmd}\` (executed automatically via Tooling Bridge: ${tooling2.stack})
 > **Execution Status:** \u274C **TEST FAILURES DETECTED**
 
 \`\`\`
-${failureLines.join("\n")}
+${displayFailures.join("\n")}
 \`\`\``;
     }
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);

@@ -980,13 +980,11 @@ async function main() {
   } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
     ensureNodeModulesInWorktree(repoRoot);
 
-    // Idea 3: Deterministic Test Pre-Execution
+    // Idea 3: Deterministic Test Pre-Execution via Tooling Bridge
     let testReport = "";
     try {
-      const testFile = join(repoRoot, "scripts", "test-guardrails.ts");
-      const testCmd = existsSync(testFile)
-        ? "npx -y tsx scripts/test-guardrails.ts"
-        : "npm test";
+      const tooling = detectRepoStack(repoRoot);
+      const testCmd = tooling.testCommand;
       const testStdout = execSync(testCmd, {
         cwd: repoRoot,
         encoding: "utf-8",
@@ -994,20 +992,24 @@ async function main() {
         stdio: ["ignore", "pipe", "pipe"],
       });
       const lines = testStdout.split("\n");
-      const summaryLines = lines.filter(l => l.includes("[PASS]") || l.includes("checks passed") || l.includes("VERIFICATION")).slice(-8);
+      const summaryLines = lines.filter(l => l.includes("[PASS]") || l.includes("checks passed") || l.includes("VERIFICATION") || l.includes("Passed") || l.includes("passed") || l.includes("PASS")).slice(-8);
+      const displayLines = summaryLines.length > 0 ? summaryLines : lines.filter(l => l.trim().length > 0).slice(-8);
       testReport = `### 🧪 Deterministic Test Pre-Execution Report (0 AI Credits)\n` +
-        `> **Command:** \`${testCmd}\` (executed automatically by guardrail hook)\n` +
+        `> **Command:** \`${testCmd}\` (executed automatically via Tooling Bridge: ${tooling.stack})\n` +
         `> **Execution Status:** ✅ **ALL CHECKS PASSED**\n\n` +
-        `\`\`\`\n${summaryLines.join("\n")}\n\`\`\`\n` +
+        `\`\`\`\n${displayLines.join("\n")}\n\`\`\`\n` +
         `*(Note for QA: The local regression suite was pre-executed above. Verify against issue acceptance criteria without re-running terminal commands unless needed.)*`;
     } catch (testErr: any) {
+      const tooling = detectRepoStack(repoRoot);
+      const testCmd = tooling.testCommand;
       const errOut = String(testErr?.stdout || testErr?.message || "");
       const lines = errOut.split("\n");
-      const failureLines = lines.filter(l => l.includes("[FAIL]") || l.includes("Error:")).slice(0, 8);
+      const failureLines = lines.filter(l => l.includes("[FAIL]") || l.includes("Error:") || l.includes("FAILED") || l.includes("failed")).slice(0, 8);
+      const displayFailures = failureLines.length > 0 ? failureLines : lines.filter(l => l.trim().length > 0).slice(0, 8);
       testReport = `### 🧪 Deterministic Test Pre-Execution Report (0 AI Credits)\n` +
-        `> **Command:** \`npx -y tsx scripts/test-guardrails.ts\`\n` +
+        `> **Command:** \`${testCmd}\` (executed automatically via Tooling Bridge: ${tooling.stack})\n` +
         `> **Execution Status:** ❌ **TEST FAILURES DETECTED**\n\n` +
-        `\`\`\`\n${failureLines.join("\n")}\n\`\`\``;
+        `\`\`\`\n${displayFailures.join("\n")}\n\`\`\``;
     }
 
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
