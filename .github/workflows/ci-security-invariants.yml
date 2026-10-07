@@ -1,0 +1,51 @@
+name: PRsquad Security Invariants & CI Gate
+
+on:
+  push:
+    branches: [main, master, copilot-app-plugin-alignment, "fix/*"]
+  pull_request:
+    branches: [main, master, copilot-app-plugin-alignment]
+
+permissions:
+  contents: read
+
+jobs:
+  guardrail-contract-gate:
+    name: Mandatory Security Invariants Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: 1. Verify TypeScript Contracts
+        run: npm run build
+
+      - name: 2. Check Plugin & Agent Consistency
+        run: npm run check:plugin
+
+      - name: 3. Verify Hook Bundles Up-To-Date
+        run: |
+          npm run bundle:hooks
+          git diff --exit-code plugins/gated-change/dist/
+
+      - name: 4. Execute Permanent Security Invariants (INV-01 to INV-20)
+        run: npm run test:security-invariants
+
+      - name: 5. Execute Core Guardrail Policy Suite
+        run: npm run test:guardrails
+
+      - name: 6. Execute Adversarial Edge Cases
+        run: npm run test:edge-cases
+
+      - name: 7. Execute Layer B Integration & Worktree Suite
+        run: npm run test:layer-b

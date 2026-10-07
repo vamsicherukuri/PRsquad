@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "description": "PRsquad Security & Governance Architectural Invariant Contracts",
+  "invariants": [
+    {
+      "id": "INV-01",
+      "name": "TRANSPORT_UNWRAPPING_RECURSIVE",
+      "statement": "Outer platform wrappers (resultType, textResultForLlm, content) must be recursively unwrapped to isolate specialist JSON payload.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-02",
+      "name": "HANDOFFS_FAIL_CLOSED",
+      "statement": "Malformed, unparseable, or schema-invalid specialist handoffs must strictly resolve to HANDOFF_INVALID without default promotion.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-03",
+      "name": "QA_PASS_REQUIRES_VERIFIED_CRITERIA",
+      "statement": "QA verdict PASS requires non-empty acceptance criteria, 100% PASS on all individual criteria, 0 regressions, and 0 blocking findings.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-04",
+      "name": "DEVELOPER_REQUIRES_EXPLICIT_DIFF_REF",
+      "statement": "Developer handoff requires explicit non-empty baseRef and commit reference (headRef or commitSha).",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-05",
+      "name": "PLAN_APPROVAL_INTEGRITY_CANONICAL_HASH",
+      "statement": "Architectural plans are cryptographically bound via canonical recursive key-sorted JSON hashing, preventing collision attacks.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-06",
+      "name": "PRODUCTION_INGESTION_NO_FIXTURES",
+      "statement": "Issue ingestion in production mode throws immediately upon fetch failure; substitution of sample mock fixtures is forbidden.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-07",
+      "name": "NO_FOREIGN_REPO_WRITE",
+      "statement": "Target edit paths located in foreign git repositories preserve traversal operators and are denied by scope enforcement.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-08",
+      "name": "NO_CROSS_WORKTREE_WRITE",
+      "statement": "File modifications targeting sibling git worktrees are rejected at the realpath native boundary.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-09",
+      "name": "NO_SHELL_MUTATION_BYPASS",
+      "statement": "Developer shell execution is restricted to Git operations and configured test runners; script interpreters and redirects are blocked.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-10",
+      "name": "NO_SHELL_COMPOSITION_CHAINING",
+      "statement": "Shell operators and chaining metacharacters (&&, ;, ||, |, newlines) are unconditionally denied across all agents.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-11",
+      "name": "NO_DOWNSTREAM_EVIDENCE_MANUFACTURING",
+      "statement": "Downstream stage hooks cannot write upstream success records. Stages must strictly verify prior attested evidence.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-12",
+      "name": "NON_DESTRUCTIVE_BRANCH_LIFECYCLE",
+      "statement": "Branch switching and initialization must inspect existing branches non-destructively, preserving rework attempt commits.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-13",
+      "name": "QA_PACKAGE_MANAGER_READ_ONLY",
+      "statement": "QA agent package manager commands are restricted to test execution; mutating commands (install, publish) are blocked.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-14",
+      "name": "VERIFICATION_BOUND_TO_CURRENT_HEAD",
+      "statement": "PR Gate requires QA verification commitSha and Reviewer audit commitSha to match current feature branch HEAD exactly.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-15",
+      "name": "HUMAN_PR_AUTH_REQUIRED",
+      "statement": "Pull request creation requires explicit human PR authorization and cannot be self-dispatched from specialist state.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-16",
+      "name": "HUMAN_SCOPE_AUTH_REQUIRED",
+      "statement": "Autonomous agents are prohibited from executing scope approval scripts; approval.lock can only be minted by human action.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-17",
+      "name": "TYPESCRIPT_CONTRACT_COMPLIANCE",
+      "statement": "All pipeline interfaces, types, and workflow states must compile with zero errors under strict TypeScript type-checking.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-18",
+      "name": "RUNTIME_DEPENDENCIES_SELF_CONTAINED",
+      "statement": "All packages required by bundled hooks in production must reside in production dependencies in package.json.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-19",
+      "name": "HOOK_TIMEOUT_EXCEEDS_TEST_BOUND",
+      "statement": "Copilot App outer hook timeoutSec must comfortably exceed internal test execution timeouts to prevent premature aborts.",
+      "failureMode": "FAIL_CLOSED"
+    },
+    {
+      "id": "INV-20",
+      "name": "CUMULATIVE_DIFF_RANGE_HEAD_BOUND",
+      "statement": "Code review AST symbol sweep inspects cumulative branch diff (${base} HEAD), guaranteeing all rework commits are audited.",
+      "failureMode": "FAIL_CLOSED"
+    }
+  ],
+  "stateMachine": {
+    "policyMonotonicity": "A downstream specialist or hook cannot upgrade unverified or missing evidence to verified status.",
+    "allowedTransitions": [
+      { "from": "INTAKE_TRIAGE", "event": "READY", "to": "ARCHITECTING" },
+      { "from": "INTAKE_TRIAGE", "event": "NOT_READY", "to": "PAUSED" },
+      { "from": "INTAKE_TRIAGE", "event": "HANDOFF_INVALID", "to": "PAUSED" },
+      { "from": "ARCHITECTING", "event": "PLAN_READY", "to": "AWAITING_SCOPE_APPROVAL" },
+      { "from": "ARCHITECTING", "event": "BLOCKED", "to": "PAUSED" },
+      { "from": "ARCHITECTING", "event": "HANDOFF_INVALID", "to": "PAUSED" },
+      { "from": "AWAITING_SCOPE_APPROVAL", "event": "HUMAN_APPROVE", "to": "DEVELOPING" },
+      { "from": "AWAITING_SCOPE_APPROVAL", "event": "HUMAN_REJECT", "to": "PAUSED" },
+      { "from": "DEVELOPING", "event": "IMPLEMENTED", "to": "TESTING" },
+      { "from": "DEVELOPING", "event": "SCOPE_AMENDMENT", "to": "ARCHITECTING" },
+      { "from": "DEVELOPING", "event": "HANDOFF_INVALID", "to": "PAUSED" },
+      { "from": "TESTING", "event": "PASS", "to": "REVIEWING" },
+      { "from": "TESTING", "event": "FAIL", "to": "DEVELOPING" },
+      { "from": "TESTING", "event": "HANDOFF_INVALID", "to": "PAUSED" },
+      { "from": "REVIEWING", "event": "CLEAR", "to": "AWAITING_PR_APPROVAL" },
+      { "from": "REVIEWING", "event": "CONCERNS", "to": "AWAITING_PR_APPROVAL" },
+      { "from": "REVIEWING", "event": "HANDOFF_INVALID", "to": "PAUSED" },
+      { "from": "AWAITING_PR_APPROVAL", "event": "HUMAN_PR_APPROVE", "to": "PR_OPEN" }
+    ]
+  }
+}
