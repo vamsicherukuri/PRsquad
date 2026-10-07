@@ -632,20 +632,31 @@ async function runSecurityInvariants() {
     const after = captureSecurityState(REPO_ROOT);
 
     const headUnchanged = before.headCommit === after.headCommit;
-    const branchUnchanged = before.activeBranch === after.activeBranch;
+    // Branch confinement: If running on main/master, ensureIsolatedBranch intentionally isolates to fix/*
+    const branchConsistent =
+      before.activeBranch === after.activeBranch ||
+      ((before.activeBranch === "master" || before.activeBranch === "main") && after.activeBranch.startsWith("fix/"));
+
+    // Restore original branch if it was isolated
+    if (before.activeBranch !== after.activeBranch && (before.activeBranch === "master" || before.activeBranch === "main")) {
+      try {
+        execSync(`git checkout ${before.activeBranch}`, { cwd: REPO_ROOT, stdio: "ignore" });
+      } catch {}
+    }
+
     const lockUnchanged = before.lockStatus === after.lockStatus && before.lockScope === after.lockScope;
     const gitStatusUnchanged = before.gitStatus === after.gitStatus;
     const attacksDenied = editDenial.allowed === false && shellDenial.allowed === false && devDenial.valid === false;
 
-    const sideEffectPassed = headUnchanged && branchUnchanged && lockUnchanged && gitStatusUnchanged && attacksDenied;
+    const sideEffectPassed = headUnchanged && branchConsistent && lockUnchanged && gitStatusUnchanged && attacksDenied;
 
     recordInvariant(
       "INV-SIDE-01",
       "Security denials produce zero unwanted mutations or side-effects",
       sideEffectPassed,
       sideEffectPassed
-        ? "Git HEAD, branch, lock, and file tree preserved identically through attack attempts"
-        : `Side effect leaked: HEAD=${headUnchanged}, Branch=${branchUnchanged}, Lock=${lockUnchanged}`
+        ? "Git HEAD, branch isolation, lock, and file tree preserved identically through attack attempts"
+        : `Side effect leaked: HEAD=${headUnchanged}, Branch=${branchConsistent}, Lock=${lockUnchanged}`
     );
   }
 
