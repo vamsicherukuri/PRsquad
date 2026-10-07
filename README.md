@@ -1,24 +1,16 @@
-<p align="center">
-  <img src="docs/images/prsquad-header.png" alt="PR Squad: Probabilistic Coding Agent + Deterministic Control Plane" width="100%" />
-</p>
-
 # PR Squad: Supervised Agentic Workflow
 
 <p align="center">
-  <a href="#readme"><strong>📖 README</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="CODE_OF_CONDUCT.md"><strong>🤝 Code of Conduct</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="CONTRIBUTING.md"><strong>🛠️ Contributing</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="LICENSE"><strong>⚖️ License</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="SECURITY.md"><strong>🔒 Security</strong></a>
+  <a href="https://github.com/vamsicherukuri/PRsquad"><img src="https://img.shields.io/badge/GitHub%20Copilot%20App-Plugin-6f42c1?logo=githubcopilot&logoColor=white" alt="GitHub Copilot App Plugin" /></a>
+  <a href="https://github.com/vamsicherukuri/PRsquad/releases"><img src="https://img.shields.io/badge/releases-v0.2.8-blue" alt="Releases" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/vamsicherukuri/PRsquad/actions/workflows/ci-security-invariants.yml"><img src="https://github.com/vamsicherukuri/PRsquad/actions/workflows/ci-security-invariants.yml/badge.svg" alt="CI Security Invariants" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?logo=open-source-initiative&logoColor=white" alt="License: MIT" /></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security-Invariant%20Enforced-success.svg?logo=securityscorecard&logoColor=white" alt="Security Policy" /></a>
-  <a href="https://github.com/features/copilot"><img src="https://img.shields.io/badge/GitHub%20Copilot-Plugin-6f42c1.svg?logo=githubcopilot&logoColor=white" alt="GitHub Copilot Plugin" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node-%3E%3D20.0.0-339933.svg?logo=node.js&logoColor=white" alt="Node.js Version" /></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?logo=github&logoColor=white" alt="PRs Welcome" /></a>
+  <strong>README</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <strong>Code of Conduct</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <strong>Contributing</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <strong>License</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <strong>Security</strong>
 </p>
 
 **Probabilistic agents · Deterministic control plane · Human-in-the-loop control.**
@@ -274,13 +266,7 @@ PRSquad opens the pull request but never performs the final merge.
 
 ---
 
-## 🤝 Community & Governance
+## License
 
-PRSquad follows standard GitHub community guidelines:
-
-- 📖 **[README](README.md)**: Architectural overview, setup, and guardrail specifications.
-- 🤝 **[Code of Conduct](CODE_OF_CONDUCT.md)**: Contributor Covenant v2.1 standards and pledge.
-- 🛠️ **[Contributing Guide](CONTRIBUTING.md)**: Development setup, local CI gates, and security invariant rules.
-- ⚖️ **[License](LICENSE)**: Licensed under the [MIT License](LICENSE).
-- 🔒 **[Security Policy](SECURITY.md)**: Threat model, responsible disclosure, and deterministic guardrail guarantees.
+See [LICENSE](LICENSE).
 
