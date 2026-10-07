@@ -1,6 +1,5 @@
 <p align="center">
-  <strong>PRSquad</strong><br/>
-  <em>Supervised Agentic Workflow for GitHub Copilot</em>
+  <img src="docs/images/prsquad-header.png" alt="PR Squad: Probabilistic Coding Agent + Deterministic Control Plane" width="100%" />
 </p>
 
 # PR Squad: Supervised Agentic Workflow
