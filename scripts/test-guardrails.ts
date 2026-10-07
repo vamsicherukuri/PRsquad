@@ -15,6 +15,7 @@ import { execSync } from "node:child_process";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { runSymbolSweep, extractExportedSymbols } from "../src/guardrails/symbolSweep.js";
+import { isValidGitRef } from "../src/guardrails/prCreator.js";
 import {
   loadState,
   saveState,
@@ -387,6 +388,30 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
   });
   const psBlockedParsed = JSON.parse(psBlockedOut);
   assert(psBlockedParsed.decision === "deny", "Sandbox blocks Developer from git push to main via 'powershell' tool with clean exit 0");
+
+  // Issue #18: Destructive git clean with force flags strictly blocked across agents
+  const devCleanFdx = validateCommandForAgent("git clean -fdx", "gated-change-developer");
+  assert(!devCleanFdx.allowed, "Developer strictly blocked from destructive 'git clean -fdx'");
+  assert(devCleanFdx.reason?.includes("POLICY_DENIAL"), "Denial reason cites POLICY_DENIAL for git clean");
+
+  const devCleanF = validateCommandForAgent("git clean -f", "gated-change-developer");
+  assert(!devCleanF.allowed, "Developer strictly blocked from destructive 'git clean -f'");
+
+  const qaCleanF = validateCommandForAgent("git clean -fdx", "gated-change-qa");
+  assert(!qaCleanF.allowed, "QA strictly blocked from destructive 'git clean -fdx'");
+
+  const devCleanDryRun = validateCommandForAgent("git clean -n", "gated-change-developer");
+  assert(devCleanDryRun.allowed, "Developer permitted to execute non-destructive dry-run 'git clean -n'");
+
+  // Issue #22: Strict git-ref validation against shell injection and invalid ref formats
+  assert(isValidGitRef("fix/issue-22"), "Validates clean feature branch name 'fix/issue-22'");
+  assert(isValidGitRef("prsquad/feat-ast"), "Validates branch with nested directory 'prsquad/feat-ast'");
+  assert(!isValidGitRef("fix/issue-22;rm -rf /"), "Strictly rejects branch containing shell semicolon");
+  assert(!isValidGitRef("feat/foo`whoami`"), "Strictly rejects branch containing shell backticks");
+  assert(!isValidGitRef("branch&&curl"), "Strictly rejects branch containing shell && operator");
+  assert(!isValidGitRef("-invalid-leading-dash"), "Strictly rejects branch with leading dash");
+  assert(!isValidGitRef("invalid..dots"), "Strictly rejects branch with double dots");
+  assert(!isValidGitRef("invalid.lock"), "Strictly rejects branch with .lock suffix");
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +426,23 @@ console.log("\nSuite 5: Guardrail 4 — Tier 1 AST Symbol Sweep");
   const report = runSymbolSweep(["src/scopeTool.ts"], "src/services/fake/");
   assert(report.totalSymbolsAnalyzed >= 2, "Analyzed exported symbols count >= 2");
   assert(report.externalReferencesFound.length > 0, "Detects external references in src/actions/architect.ts");
+
+  // Issue #21: TypeScript AST anonymous default export and arrow function tests
+  const anonArrowFile = join(TEST_ISOLATED_DIR, "anon-arrow.ts");
+  writeFileSync(anonArrowFile, "export default () => 42;\nexport const version = '1.0';\n");
+  const anonArrowSymbols = extractExportedSymbols("anon-arrow.ts", TEST_ISOLATED_DIR);
+  assert(anonArrowSymbols.includes("default"), "Captures anonymous default arrow function as 'default'");
+  assert(anonArrowSymbols.includes("version"), "Captures named export alongside anonymous default export");
+
+  const anonFuncFile = join(TEST_ISOLATED_DIR, "anon-func.ts");
+  writeFileSync(anonFuncFile, "export default function() { return 'hello'; }\n");
+  const anonFuncSymbols = extractExportedSymbols("anon-func.ts", TEST_ISOLATED_DIR);
+  assert(anonFuncSymbols.includes("default"), "Captures anonymous default function declaration as 'default'");
+
+  const anonClassFile = join(TEST_ISOLATED_DIR, "anon-class.ts");
+  writeFileSync(anonClassFile, "export default class { compute() { return 1; } }\n");
+  const anonClassSymbols = extractExportedSymbols("anon-class.ts", TEST_ISOLATED_DIR);
+  assert(anonClassSymbols.includes("default"), "Captures anonymous default class as 'default'");
 }
 
 console.log("\n=======================================================");

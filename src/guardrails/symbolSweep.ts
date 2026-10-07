@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -19,11 +20,11 @@ export interface SymbolSweepReport {
   summary: string;
 }
 
-const EXPORT_REGEX =
-  /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
-
 /**
- * Extracts exported symbol names from a TypeScript or JavaScript file.
+ * Extracts exported symbol names from a TypeScript or JavaScript file using the TypeScript Compiler AST.
+ * Safely extracts named functions, classes, variables, types, interfaces, enums, re-exports,
+ * and captures anonymous default exports (e.g. arrow functions, unnamed functions/classes) as 'default'.
+ * Never throws an uncaught exception on malformed or unnamed expressions.
  */
 export function extractExportedSymbols(filePath: string, rootDir: string = process.cwd()): string[] {
   const full = join(rootDir, filePath);
@@ -32,23 +33,105 @@ export function extractExportedSymbols(filePath: string, rootDir: string = proce
   const content = readFileSync(full, "utf-8");
   const symbols = new Set<string>();
 
-  let match: RegExpExecArray | null;
-  while ((match = EXPORT_REGEX.exec(content)) !== null) {
-    if (match[1]) {
-      symbols.add(match[1]);
-    }
-  }
+  try {
+    const sourceFile = ts.createSourceFile(
+      filePath,
+      content,
+      ts.ScriptTarget.Latest,
+      true
+    );
 
-  // Also check "export { A, B as C }" patterns
-  const namedExportRegex = /export\s*\{([^}]+)\}/g;
-  while ((match = namedExportRegex.exec(content)) !== null) {
-    const list = match[1].split(",");
-    for (const item of list) {
-      const parts = item.trim().split(/\s+as\s+/);
-      const name = parts[parts.length - 1]?.trim();
-      if (name && /^[A-Za-z0-9_$]+$/.test(name)) {
-        symbols.add(name);
+    function visit(node: ts.Node) {
+      const modifiers = (ts.canHaveModifiers && ts.canHaveModifiers(node)
+        ? ts.getModifiers(node)
+        : (node as any).modifiers) || [];
+
+      const isExported = modifiers.some(
+        (m: any) => m.kind === ts.SyntaxKind.ExportKeyword
+      );
+      const isDefault = modifiers.some(
+        (m: any) => m.kind === ts.SyntaxKind.DefaultKeyword
+      );
+
+      if (isDefault) {
+        symbols.add("default");
       }
+
+      if (ts.isFunctionDeclaration(node)) {
+        if (isExported) {
+          if (node.name?.text) {
+            symbols.add(node.name.text);
+          } else if (isDefault) {
+            symbols.add("default");
+          }
+        }
+      } else if (ts.isClassDeclaration(node)) {
+        if (isExported) {
+          if (node.name?.text) {
+            symbols.add(node.name.text);
+          } else if (isDefault) {
+            symbols.add("default");
+          }
+        }
+      } else if (ts.isVariableStatement(node)) {
+        if (isExported) {
+          for (const decl of node.declarationList.declarations) {
+            if (ts.isIdentifier(decl.name)) {
+              symbols.add(decl.name.text);
+            } else if (ts.isObjectBindingPattern(decl.name) || ts.isArrayBindingPattern(decl.name)) {
+              for (const elem of decl.name.elements) {
+                if (ts.isBindingElement(elem) && ts.isIdentifier(elem.name)) {
+                  symbols.add(elem.name.text);
+                }
+              }
+            }
+          }
+        }
+      } else if (ts.isInterfaceDeclaration(node)) {
+        if (isExported && node.name?.text) {
+          symbols.add(node.name.text);
+        }
+      } else if (ts.isTypeAliasDeclaration(node)) {
+        if (isExported && node.name?.text) {
+          symbols.add(node.name.text);
+        }
+      } else if (ts.isEnumDeclaration(node)) {
+        if (isExported && node.name?.text) {
+          symbols.add(node.name.text);
+        }
+      } else if (ts.isExportDeclaration(node)) {
+        // export { A, B as C }
+        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+          for (const elem of node.exportClause.elements) {
+            const name = elem.name?.text;
+            if (name) {
+              symbols.add(name);
+            }
+          }
+        }
+      } else if (ts.isExportAssignment(node)) {
+        // export default () => 42; or export default 42; or export = foo;
+        if (!node.isExportEquals) {
+          symbols.add("default");
+        } else if (ts.isIdentifier(node.expression)) {
+          symbols.add(node.expression.text);
+        }
+      }
+
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  } catch {
+    // Graceful fallback to regex scanning if AST parsing fails
+    const exportRegex =
+      /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = exportRegex.exec(content)) !== null) {
+      if (match[1]) symbols.add(match[1]);
+    }
+    if (/export\s+default\b/.test(content)) {
+      symbols.add("default");
     }
   }
 

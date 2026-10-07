@@ -283,6 +283,7 @@ var QA_MUTATING_GIT_REGEX = /\bgit\s+(push|commit|checkout|switch|merge|rebase|r
 var PROTECTED_BASE_BRANCH_REGEX = /\bgit\s+(checkout|switch|commit|push|merge|rebase|reset|branch\s+-(?:d|D))\b.*?\b(?:origin\/)?(main|master)\b/i;
 var BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
+var DESTRUCTIVE_GIT_CLEAN_REGEX = /\bgit\s+clean\b.*?(?:-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)/i;
 function validateCommandForAgent(command, agent = "unknown", rootDir) {
   const trimmed = command.trim();
   if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
@@ -316,6 +317,12 @@ function validateCommandForAgent(command, agent = "unknown", rootDir) {
     return {
       allowed: false,
       reason: `POLICY_DENIAL: Command '${trimmed}' contains forbidden destructive or publishing operations.`
+    };
+  }
+  if (DESTRUCTIVE_GIT_CLEAN_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL: Destructive git clean operations with force flags are prohibited. Use dry-run ('git clean -n') for inspection."
     };
   }
   if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {

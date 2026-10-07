@@ -29,6 +29,10 @@ const BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 const DANGEROUS_SYSTEM_REGEX =
   /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
 
+// Destructive git clean operations with force flags (-f, --force, -fd, -fdx, -fx, -xdf)
+const DESTRUCTIVE_GIT_CLEAN_REGEX =
+  /\bgit\s+clean\b.*?(?:-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)/i;
+
 /**
  * Validates whether a shell command is permissible for the calling agent.
  */
@@ -83,7 +87,16 @@ export function validateCommandForAgent(
     };
   }
 
-  // 5. QA Agent: Strict Allowlist (Test execution & non-mutating git inspection only)
+  // 5. Destructive Workspace Clean: Block git clean operations with force flags across all agents
+  if (DESTRUCTIVE_GIT_CLEAN_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason:
+        "POLICY_DENIAL: Destructive git clean operations with force flags are prohibited. Use dry-run ('git clean -n') for inspection.",
+    };
+  }
+
+  // 6. QA Agent: Strict Allowlist (Test execution & non-mutating git inspection only)
   if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {
     // A. Disallow shell file redirection
     if (trimmed.includes(">") || trimmed.includes(">>")) {

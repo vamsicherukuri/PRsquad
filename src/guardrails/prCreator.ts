@@ -83,6 +83,23 @@ ${lock?.planHash ? `- **Approval Integrity Binding (planHash)**: \`${lock.planHa
 }
 
 /**
+ * Strict branch name validation conforming to pr-governance skill and git-check-ref-format standards.
+ * Enforces: ^[a-zA-Z0-9/_.-]+$
+ * Rejects: shell metacharacters (; | & $ ` < > \n \r), leading hyphens, double dots (..),
+ * trailing slashes, leading slashes, .lock suffixes, and @{ sequences.
+ */
+export function isValidGitRef(branch: string): boolean {
+  if (!branch || typeof branch !== "string") return false;
+  const VALID_BRANCH_REGEX = /^[a-zA-Z0-9/_.-]+$/;
+  const SHELL_META_REGEX = /[;|&$\`><\n\r]/;
+  if (!VALID_BRANCH_REGEX.test(branch)) return false;
+  if (SHELL_META_REGEX.test(branch)) return false;
+  if (branch.startsWith("-") || branch.startsWith("/") || branch.endsWith("/")) return false;
+  if (branch.includes("..") || branch.includes("@{") || branch.endsWith(".lock")) return false;
+  return true;
+}
+
+/**
  * Deterministically creates a GitHub Pull Request for the active feature branch.
  * Zero LLM token cost: extracts evidence from local state and executes via gh CLI.
  * Does NOT merge; leaves merging exclusively to human review on GitHub.
@@ -113,6 +130,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       };
     }
 
+    // Validate active feature branch format against pr-governance skill
+    if (!isValidGitRef(activeBranch)) {
+      return {
+        success: false,
+        error: `INVALID_BRANCH_NAME: Feature branch '${activeBranch}' violates pr-governance naming rules. Must match '^[a-zA-Z0-9/_.-]+$' without shell operators, control characters, or leading hyphens.`,
+      };
+    }
+
     // 2. Resolve target base branch (default to copilot-app-plugin-alignment or main)
     let baseBranch = options.baseBranch;
     if (!baseBranch) {
@@ -126,6 +151,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       } catch {
         baseBranch = "copilot-app-plugin-alignment";
       }
+    }
+
+    // Validate target base branch format against pr-governance skill
+    if (baseBranch && !isValidGitRef(baseBranch)) {
+      return {
+        success: false,
+        error: `INVALID_BRANCH_NAME: Base branch '${baseBranch}' violates pr-governance naming rules. Must match '^[a-zA-Z0-9/_.-]+$' without shell operators, control characters, or leading hyphens.`,
+      };
     }
 
     // Deterministically resolve issue number from:
