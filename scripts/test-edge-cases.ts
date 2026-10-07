@@ -869,6 +869,27 @@ async function runEdgeCases() {
     }
     assert(driftExitCode === 1, "Hook strictly denies Developer when plan drifts from approved lock (Exit 1)");
     assert(driftReason.includes("Approval Integrity Drift"), "Denial reason explicitly cites Approval Integrity Drift");
+
+    // 5. Developer invoked with conversational prompt variation (no structured planHash) -> Allowed (no false-positive drift)
+    let naturalPromptAllowed = false;
+    try {
+      const input = JSON.stringify({
+        tool: "agent",
+        toolArgs: {
+          name: "gated-change-developer",
+          prompt: "Here is your plan:\n### 📐 Approved Architecture Plan\nSlightly reworded prompt text\n[HUMAN_SCOPE_GATE_APPROVED: src/services/billing/]",
+        },
+      });
+      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const parsed = JSON.parse(stdout);
+      naturalPromptAllowed = parsed.decision === "allow";
+    } catch {}
+    assert(naturalPromptAllowed, "Natural language prompt variation does not trigger false-positive plan drift block");
   }
 
   // -------------------------------------------------------------------------

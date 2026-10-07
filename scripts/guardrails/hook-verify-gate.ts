@@ -232,17 +232,36 @@ async function main() {
     }
 
     // 2. Approval Integrity Binding: verify plan hash and base commit
-    // Enforces that the plan passed to Developer exactly matches the plan approved by the human maintainer.
+    // Enforces that structured plan arguments match the plan approved by the human maintainer.
+    // Avoids fuzzy prompt regex scraping to prevent false-positive blocks on natural language variation.
     if (lock.planHash) {
-      const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
-      let currentPlan = toolArgs.plan || toolArgs.planMarkdown;
-      if (!currentPlan && !toolArgs.planHash) {
-        const planMatch = prompt.match(/(?:###\s*📐\s*Approved Architecture Plan|PLAN_READY|Technical Plan)[\s\S]*?(?=(?:###|$))/i);
-        if (planMatch) currentPlan = planMatch[0].trim();
+      if (toolArgs.planHash && toolArgs.planHash !== lock.planHash) {
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "developer_invocation_blocked_plan_drift",
+          decision: "deny",
+          details: {
+            expectedPlanHash: lock.planHash,
+            actualPlanHash: toolArgs.planHash,
+            lockIssue: lock.issueNumber,
+          },
+        }, repoRoot);
+
+        const output: HookOutput = {
+          decision: "deny",
+          reason:
+            `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match ` +
+            `the approved planHash '${lock.planHash}'. Re-approval is required.`,
+        };
+        process.stdout.write(JSON.stringify(output) + "\n");
+        process.exit(1);
       }
 
-      if (currentPlan) {
-        const currentHash = computePlanHash(currentPlan);
+      const structuredPlan = toolArgs.plan || toolArgs.planMarkdown;
+      if (structuredPlan) {
+        const currentHash = computePlanHash(structuredPlan);
         if (currentHash && currentHash !== lock.planHash) {
           appendAuditLog({
             sessionId: state.sessionId,
@@ -267,30 +286,6 @@ async function main() {
           process.stdout.write(JSON.stringify(output) + "\n");
           process.exit(1);
         }
-      }
-
-      if (toolArgs.planHash && toolArgs.planHash !== lock.planHash) {
-        appendAuditLog({
-          sessionId: state.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "developer_invocation_blocked_plan_drift",
-          decision: "deny",
-          details: {
-            expectedPlanHash: lock.planHash,
-            actualPlanHash: toolArgs.planHash,
-            lockIssue: lock.issueNumber,
-          },
-        }, repoRoot);
-
-        const output: HookOutput = {
-          decision: "deny",
-          reason:
-            `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match ` +
-            `the approved planHash '${lock.planHash}'. Re-approval is required.`,
-        };
-        process.stdout.write(JSON.stringify(output) + "\n");
-        process.exit(1);
       }
     }
 

@@ -2163,14 +2163,29 @@ async function main() {
       process.exit(1);
     }
     if (lock2.planHash) {
-      const prompt3 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
-      let currentPlan = toolArgs.plan || toolArgs.planMarkdown;
-      if (!currentPlan && !toolArgs.planHash) {
-        const planMatch = prompt3.match(/(?:###\s*📐\s*Approved Architecture Plan|PLAN_READY|Technical Plan)[\s\S]*?(?=(?:###|$))/i);
-        if (planMatch) currentPlan = planMatch[0].trim();
+      if (toolArgs.planHash && toolArgs.planHash !== lock2.planHash) {
+        appendAuditLog({
+          sessionId: state2.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "developer_invocation_blocked_plan_drift",
+          decision: "deny",
+          details: {
+            expectedPlanHash: lock2.planHash,
+            actualPlanHash: toolArgs.planHash,
+            lockIssue: lock2.issueNumber
+          }
+        }, repoRoot2);
+        const output2 = {
+          decision: "deny",
+          reason: `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match the approved planHash '${lock2.planHash}'. Re-approval is required.`
+        };
+        process.stdout.write(JSON.stringify(output2) + "\n");
+        process.exit(1);
       }
-      if (currentPlan) {
-        const currentHash = computePlanHash(currentPlan);
+      const structuredPlan = toolArgs.plan || toolArgs.planMarkdown;
+      if (structuredPlan) {
+        const currentHash = computePlanHash(structuredPlan);
         if (currentHash && currentHash !== lock2.planHash) {
           appendAuditLog({
             sessionId: state2.sessionId,
@@ -2191,26 +2206,6 @@ async function main() {
           process.stdout.write(JSON.stringify(output2) + "\n");
           process.exit(1);
         }
-      }
-      if (toolArgs.planHash && toolArgs.planHash !== lock2.planHash) {
-        appendAuditLog({
-          sessionId: state2.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "developer_invocation_blocked_plan_drift",
-          decision: "deny",
-          details: {
-            expectedPlanHash: lock2.planHash,
-            actualPlanHash: toolArgs.planHash,
-            lockIssue: lock2.issueNumber
-          }
-        }, repoRoot2);
-        const output2 = {
-          decision: "deny",
-          reason: `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match the approved planHash '${lock2.planHash}'. Re-approval is required.`
-        };
-        process.stdout.write(JSON.stringify(output2) + "\n");
-        process.exit(1);
       }
     }
     if (lock2.currentAttempt > lock2.maxAttempts) {
