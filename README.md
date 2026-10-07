@@ -88,36 +88,24 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 `@prsquad` is the supervisor and routing authority. It delegates each stage, receives the specialist's structured handoff, validates the result, and determines the next action. Specialists do not bypass the orchestrator to hand work directly to one another.
 
 ```mermaid
-flowchart TB
-    U["User / GitHub Issue"] --> O["@prsquad<br/>Orchestrator"]
+flowchart TD
+    Issue["GitHub Issue"] --> H_INTAKE["🛡️ hook-intake-ingest<br/>Authentic Issue Ingestion"]
+    H_INTAKE --> T["@prsquad-triage<br/>Issue Assessment"]
+    T --> A["@prsquad-architect<br/>Plan & Scope Synthesis"]
 
-    O -->|Delegate| T["@prsquad-triage<br/>Issue readiness"]
-    T -->|"Structured handoff"| O
+    A --> G_SCOPE{{"🔒 Human Scope Gate<br/>node .gated-change/bin/gate-approve.mjs"}}
 
-    O -->|READY| A["@prsquad-architect<br/>Plan + blast radius"]
-    A -->|"Structured handoff"| O
+    G_SCOPE --> H_GATE["🛡️ hook-verify-gate<br/>Approval Lock Verification"]
+    H_GATE --> D["@prsquad-dev<br/>Scoped Implementation"]
 
-    O --> SG{{"Human Scope Gate"}}
-    SG -->|"Maintainer runs scope-approve.ts<br/>approval.lock minted"| O
+    D -.->|preToolUse: edit| H_SCOPE["🛡️ hook-enforce-scope<br/>Physical Write Boundary"]
+    D -.->|preToolUse: bash| H_BASH["🛡️ hook-sandbox-bash<br/>Command & Mutation Sandbox"]
 
-    O -->|"Approved scope"| D["@prsquad-dev<br/>Implementation"]
-    D -->|"Structured handoff"| O
+    D --> Q["@prsquad-qa<br/>Independent Verification"]
+    Q --> R["@prsquad-review<br/>Read-Only Security Audit"]
 
-    O --> Q["@prsquad-qa<br/>Independent verification"]
-    Q -->|"PASS / FAIL / BLOCKED"| O
-    O -->|"FAIL · bounded retry"| D
-
-    O -->|"QA PASS"| R["@prsquad-review<br/>Read-only review"]
-    R -->|"Structured handoff"| O
-
-    O --> PG{{"Human PR Gate"}}
-    PG -->|"Maintainer runs pr-create.ts"| PC["Deterministic PR Creator"]
-    PC --> PR["Pull Request"]
-    PR --> HM["Human Maintainer<br/>Review + Merge"]
-
-    CP["Deterministic Control Plane<br/>Gate verification · Scope enforcement · Shell sandbox<br/>State · Evidence · Retry ceilings · Audit · Telemetry"]
-
-    CP -. "governs transitions and actions" .-> O
+    R --> G_PR{{"🔒 Human PR Gate<br/>node .gated-change/bin/pr-create.mjs"}}
+    G_PR --> PR["🚀 Official Pull Request"]
 ```
 
 ### The Two Layers
