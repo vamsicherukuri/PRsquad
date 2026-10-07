@@ -84,36 +84,46 @@ PRsquad guides the issue through its governed 7-stage pipeline:
 
 Unlike unconstrained multi-agent frameworks, PRsquad enforces physical separation between **investigation**, **planning**, **human authorization**, **containment implementation**, **isolated verification**, and **review**.
 
-<p align="center">
-  <img src="docs/images/prsquad-architecture.svg" alt="PRsquad Supervised Agentic Workflow Architecture" width="100%">
-</p>
-
-<details>
-<summary><b>View Text-Based Mermaid Sequence</b></summary>
-
 ```mermaid
-flowchart LR
-    classDef gate fill:#FFF8C5,stroke:#9A6700,stroke-width:2px,color:#1A1F2C
-    classDef agent fill:#DDF4FF,stroke:#0969DA,stroke-width:1.5px,color:#1A1F2C
+flowchart TD
+    %% Styling Classes
+    classDef trigger fill:#1e293b,stroke:#64748b,stroke-width:2px,color:#f8fafc;
+    classDef agent fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc;
+    classDef gate fill:#422006,stroke:#f59e0b,stroke-width:2px,color:#fef3c7;
+    classDef done fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#ecfdf5;
 
-    S0["<b>0. Triage</b><br/>@prsquad-triage<br/><i>&lt;2s Fast-Fail</i>"]:::agent
-    S1["<b>1. Architect</b><br/>@prsquad-architect<br/><i>Blast Radius</i>"]:::agent
-    S2{{"<b>2. Scope Gate</b><br/>Human Approval<br/><i>approval.lock</i>"}}:::gate
-    S3["<b>3. Developer</b><br/>@prsquad-dev<br/><i>Write Barrier</i>"]:::agent
-    S4["<b>4. QA</b><br/>@prsquad-qa<br/><i>Worktree Test</i>"]:::agent
-    S5["<b>5. Reviewer</b><br/>@prsquad-review<br/><i>AST Sweep</i>"]:::agent
-    S6{{"<b>6. PR Gate</b><br/>Human Merge<br/><i>Review Diff</i>"}}:::gate
+    ISSUE["<b>GitHub Issue</b>"]:::trigger
+    TRIAGE["<b>Triage Agent</b><br/><code>🛡️ hook-intake-ingest</code>"]:::agent
+    ARCH["<b>Architecture Agent</b><br/><code>🛡️ hook-verify-gate</code>"]:::agent
+    GATE_SCOPE{{"<b>Scope Approval Gate</b><br/><code>🔒 approval.lock</code>"}}:::gate
+    DEV["<b>Developer Agent</b><br/><code>🛡️ hook-enforce-scope</code> &bull; <code>🛡️ hook-sandbox-bash</code>"]:::agent
+    QA["<b>QA Agent</b><br/><code>🛡️ hook-sandbox-bash</code>"]:::agent
+    REVIEW["<b>Code Review Agent</b><br/><code>🛡️ hook-verify-gate</code>"]:::agent
+    GATE_PR{{"<b>PR Merge Gate</b><br/><i>Human Maintainer</i>"}}:::gate
+    DONE["<b>Merged to Main</b>"]:::done
 
-    S0 --> S1
-    S1 --> S2
-    S2 -->|"Maintainer /approve"| S3
-    S3 --> S4
-    S4 -->|"Tests Pass"| S5
-    S4 -.->|"Fail: Repair (≤3x)"| S3
-    S5 --> S6
+    %% Flow Progression
+    ISSUE -->|"New issue"| TRIAGE
+    TRIAGE -->|"Ready"| ARCH
+    TRIAGE -.->|"Needs clarification"| ISSUE
+
+    ARCH -->|"Proposes plan & scope"| GATE_SCOPE
+    GATE_SCOPE -->|"Maintainer /approve"| DEV
+
+    DEV -->|"Fix & regression tests"| QA
+
+    %% QA Repair Loop
+    QA -->|"Test failure (≤ 3 loops)"| DEV
+
+    %% Scope Amendment Loop
+    DEV -.->|"Scope expansion needed"| ARCH
+    ARCH -.->|"Revised plan"| GATE_SCOPE
+
+    %% Review & Merge
+    QA -->|"All tests pass"| REVIEW
+    REVIEW -->|"Diff sealed & audited"| GATE_PR
+    GATE_PR -->|"Maintainer merge"| DONE
 ```
-
-</details>
 
 ---
 
