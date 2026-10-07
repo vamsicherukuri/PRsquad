@@ -455,6 +455,70 @@ async function runEdgeCases() {
     assert(escalationTriggered, "Controller detects retry limit exhausted on 3rd attempt");
     assert(reloaded.phase === "ESCALATED", "Workflow transitions to ESCALATED; no 4th Developer pass permitted");
     assert(reloaded.implementationAttempt === 3, "Implementation attempts capped strictly at 3");
+
+    // Deterministic Hook Verification: QA 3rd FAIL increments attempt to 4 and blocks Developer
+    saveApprovalLock({
+      issueNumber: 42,
+      approvedScope: "src/",
+      status: "ACTIVE",
+      maxAttempts: 3,
+      currentAttempt: 3,
+      approvedBy: "Maintainer",
+    }, REPO_ROOT);
+
+    const qaPostToolInput = JSON.stringify({
+      tool: "agent",
+      targetAgent: "gated-change-qa",
+      toolArgs: { name: "gated-change-qa" },
+      toolResult: JSON.stringify({
+        verdict: "FAIL",
+        scopeCompliance: "PASS",
+        failureClassification: [{ failure: "regression test failed", classification: "GENUINE_FIX_CAUSED" }],
+      }),
+    });
+    const qaPostStdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      cwd: REPO_ROOT,
+      input: qaPostToolInput,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const qaPostParsed = JSON.parse(qaPostStdout);
+    assert(
+      qaPostParsed.hookSpecificOutput?.additionalContext?.includes("Implementation retry limit exhausted (3/3 attempts used)"),
+      "QA postToolUse hook detects retry budget exhausted and instructs Controller to escalate"
+    );
+
+    const postState = loadState();
+    assert(postState.phase === "ESCALATED", "Hook transitions state.phase to ESCALATED upon 3rd QA failure");
+
+    // Invariant: 4th Developer invocation is mechanically denied by hook (Exit 1)
+    let devAttempt4ExitCode = 0;
+    let devAttempt4Reason = "";
+    try {
+      const dev4Input = JSON.stringify({
+        tool: "agent",
+        toolArgs: { name: "gated-change-developer" },
+      });
+      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input: dev4Input,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      devAttempt4Reason = JSON.parse(stdout).reason || "";
+    } catch (e: any) {
+      devAttempt4ExitCode = e.status;
+      try {
+        devAttempt4Reason = JSON.parse(e.stdout || e.stderr || "").reason || "";
+      } catch {}
+    }
+
+    assert(devAttempt4ExitCode === 1, "Hook mechanically blocks 4th Developer invocation with Exit 1");
+    assert(
+      devAttempt4Reason.includes("Implementation retry limit exhausted (3/3 attempts used)"),
+      "Hook denial explicitly cites retry limit exhausted"
+    );
+    assert(loadApprovalLock() === null, "Exhausted approval lock is permanently revoked");
   }
 
   // -------------------------------------------------------------------------

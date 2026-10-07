@@ -2699,7 +2699,19 @@ ${stateObj.issue.body.trim()}`);
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
       const qaVerdict = qaVal.valid ? qaVal.data.verdict : qaDetails.verdict || "BLOCKED";
-      const qaSummary = qaVal.valid ? qaVerdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : qaVerdict === "FAIL" ? `Independent QA verification detected failures (${qaVal.data.failureClassification?.map((f) => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})` : "QA verification blocked: unable to complete test suite" : qaDetails.testNotes || "Independent QA verification complete";
+      let retryExhausted = false;
+      if (qaVerdict === "FAIL" && lock2) {
+        lock2.currentAttempt++;
+        saveApprovalLock(lock2, repoRoot2);
+        state2.implementationAttempt = lock2.currentAttempt;
+        if (lock2.currentAttempt > lock2.maxAttempts) {
+          retryExhausted = true;
+          state2.phase = "ESCALATED";
+          state2.currentPhase = "ESCALATED";
+        }
+        saveState(state2, repoRoot2);
+      }
+      const qaSummary = qaVal.valid ? qaVerdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : qaVerdict === "FAIL" ? retryExhausted ? `Independent QA verification failed and retry budget exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used)` : `Independent QA verification detected failures (${qaVal.data.failureClassification?.map((f) => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})` : "QA verification blocked: unable to complete test suite" : qaDetails.testNotes || "Independent QA verification complete";
       const dashQA = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2709,9 +2721,9 @@ ${stateObj.issue.body.trim()}`);
         phase: "qa",
         status: qaVerdict,
         summary: qaSummary,
-        details: { ...qaDetails, verdict: qaVerdict }
+        details: { ...qaDetails, verdict: qaVerdict, currentAttempt: lock2 ? lock2.currentAttempt : void 0 }
       });
-      const qaInstruction = qaVal.valid && qaVerdict === "FAIL" ? "[INSTRUCTION FOR CONTROLLER]: QA verification failed. Route back to Developer for rework attempt (consume retry budget)." : qaVal.valid && qaVerdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
+      const qaInstruction = retryExhausted ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.` : qaVal.valid && qaVerdict === "FAIL" ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock2?.currentAttempt || 2) - 1}/${lock2?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock2?.currentAttempt || 2}/${lock2?.maxAttempts || 3}.` : qaVal.valid && qaVerdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
       const out = buildEnrichedPostToolOutput(input, qaAiCredits, qaInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");

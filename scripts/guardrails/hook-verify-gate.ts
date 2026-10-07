@@ -876,11 +876,27 @@ async function main() {
       const qaDetails = extractQADetails(input.toolResult);
       const qaVerdict = qaVal.valid ? qaVal.data.verdict : (qaDetails.verdict || "BLOCKED");
 
+      // Deterministic implementation retry tracking & exhaustion guardrail
+      let retryExhausted = false;
+      if (qaVerdict === "FAIL" && lock) {
+        lock.currentAttempt++;
+        saveApprovalLock(lock, repoRoot);
+        state.implementationAttempt = lock.currentAttempt;
+        if (lock.currentAttempt > lock.maxAttempts) {
+          retryExhausted = true;
+          state.phase = "ESCALATED";
+          state.currentPhase = "ESCALATED";
+        }
+        saveState(state, repoRoot);
+      }
+
       const qaSummary = qaVal.valid
         ? (qaVerdict === "PASS"
             ? "Independent QA verification passed all acceptance criteria"
             : qaVerdict === "FAIL"
-              ? `Independent QA verification detected failures (${qaVal.data.failureClassification?.map(f => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})`
+              ? (retryExhausted
+                  ? `Independent QA verification failed and retry budget exhausted (${lock!.maxAttempts}/${lock!.maxAttempts} attempts used)`
+                  : `Independent QA verification detected failures (${qaVal.data.failureClassification?.map(f => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})`)
               : "QA verification blocked: unable to complete test suite")
         : (qaDetails.testNotes || "Independent QA verification complete");
 
@@ -893,14 +909,16 @@ async function main() {
         phase: "qa",
         status: qaVerdict,
         summary: qaSummary,
-        details: { ...qaDetails, verdict: qaVerdict },
+        details: { ...qaDetails, verdict: qaVerdict, currentAttempt: lock ? lock.currentAttempt : undefined },
       });
 
-      const qaInstruction = (qaVal.valid && qaVerdict === "FAIL")
-        ? "[INSTRUCTION FOR CONTROLLER]: QA verification failed. Route back to Developer for rework attempt (consume retry budget)."
-        : (qaVal.valid && qaVerdict === "BLOCKED")
-          ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer."
-          : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
+      const qaInstruction = retryExhausted
+        ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock!.maxAttempts}/${lock!.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.`
+        : (qaVal.valid && qaVerdict === "FAIL")
+          ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock?.currentAttempt || 2) - 1}/${lock?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock?.currentAttempt || 2}/${lock?.maxAttempts || 3}.`
+          : (qaVal.valid && qaVerdict === "BLOCKED")
+            ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer."
+            : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
 
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== undefined
         ? `> ⚡ Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
