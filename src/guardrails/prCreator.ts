@@ -242,10 +242,10 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       // 4c. Verified Security & Code Review Clearance Evidence
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      if (!revVerdict || (revVerdict !== "CLEAR" && revVerdict !== "APPROVED" && revVerdict !== "CONCERNS")) {
+      if (!revVerdict || (revVerdict !== "CLEAR" && revVerdict !== "APPROVED")) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance evidence.`,
+          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR or APPROVED).`,
         };
       }
     }

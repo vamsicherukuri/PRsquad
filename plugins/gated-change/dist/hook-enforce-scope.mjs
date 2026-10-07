@@ -65,13 +65,27 @@ function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   let rel = relative(rootDir, full);
   if (rel.startsWith("..") && isAbsolute(filePath)) {
     try {
-      const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+      const currentGitCommon = execSync("git rev-parse --git-common-dir", {
+        cwd: rootDir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      const targetGitCommon = execSync("git rev-parse --git-common-dir", {
         cwd: dirname(filePath),
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]
-      }).trim().replace(/\\/g, "/");
-      if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
-        return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+      }).trim();
+      const currentCommonAbs = resolve(rootDir, currentGitCommon).replace(/\\/g, "/").toLowerCase();
+      const targetCommonAbs = resolve(dirname(filePath), targetGitCommon).replace(/\\/g, "/").toLowerCase();
+      if (currentCommonAbs === targetCommonAbs) {
+        const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+          cwd: dirname(filePath),
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim().replace(/\\/g, "/");
+        if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
+          return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+        }
       }
     } catch {
     }

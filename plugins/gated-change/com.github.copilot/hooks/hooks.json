@@ -7,7 +7,7 @@
         "command": "node",
         "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
         "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
-        "timeoutSec": 15
+        "timeoutSec": 60
       },
       {
         "tools": ["agent", "task"],
@@ -37,7 +37,7 @@
         "command": "node",
         "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
         "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
-        "timeoutSec": 15
+        "timeoutSec": 60
       }
     ]
   }

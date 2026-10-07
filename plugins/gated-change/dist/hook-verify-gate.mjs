@@ -66,13 +66,27 @@ function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   let rel = relative(rootDir, full);
   if (rel.startsWith("..") && isAbsolute(filePath)) {
     try {
-      const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+      const currentGitCommon = execSync("git rev-parse --git-common-dir", {
+        cwd: rootDir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      const targetGitCommon = execSync("git rev-parse --git-common-dir", {
         cwd: dirname(filePath),
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]
-      }).trim().replace(/\\/g, "/");
-      if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
-        return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+      }).trim();
+      const currentCommonAbs = resolve(rootDir, currentGitCommon).replace(/\\/g, "/").toLowerCase();
+      const targetCommonAbs = resolve(dirname(filePath), targetGitCommon).replace(/\\/g, "/").toLowerCase();
+      if (currentCommonAbs === targetCommonAbs) {
+        const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+          cwd: dirname(filePath),
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim().replace(/\\/g, "/");
+        if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
+          return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+        }
       }
     } catch {
     }
@@ -1239,11 +1253,15 @@ function runSymbolSweep(changedFiles, approvedScopePrefix, rootDir = process.cwd
       summary: "No exported symbols detected in changed files. Blast radius is strictly internal."
     };
   }
+  const scopePrefixes = approvedScopePrefix.split(/[,;]/).map((s) => s.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "")).filter(Boolean);
   const allFiles = getAllSourceFiles(rootDir, rootDir);
-  const normalizedScope = approvedScopePrefix.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-  const externalFiles = allFiles.filter(
-    (f) => !f.startsWith(normalizedScope + "/") && f !== normalizedScope && !changedFiles.includes(f)
-  );
+  const externalFiles = allFiles.filter((f) => {
+    if (changedFiles.includes(f)) return false;
+    const isInsideScope = scopePrefixes.some(
+      (prefix) => f === prefix || f.startsWith(prefix + "/")
+    );
+    return !isInsideScope;
+  });
   const externalReferencesFound = [];
   for (const extFile of externalFiles) {
     const full = join3(rootDir, extFile);
@@ -1722,8 +1740,20 @@ function detectRepoStack(rootDir = getRepoRoot()) {
 // src/guardrails/handoffValidator.ts
 function extractJsonFromOutput(raw) {
   if (!raw) return null;
-  if (typeof raw === "object") return raw;
-  const text = String(raw).trim();
+  let target = raw;
+  if (typeof target === "object" && target !== null) {
+    const obj = target;
+    if (typeof obj.textResultForLlm === "string") {
+      target = obj.textResultForLlm;
+    } else if (typeof obj.content === "string") {
+      target = obj.content;
+    } else if (typeof obj.value === "string") {
+      target = obj.value;
+    } else if (obj.status || obj.verdict || obj.assessment) {
+      return obj;
+    }
+  }
+  const text = String(target).trim();
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
   if (fenceMatch) {
     try {
@@ -1867,6 +1897,15 @@ function validateDeveloper(output) {
     }
     if (!json.diffReference || typeof json.diffReference !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
+    } else {
+      const hasBase = Boolean(json.diffReference.baseRef || json.baseRef);
+      const hasHead = Boolean(json.diffReference.headRef || json.headRef || json.commitSha);
+      if (!hasBase) {
+        errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
+      }
+      if (!hasHead) {
+        errors.push("IMPLEMENTED developer handoff requires 'diffReference.headRef' or 'commitSha'");
+      }
     }
   } else if (status === "BLOCKED") {
     if (!json.blocker || typeof json.blocker !== "object") {
@@ -1920,6 +1959,24 @@ function validateQA(output) {
     const hasFailCriteria = Array.isArray(json.acceptanceCriteriaResults) && json.acceptanceCriteriaResults.some((c) => c.result === "FAIL");
     if (!hasFailClassification && !hasFindings && !hasFailCriteria && scopeCompliance !== "FAIL") {
       errors.push("QA verdict 'FAIL' requires failureClassification, blockingFindings, or failing acceptance criteria");
+    }
+  } else if (verdict === "PASS") {
+    if (scopeCompliance !== "PASS") {
+      errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
+    }
+    if (Array.isArray(json.acceptanceCriteriaResults)) {
+      const hasFailingCriteria = json.acceptanceCriteriaResults.some(
+        (c) => c.result === "FAIL" || c.passed === false || c.result === false
+      );
+      if (hasFailingCriteria) {
+        errors.push("QA verdict 'PASS' is internally contradictory: one or more acceptance criteria reported 'FAIL'");
+      }
+    }
+    if (Array.isArray(json.failureClassification)) {
+      const hasGenuineFixFailures = json.failureClassification.some((f) => f.classification === "GENUINE_FIX_CAUSED");
+      if (hasGenuineFixFailures) {
+        errors.push("QA verdict 'PASS' is internally contradictory: failureClassification contains 'GENUINE_FIX_CAUSED'");
+      }
     }
   }
   if (errors.length > 0) {
@@ -1979,6 +2036,18 @@ function validateReview(output) {
 
 // src/guardrails/scopeApprover.ts
 import { createHash } from "node:crypto";
+function canonicalJsonStringify(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonicalJsonStringify).join(",") + "]";
+  }
+  const obj = value;
+  const sortedKeys = Object.keys(obj).sort();
+  const entries = sortedKeys.map((k) => JSON.stringify(k) + ":" + canonicalJsonStringify(obj[k]));
+  return "{" + entries.join(",") + "}";
+}
 function computePlanHash(planOrHandoff) {
   if (!planOrHandoff) return "";
   let normalized = "";
@@ -1986,13 +2055,13 @@ function computePlanHash(planOrHandoff) {
     normalized = planOrHandoff.replace(/\r\n/g, "\n").trim();
   } else if (typeof planOrHandoff === "object") {
     try {
-      normalized = JSON.stringify(planOrHandoff, Object.keys(planOrHandoff).sort());
+      normalized = canonicalJsonStringify(planOrHandoff);
     } catch {
       normalized = String(planOrHandoff);
     }
   }
   if (!normalized) return "";
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 // scripts/guardrails/hook-verify-gate.ts
@@ -2234,26 +2303,82 @@ async function main() {
     const branchName = `fix/issue-${resolvedIssue2}`;
     let branchStatus = "unknown";
     try {
-      const currentBranch = execSync3("git rev-parse --abbrev-ref HEAD", {
-        cwd: repoRoot2,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-      const isBaseBranch = currentBranch === "main" || currentBranch === "master" || currentBranch === "HEAD" || currentBranch.startsWith("origin/") || process.env.FORCE_BRANCH_SWITCH === "true";
-      if (isBaseBranch && currentBranch !== branchName) {
-        execSync3(`git checkout -B ${branchName}`, {
+      let currentBranch = "main";
+      try {
+        currentBranch = execSync3("git rev-parse --abbrev-ref HEAD", {
           cwd: repoRoot2,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"]
-        });
-        branchStatus = `switched_to_${branchName}`;
+        }).trim();
+      } catch {
+        try {
+          currentBranch = execSync3("git symbolic-ref --short HEAD", {
+            cwd: repoRoot2,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"]
+          }).trim();
+        } catch {
+          currentBranch = "main";
+        }
+      }
+      const isBaseBranch = currentBranch === "main" || currentBranch === "master" || currentBranch === "HEAD" || currentBranch.startsWith("origin/") || process.env.FORCE_BRANCH_SWITCH === "true";
+      if (isBaseBranch && currentBranch !== branchName) {
+        let hasCommits = false;
+        try {
+          execSync3("git rev-parse HEAD", { cwd: repoRoot2, stdio: "ignore" });
+          hasCommits = true;
+        } catch {
+        }
+        if (!hasCommits) {
+          try {
+            execSync3(`git checkout -b ${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+          } catch {
+            execSync3(`git symbolic-ref HEAD refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+          }
+          branchStatus = `initialized_on_${branchName}`;
+        } else {
+          let branchExists = false;
+          try {
+            execSync3(`git rev-parse --verify refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+            branchExists = true;
+          } catch {
+          }
+          if (branchExists) {
+            execSync3(`git checkout ${branchName}`, {
+              cwd: repoRoot2,
+              encoding: "utf-8",
+              stdio: ["ignore", "pipe", "ignore"]
+            });
+            branchStatus = `switched_to_${branchName}`;
+          } else {
+            execSync3(`git checkout -b ${branchName}`, {
+              cwd: repoRoot2,
+              encoding: "utf-8",
+              stdio: ["ignore", "pipe", "ignore"]
+            });
+            branchStatus = `created_and_switched_to_${branchName}`;
+          }
+        }
       } else if (currentBranch === branchName) {
         branchStatus = `already_on_${branchName}`;
       } else {
         branchStatus = `retained_${currentBranch}`;
       }
-    } catch {
-      branchStatus = `virtual_${branchName}`;
+    } catch (branchErr) {
+      appendAuditLog({
+        sessionId: state2.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "developer_branch_isolation_failed",
+        decision: "deny",
+        details: { branchName, error: branchErr?.message }
+      }, repoRoot2);
+      const output2 = {
+        decision: "deny",
+        reason: `BLOCKED BY POLICY: Failed to create or switch to feature branch '${branchName}': ${branchErr?.message}. Developer execution halted to protect base branch.`
+      };
+      process.stdout.write(JSON.stringify(output2) + "\n");
+      process.exit(1);
     }
     state2.phase = "DEVELOPING";
     state2.humanApproval = true;
@@ -2617,8 +2742,8 @@ ${stateObj.issue.body.trim()}`);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const triageVal = validateTriage(input.toolResult);
-      const triageStatus = triageVal.valid ? triageVal.data.status : "READY";
-      const triageSummary = triageVal.valid ? triageStatus === "READY" ? "Issue requirements extracted and acceptance criteria validated" : triageStatus === "NOT_READY" ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})` : `Triage reported ${triageStatus}` : "Issue requirements extracted and acceptance criteria validated";
+      const triageStatus = triageVal.valid ? triageVal.data.status : "NOT_READY";
+      const triageSummary = triageVal.valid ? triageStatus === "READY" ? "Issue requirements extracted and acceptance criteria validated" : triageStatus === "NOT_READY" ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})` : `Triage reported ${triageStatus}` : `Triage handoff validation failed: ${triageVal.errors.join("; ")}`;
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2628,20 +2753,20 @@ ${stateObj.issue.body.trim()}`);
         phase: "intake",
         status: triageStatus,
         summary: triageSummary,
-        details: triageVal.valid ? triageVal.data : void 0
+        details: triageVal.valid ? triageVal.data : { errors: triageVal.errors }
       });
-      const triageInstruction = triageVal.valid && triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
+      const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Ask the maintainer clarifying questions or halt.` : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const archVal = validateArchitect(input.toolResult);
-      const archStatus = archVal.valid ? archVal.data.status : "PLAN_READY";
+      const archStatus = archVal.valid ? archVal.data.status : "BLOCKED";
       const rawText = typeof input.toolResult === "string" ? input.toolResult : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
       const proposedScope = archVal.valid && archVal.data.proposedScope ? archVal.data.proposedScope : state2.approvedScope || "NOT RECORDED";
-      const archSummary = archVal.valid ? archStatus === "PLAN_READY" ? "Technical architecture plan & scope specification generated" : archStatus === "BLOCKED" ? `Architect blocked: ${archVal.data.blockedReason || "Cannot produce confident plan"}` : `Scope amendment ${archStatus}` : "Technical architecture plan & scope specification generated";
+      const archSummary = archVal.valid ? archStatus === "PLAN_READY" ? "Technical architecture plan & scope specification generated" : archStatus === "BLOCKED" ? `Architect blocked: ${archVal.data.blockedReason || "Cannot produce confident plan"}` : `Scope amendment ${archStatus}` : `Architect handoff validation failed: ${archVal.errors.join("; ")}`;
       const dashArch = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2655,18 +2780,19 @@ ${stateObj.issue.body.trim()}`);
           plan: planMarkdown || rawText,
           proposedScope,
           riskTier: archVal.valid && archVal.data.blastRadius?.risk || "Low",
-          validated: archVal.valid
+          validated: archVal.valid,
+          errors: archVal.valid ? void 0 : archVal.errors
         }
       });
-      const archInstruction = archVal.valid && archStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer." : archVal.valid && archStatus === "SCOPE_AMENDMENT_CONFIRMED" ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation." : "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
+      const archInstruction = !archVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${archVal.errors.join("; ")}). Pause pipeline and report blocker to maintainer.` : archStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer." : archStatus === "SCOPE_AMENDMENT_CONFIRMED" ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation." : "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
       const chatMeter = formatChatCreditMeter(dashArch);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, archInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
       const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "IMPLEMENTED";
-      if (devStatus === "IMPLEMENTED") {
+      const devStatus = devVal.valid ? devVal.data.status : "SCHEMA_INVALID";
+      if (devVal.valid && devStatus === "IMPLEMENTED") {
         try {
           const statusOut = execSync3("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
           if (statusOut) {
@@ -2677,8 +2803,8 @@ ${stateObj.issue.body.trim()}`);
         } catch {
         }
       }
-      const devDetails = extractDeveloperDetails(input.toolResult, repoRoot2);
-      const devSummary = devVal.valid ? devStatus === "IMPLEMENTED" ? devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally" : devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "Developer requested scope amendment outside approved boundary" : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}` : devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally";
+      const devDetails = devVal.valid ? extractDeveloperDetails(input.toolResult, repoRoot2) : { status: "SCHEMA_INVALID", errors: devVal.errors };
+      const devSummary = devVal.valid ? devStatus === "IMPLEMENTED" ? devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally" : devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "Developer requested scope amendment outside approved boundary" : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}` : `Developer handoff validation failed: ${devVal.errors.join("; ")}`;
       const dashDev = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2690,7 +2816,7 @@ ${stateObj.issue.body.trim()}`);
         summary: devSummary,
         details: devDetails
       });
-      const devInstruction = devVal.valid && devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review." : devVal.valid && devStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
+      const devInstruction = !devVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Developer handoff schema invalid (${devVal.errors.join("; ")}). Re-prompt Developer for valid schema handoff or pause pipeline.` : devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review." : devStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
       const devAiCredits = dashDev?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
       const out = buildEnrichedPostToolOutput(input, devAiCredits, devInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
@@ -2698,7 +2824,7 @@ ${stateObj.issue.body.trim()}`);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
-      const qaVerdict = qaVal.valid ? qaVal.data.verdict : qaDetails.verdict || "BLOCKED";
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "SCHEMA_INVALID";
       let retryExhausted = false;
       if (qaVerdict === "FAIL" && lock2) {
         lock2.currentAttempt++;
@@ -2711,7 +2837,7 @@ ${stateObj.issue.body.trim()}`);
         }
         saveState(state2, repoRoot2);
       }
-      const qaSummary = qaVal.valid ? qaVerdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : qaVerdict === "FAIL" ? retryExhausted ? `Independent QA verification failed and retry budget exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used)` : `Independent QA verification detected failures (${qaVal.data.failureClassification?.map((f) => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})` : "QA verification blocked: unable to complete test suite" : qaDetails.testNotes || "Independent QA verification complete";
+      const qaSummary = qaVal.valid ? qaVerdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : qaVerdict === "FAIL" ? retryExhausted ? `Independent QA verification failed and retry budget exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used)` : `Independent QA verification detected failures (${qaVal.data.failureClassification?.map((f) => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})` : "QA verification blocked: unable to complete test suite" : `QA handoff validation failed: ${qaVal.errors.join("; ")}`;
       const dashQA = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2721,9 +2847,9 @@ ${stateObj.issue.body.trim()}`);
         phase: "qa",
         status: qaVerdict,
         summary: qaSummary,
-        details: { ...qaDetails, verdict: qaVerdict, currentAttempt: lock2 ? lock2.currentAttempt : void 0 }
+        details: { ...qaDetails, verdict: qaVerdict, errors: qaVal.valid ? void 0 : qaVal.errors, currentAttempt: lock2 ? lock2.currentAttempt : void 0 }
       });
-      const qaInstruction = retryExhausted ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.` : qaVal.valid && qaVerdict === "FAIL" ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock2?.currentAttempt || 2) - 1}/${lock2?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock2?.currentAttempt || 2}/${lock2?.maxAttempts || 3}.` : qaVal.valid && qaVerdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
+      const qaInstruction = !qaVal.valid ? `[INSTRUCTION FOR CONTROLLER]: QA handoff failed validation (${qaVal.errors.join("; ")}). Re-prompt QA for valid verification report or pause pipeline.` : retryExhausted ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock2.maxAttempts}/${lock2.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.` : qaVerdict === "FAIL" ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock2?.currentAttempt || 2) - 1}/${lock2?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock2?.currentAttempt || 2}/${lock2?.maxAttempts || 3}.` : qaVerdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
       const out = buildEnrichedPostToolOutput(input, qaAiCredits, qaInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
@@ -2731,7 +2857,7 @@ ${stateObj.issue.body.trim()}`);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revVal.valid ? revVal.data.assessment : revDetails.assessment || revDetails.verdict || "CONCERNS";
+      const verdict = revVal.valid ? revVal.data.assessment : "SCHEMA_INVALID";
       syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2739,32 +2865,39 @@ ${stateObj.issue.body.trim()}`);
         sessionId: input.sessionId || state2.sessionId,
         phase: "reviewer",
         status: verdict,
-        summary: `Read-only diff security audit complete: ${verdict}`,
-        details: revDetails
+        summary: revVal.valid ? `Read-only diff security audit complete: ${verdict}` : `Reviewer handoff validation failed: ${revVal.errors.join("; ")}`,
+        details: revVal.valid ? revDetails : { errors: revVal.errors, ...revDetails }
       });
-      state2.phase = "PR_READY";
-      state2.currentPhase = "WAITING_FOR_HUMAN";
-      saveState(state2, repoRoot2);
-      const dashMerge = syncWorkflowDashboard(repoRoot2, {
-        sessionId: input.sessionId || state2.sessionId,
-        phase: "mergeGate",
-        status: "WAITING_FOR_HUMAN",
-        summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
-        details: {
-          baseBranch: "copilot-app-plugin-alignment",
-          headBranch: state2.activeBranch || `fix/issue-${resolvedIssue2}`,
-          prOpen: false,
-          awaitingHumanApproval: true
-        }
-      });
-      const chatMeter = formatChatCreditMeter(dashMerge);
-      const out = chatMeter ? buildEnrichedPostToolOutput(
-        input,
-        chatMeter,
-        "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final \u26A1 AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
-      ) : { decision: "allow" };
-      process.stdout.write(JSON.stringify(out) + "\n");
-      process.exit(0);
+      if (revVal.valid && verdict === "CLEAR") {
+        state2.phase = "PR_READY";
+        state2.currentPhase = "WAITING_FOR_HUMAN";
+        saveState(state2, repoRoot2);
+        const dashMerge = syncWorkflowDashboard(repoRoot2, {
+          sessionId: input.sessionId || state2.sessionId,
+          phase: "mergeGate",
+          status: "WAITING_FOR_HUMAN",
+          summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
+          details: {
+            baseBranch: "copilot-app-plugin-alignment",
+            headBranch: state2.activeBranch || `fix/issue-${resolvedIssue2}`,
+            prOpen: false,
+            awaitingHumanApproval: true
+          }
+        });
+        const chatMeter = formatChatCreditMeter(dashMerge);
+        const out = chatMeter ? buildEnrichedPostToolOutput(
+          input,
+          chatMeter,
+          "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final \u26A1 AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
+        ) : { decision: "allow" };
+        process.stdout.write(JSON.stringify(out) + "\n");
+        process.exit(0);
+      } else {
+        const revInstruction = !revVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Reviewer handoff failed validation (${revVal.errors.join("; ")}). Pause pipeline and notify maintainer.` : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported ${verdict}. Resolve review findings before opening Pull Request.`;
+        const out = buildEnrichedPostToolOutput(input, "", revInstruction);
+        process.stdout.write(JSON.stringify(out) + "\n");
+        process.exit(0);
+      }
     }
     process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
     process.exit(0);
@@ -2932,6 +3065,31 @@ Execute for verification: \`${tooling.testCommand}\`
     process.exit(0);
   } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
     ensureNodeModulesInWorktree(repoRoot);
+    const dashFile = join6(repoRoot, ".gated-change", "dashboard.json");
+    let dashData = null;
+    if (existsSync6(dashFile)) {
+      try {
+        dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
+      } catch {
+      }
+    }
+    const qaStatus = dashData?.phases?.qa?.status || state.phases?.qa?.status;
+    if (qaStatus !== "PASS") {
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "reviewer_invocation_blocked_qa_not_passed",
+        decision: "deny",
+        details: { qaStatus: qaStatus || "NONE" }
+      }, repoRoot);
+      const output = {
+        decision: "deny",
+        reason: `BLOCKED BY POLICY: Reviewer agent cannot be invoked before independent QA verification has passed. Current QA status: '${qaStatus || "PENDING"}'.`
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
+    }
     let diffReport = "";
     try {
       const base = state.baseRef || "HEAD~1";
@@ -2943,8 +3101,12 @@ Execute for verification: \`${tooling.testCommand}\`
       }
       let changedFiles = [];
       try {
-        changedFiles = execSync3("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
+        changedFiles = execSync3(`git diff --name-only ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
       } catch {
+        try {
+          changedFiles = execSync3("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
+        } catch {
+        }
       }
       const sweep = runSymbolSweep(changedFiles, state.approvedScope || "", repoRoot);
       const diffLines = diffOutput.split("\n");
@@ -2963,17 +3125,6 @@ ${truncatedDiff}
     }
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
     const qaHandoff = buildQAHandoffPayload(repoRoot, state, prompt);
-    syncWorkflowDashboard(repoRoot, {
-      owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "prsquad",
-      issueNumber: resolvedIssue,
-      issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-      sessionId: input.sessionId || state.sessionId,
-      phase: "qa",
-      status: "PASS",
-      summary: "Independent QA verification passed all acceptance criteria",
-      details: qaHandoff.details
-    });
     const dashRev = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,
       phase: "reviewer",

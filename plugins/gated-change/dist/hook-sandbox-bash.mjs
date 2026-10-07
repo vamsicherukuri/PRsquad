@@ -270,9 +270,41 @@ function detectRepoStack(rootDir = getRepoRoot()) {
 }
 function isCommandAllowedByTooling(command, config) {
   const trimmed = command.trim();
-  const baseTest = config.testCommand.split(" ")[0];
-  if (trimmed.startsWith(config.testCommand)) return true;
-  if (trimmed.startsWith(baseTest)) return true;
+  const tokens = trimmed.split(/\s+/);
+  if (trimmed === config.testCommand) return true;
+  if (trimmed.startsWith(config.testCommand + " ") || trimmed.startsWith(config.testCommand + "=")) {
+    return true;
+  }
+  if (config.stack === "npm" || config.stack === "typescript" || config.stack === "node") {
+    if (tokens[0] === "npm" && (tokens[1] === "test" || tokens[1] === "t" || tokens[1] === "run" && tokens[2]?.startsWith("test"))) {
+      return true;
+    }
+    if (tokens[0] === "pnpm" && (tokens[1] === "test" || tokens[1] === "t" || tokens[1] === "run" && tokens[2]?.startsWith("test"))) {
+      return true;
+    }
+    if (tokens[0] === "yarn" && (tokens[1] === "test" || tokens[1] === "run" && tokens[2]?.startsWith("test"))) {
+      return true;
+    }
+    return false;
+  }
+  if (config.stack === "maven") {
+    return tokens[0] === "mvn" && tokens.includes("test");
+  }
+  if (config.stack === "gradle") {
+    return (tokens[0] === "gradle" || tokens[0] === "./gradlew") && tokens.includes("test");
+  }
+  if (config.stack === "pytest") {
+    return tokens[0] === "pytest" || tokens[0].startsWith("python") && tokens.includes("pytest");
+  }
+  if (config.stack === "cargo") {
+    return tokens[0] === "cargo" && tokens[1] === "test";
+  }
+  if (config.stack === "go") {
+    return tokens[0] === "go" && tokens[1] === "test";
+  }
+  if (config.stack === "dotnet") {
+    return tokens[0] === "dotnet" && tokens[1] === "test";
+  }
   return false;
 }
 
@@ -286,11 +318,25 @@ var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wg
 var DESTRUCTIVE_GIT_CLEAN_REGEX = /\bgit\s+clean\b.*?(?:-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)/i;
 function validateCommandForAgent(command, agent = "unknown", rootDir) {
   const trimmed = command.trim();
+  const AGENT_SELF_APPROVE_REGEX = /\bscope-approve(?:\.ts|\.js)?\b/i;
+  if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve'. Scope authorization is exclusively reserved for the human maintainer."
+    };
+  }
+  const SHELL_CHAINING_REGEX = /[;&|\n]/;
   if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
     if (trimmed.includes(">") || trimmed.includes(">>")) {
       return {
         allowed: false,
         reason: "POLICY_DENIAL: Code Review agent is strictly read-only and cannot use file redirects ('>' or '>>')."
+      };
+    }
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): Code Review agent cannot use shell composition or chaining operators (';', '&&', '||', '|')."
       };
     }
     if (!GIT_INSPECTION_ALLOWLIST_REGEX.test(trimmed)) {
@@ -330,6 +376,12 @@ function validateCommandForAgent(command, agent = "unknown", rootDir) {
       return {
         allowed: false,
         reason: "POLICY_DENIAL: QA agent cannot use file redirects ('>' or '>>'). QA executes tests for validation only with zero disk mutations."
+      };
+    }
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): QA agent cannot use shell composition or chaining operators (';', '&&', '||', '|')."
       };
     }
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {

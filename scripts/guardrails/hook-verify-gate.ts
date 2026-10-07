@@ -323,11 +323,24 @@ async function main() {
     let branchStatus = "unknown";
 
     try {
-      const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-        cwd: repoRoot,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
+      let currentBranch = "main";
+      try {
+        currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd: repoRoot,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+      } catch {
+        try {
+          currentBranch = execSync("git symbolic-ref --short HEAD", {
+            cwd: repoRoot,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }).trim();
+        } catch {
+          currentBranch = "main";
+        }
+      }
 
       const isBaseBranch =
         currentBranch === "main" ||
@@ -337,20 +350,63 @@ async function main() {
         process.env.FORCE_BRANCH_SWITCH === "true";
 
       if (isBaseBranch && currentBranch !== branchName) {
-        execSync(`git checkout -B ${branchName}`, {
-          cwd: repoRoot,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"],
-        });
-        branchStatus = `switched_to_${branchName}`;
+        let hasCommits = false;
+        try {
+          execSync("git rev-parse HEAD", { cwd: repoRoot, stdio: "ignore" });
+          hasCommits = true;
+        } catch {}
+
+        if (!hasCommits) {
+          try {
+            execSync(`git checkout -b ${branchName}`, { cwd: repoRoot, stdio: "ignore" });
+          } catch {
+            execSync(`git symbolic-ref HEAD refs/heads/${branchName}`, { cwd: repoRoot, stdio: "ignore" });
+          }
+          branchStatus = `initialized_on_${branchName}`;
+        } else {
+          let branchExists = false;
+          try {
+            execSync(`git rev-parse --verify refs/heads/${branchName}`, { cwd: repoRoot, stdio: "ignore" });
+            branchExists = true;
+          } catch {}
+
+          if (branchExists) {
+            execSync(`git checkout ${branchName}`, {
+              cwd: repoRoot,
+              encoding: "utf-8",
+              stdio: ["ignore", "pipe", "ignore"],
+            });
+            branchStatus = `switched_to_${branchName}`;
+          } else {
+            execSync(`git checkout -b ${branchName}`, {
+              cwd: repoRoot,
+              encoding: "utf-8",
+              stdio: ["ignore", "pipe", "ignore"],
+            });
+            branchStatus = `created_and_switched_to_${branchName}`;
+          }
+        }
       } else if (currentBranch === branchName) {
         branchStatus = `already_on_${branchName}`;
       } else {
         branchStatus = `retained_${currentBranch}`;
       }
-    } catch {
-      // In worktree or non-git environments, record virtual branch without failing
-      branchStatus = `virtual_${branchName}`;
+    } catch (branchErr: any) {
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "developer_branch_isolation_failed",
+        decision: "deny",
+        details: { branchName, error: branchErr?.message },
+      }, repoRoot);
+
+      const output: HookOutput = {
+        decision: "deny",
+        reason: `BLOCKED BY POLICY: Failed to create or switch to feature branch '${branchName}': ${branchErr?.message}. Developer execution halted to protect base branch.`,
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
     }
 
     state.phase = "DEVELOPING";
@@ -743,14 +799,14 @@ async function main() {
 
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const triageVal = validateTriage(input.toolResult);
-      const triageStatus = triageVal.valid ? triageVal.data.status : "READY";
+      const triageStatus = triageVal.valid ? triageVal.data.status : "NOT_READY";
       const triageSummary = triageVal.valid
         ? (triageStatus === "READY"
             ? "Issue requirements extracted and acceptance criteria validated"
             : triageStatus === "NOT_READY"
               ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})`
               : `Triage reported ${triageStatus}`)
-        : "Issue requirements extracted and acceptance criteria validated";
+        : `Triage handoff validation failed: ${triageVal.errors.join("; ")}`;
 
       const dashIntake = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -761,12 +817,14 @@ async function main() {
         phase: "intake",
         status: triageStatus,
         summary: triageSummary,
-        details: triageVal.valid ? triageVal.data : undefined,
+        details: triageVal.valid ? triageVal.data : { errors: triageVal.errors },
       });
 
-      const triageInstruction = (triageVal.valid && triageStatus === "NOT_READY")
-        ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
-        : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
+      const triageInstruction = !triageVal.valid
+        ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Ask the maintainer clarifying questions or halt.`
+        : triageStatus === "NOT_READY"
+          ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
+          : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
 
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter
@@ -776,7 +834,7 @@ async function main() {
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const archVal = validateArchitect(input.toolResult);
-      const archStatus = archVal.valid ? archVal.data.status : "PLAN_READY";
+      const archStatus = archVal.valid ? archVal.data.status : "BLOCKED";
       const rawText = typeof input.toolResult === "string"
         ? input.toolResult
         : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
@@ -791,7 +849,7 @@ async function main() {
             : archStatus === "BLOCKED"
               ? `Architect blocked: ${archVal.data.blockedReason || "Cannot produce confident plan"}`
               : `Scope amendment ${archStatus}`)
-        : "Technical architecture plan & scope specification generated";
+        : `Architect handoff validation failed: ${archVal.errors.join("; ")}`;
 
       const dashArch = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -807,14 +865,17 @@ async function main() {
           proposedScope,
           riskTier: (archVal.valid && archVal.data.blastRadius?.risk) || "Low",
           validated: archVal.valid,
+          errors: archVal.valid ? undefined : archVal.errors,
         },
       });
 
-      const archInstruction = (archVal.valid && archStatus === "BLOCKED")
-        ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer."
-        : (archVal.valid && archStatus === "SCOPE_AMENDMENT_CONFIRMED")
-          ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation."
-          : "[INSTRUCTION FOR CONTROLLER]: Include this live ⚡ AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
+      const archInstruction = !archVal.valid
+        ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${archVal.errors.join("; ")}). Pause pipeline and report blocker to maintainer.`
+        : archStatus === "BLOCKED"
+          ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer."
+          : archStatus === "SCOPE_AMENDMENT_CONFIRMED"
+            ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation."
+            : "[INSTRUCTION FOR CONTROLLER]: Include this live ⚡ AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
 
       const chatMeter = formatChatCreditMeter(dashArch);
       const out = chatMeter
@@ -824,10 +885,10 @@ async function main() {
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
       const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "IMPLEMENTED";
+      const devStatus = devVal.valid ? devVal.data.status : "SCHEMA_INVALID";
 
-      // Deterministic auto-commit (Idea 2): only commit if fix was IMPLEMENTED
-      if (devStatus === "IMPLEMENTED") {
+      // Deterministic auto-commit: strictly require VALID IMPLEMENTED handoff
+      if (devVal.valid && devStatus === "IMPLEMENTED") {
         try {
           const statusOut = execSync("git status --porcelain", { cwd: repoRoot, encoding: "utf-8" }).trim();
           if (statusOut) {
@@ -838,14 +899,16 @@ async function main() {
         } catch {}
       }
 
-      const devDetails = extractDeveloperDetails(input.toolResult, repoRoot);
+      const devDetails = devVal.valid
+        ? extractDeveloperDetails(input.toolResult, repoRoot)
+        : { status: "SCHEMA_INVALID", errors: devVal.errors };
       const devSummary = devVal.valid
         ? (devStatus === "IMPLEMENTED"
             ? (devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally")
             : devStatus === "SCOPE_AMENDMENT_REQUIRED"
               ? "Developer requested scope amendment outside approved boundary"
               : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}`)
-        : (devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally");
+        : `Developer handoff validation failed: ${devVal.errors.join("; ")}`;
 
       const dashDev = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -859,11 +922,13 @@ async function main() {
         details: devDetails,
       });
 
-      const devInstruction = (devVal.valid && devStatus === "SCOPE_AMENDMENT_REQUIRED")
-        ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review."
-        : (devVal.valid && devStatus === "BLOCKED")
-          ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer."
-          : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
+      const devInstruction = !devVal.valid
+        ? `[INSTRUCTION FOR CONTROLLER]: Developer handoff schema invalid (${devVal.errors.join("; ")}). Re-prompt Developer for valid schema handoff or pause pipeline.`
+        : devStatus === "SCOPE_AMENDMENT_REQUIRED"
+          ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review."
+          : devStatus === "BLOCKED"
+            ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer."
+            : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
 
       const devAiCredits = dashDev?.telemetry?.actualAiCredits !== undefined
         ? `> ⚡ Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
@@ -874,7 +939,7 @@ async function main() {
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
-      const qaVerdict = qaVal.valid ? qaVal.data.verdict : (qaDetails.verdict || "BLOCKED");
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "SCHEMA_INVALID";
 
       // Deterministic implementation retry tracking & exhaustion guardrail
       let retryExhausted = false;
@@ -898,7 +963,7 @@ async function main() {
                   ? `Independent QA verification failed and retry budget exhausted (${lock!.maxAttempts}/${lock!.maxAttempts} attempts used)`
                   : `Independent QA verification detected failures (${qaVal.data.failureClassification?.map(f => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})`)
               : "QA verification blocked: unable to complete test suite")
-        : (qaDetails.testNotes || "Independent QA verification complete");
+        : `QA handoff validation failed: ${qaVal.errors.join("; ")}`;
 
       const dashQA = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -909,16 +974,18 @@ async function main() {
         phase: "qa",
         status: qaVerdict,
         summary: qaSummary,
-        details: { ...qaDetails, verdict: qaVerdict, currentAttempt: lock ? lock.currentAttempt : undefined },
+        details: { ...qaDetails, verdict: qaVerdict, errors: qaVal.valid ? undefined : qaVal.errors, currentAttempt: lock ? lock.currentAttempt : undefined },
       });
 
-      const qaInstruction = retryExhausted
-        ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock!.maxAttempts}/${lock!.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.`
-        : (qaVal.valid && qaVerdict === "FAIL")
-          ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock?.currentAttempt || 2) - 1}/${lock?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock?.currentAttempt || 2}/${lock?.maxAttempts || 3}.`
-          : (qaVal.valid && qaVerdict === "BLOCKED")
-            ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer."
-            : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
+      const qaInstruction = !qaVal.valid
+        ? `[INSTRUCTION FOR CONTROLLER]: QA handoff failed validation (${qaVal.errors.join("; ")}). Re-prompt QA for valid verification report or pause pipeline.`
+        : retryExhausted
+          ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${lock!.maxAttempts}/${lock!.maxAttempts} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.`
+          : qaVerdict === "FAIL"
+            ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(lock?.currentAttempt || 2) - 1}/${lock?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${lock?.currentAttempt || 2}/${lock?.maxAttempts || 3}.`
+            : qaVerdict === "BLOCKED"
+              ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer."
+              : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
 
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== undefined
         ? `> ⚡ Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
@@ -929,7 +996,7 @@ async function main() {
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revVal.valid ? revVal.data.assessment : (revDetails.assessment || revDetails.verdict || "CONCERNS");
+      const verdict = revVal.valid ? revVal.data.assessment : "SCHEMA_INVALID";
 
       syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -938,38 +1005,49 @@ async function main() {
         sessionId: input.sessionId || state.sessionId,
         phase: "reviewer",
         status: verdict,
-        summary: `Read-only diff security audit complete: ${verdict}`,
-        details: revDetails,
+        summary: revVal.valid
+          ? `Read-only diff security audit complete: ${verdict}`
+          : `Reviewer handoff validation failed: ${revVal.errors.join("; ")}`,
+        details: revVal.valid ? revDetails : { errors: revVal.errors, ...revDetails },
       });
 
-      // Transition state: REVIEW_COMPLETE -> PR_READY -> WAITING_FOR_HUMAN
-      state.phase = "PR_READY";
-      state.currentPhase = "WAITING_FOR_HUMAN";
-      saveState(state, repoRoot);
+      if (revVal.valid && verdict === "CLEAR") {
+        // Transition state: REVIEW_COMPLETE -> PR_READY -> WAITING_FOR_HUMAN
+        state.phase = "PR_READY";
+        state.currentPhase = "WAITING_FOR_HUMAN";
+        saveState(state, repoRoot);
 
-      const dashMerge = syncWorkflowDashboard(repoRoot, {
-        sessionId: input.sessionId || state.sessionId,
-        phase: "mergeGate",
-        status: "WAITING_FOR_HUMAN",
-        summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
-        details: {
-          baseBranch: "copilot-app-plugin-alignment",
-          headBranch: state.activeBranch || `fix/issue-${resolvedIssue}`,
-          prOpen: false,
-          awaitingHumanApproval: true,
-        },
-      });
+        const dashMerge = syncWorkflowDashboard(repoRoot, {
+          sessionId: input.sessionId || state.sessionId,
+          phase: "mergeGate",
+          status: "WAITING_FOR_HUMAN",
+          summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
+          details: {
+            baseBranch: "copilot-app-plugin-alignment",
+            headBranch: state.activeBranch || `fix/issue-${resolvedIssue}`,
+            prOpen: false,
+            awaitingHumanApproval: true,
+          },
+        });
 
-      const chatMeter = formatChatCreditMeter(dashMerge);
-      const out = chatMeter
-        ? buildEnrichedPostToolOutput(
-            input,
-            chatMeter,
-            "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final ⚡ AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
-          )
-        : { decision: "allow" };
-      process.stdout.write(JSON.stringify(out) + "\n");
-      process.exit(0);
+        const chatMeter = formatChatCreditMeter(dashMerge);
+        const out = chatMeter
+          ? buildEnrichedPostToolOutput(
+              input,
+              chatMeter,
+              "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final ⚡ AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
+            )
+          : { decision: "allow" };
+        process.stdout.write(JSON.stringify(out) + "\n");
+        process.exit(0);
+      } else {
+        const revInstruction = !revVal.valid
+          ? `[INSTRUCTION FOR CONTROLLER]: Reviewer handoff failed validation (${revVal.errors.join("; ")}). Pause pipeline and notify maintainer.`
+          : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported ${verdict}. Resolve review findings before opening Pull Request.`;
+        const out = buildEnrichedPostToolOutput(input, "", revInstruction);
+        process.stdout.write(JSON.stringify(out) + "\n");
+        process.exit(0);
+      }
     }
 
     process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
@@ -1133,6 +1211,35 @@ async function main() {
   } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
     ensureNodeModulesInWorktree(repoRoot);
 
+    // Gate check: Reviewer cannot be invoked before QA verification passes
+    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
+    let dashData: any = null;
+    if (existsSync(dashFile)) {
+      try {
+        dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
+      } catch {}
+    }
+    const qaStatus = dashData?.phases?.qa?.status || state.phases?.qa?.status;
+    if (qaStatus !== "PASS") {
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "reviewer_invocation_blocked_qa_not_passed",
+        decision: "deny",
+        details: { qaStatus: qaStatus || "NONE" },
+      }, repoRoot);
+
+      const output: HookOutput = {
+        decision: "deny",
+        reason:
+          `BLOCKED BY POLICY: Reviewer agent cannot be invoked before independent QA verification has passed. ` +
+          `Current QA status: '${qaStatus || "PENDING"}'.`,
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
+    }
+
     // Idea 4: Deterministic Diff Pre-Injection & AST Symbol Sweep
     let diffReport = "";
     try {
@@ -1146,9 +1253,14 @@ async function main() {
 
       let changedFiles: string[] = [];
       try {
-        changedFiles = execSync("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" })
+        changedFiles = execSync(`git diff --name-only ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" })
           .split("\n").map(l => l.trim()).filter(Boolean);
-      } catch {}
+      } catch {
+        try {
+          changedFiles = execSync("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" })
+            .split("\n").map(l => l.trim()).filter(Boolean);
+        } catch {}
+      }
 
       const sweep = runSymbolSweep(changedFiles, state.approvedScope || "", repoRoot);
 
@@ -1167,18 +1279,6 @@ async function main() {
 
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
     const qaHandoff = buildQAHandoffPayload(repoRoot, state, prompt);
-
-    syncWorkflowDashboard(repoRoot, {
-      owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "prsquad",
-      issueNumber: resolvedIssue,
-      issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-      sessionId: input.sessionId || state.sessionId,
-      phase: "qa",
-      status: "PASS",
-      summary: "Independent QA verification passed all acceptance criteria",
-      details: qaHandoff.details,
-    });
 
     const dashRev = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,

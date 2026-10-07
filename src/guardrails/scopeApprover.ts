@@ -38,8 +38,25 @@ export interface ScopeApprovalResult {
 }
 
 /**
+ * Recursively produces a canonical JSON string with sorted keys and preserved array order.
+ */
+export function canonicalJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return "[" + value.map(canonicalJsonStringify).join(",") + "]";
+  }
+  const obj = value as Record<string, unknown>;
+  const sortedKeys = Object.keys(obj).sort();
+  const entries = sortedKeys.map((k) => JSON.stringify(k) + ":" + canonicalJsonStringify(obj[k]));
+  return "{" + entries.join(",") + "}";
+}
+
+/**
  * Computes a deterministic canonical SHA-256 hash for an architecture plan.
  * Normalizes line endings (CRLF -> LF) and trims whitespace.
+ * Uses full 64-character SHA-256 hex digest.
  */
 export function computePlanHash(planOrHandoff: unknown): string {
   if (!planOrHandoff) return "";
@@ -48,13 +65,13 @@ export function computePlanHash(planOrHandoff: unknown): string {
     normalized = planOrHandoff.replace(/\r\n/g, "\n").trim();
   } else if (typeof planOrHandoff === "object") {
     try {
-      normalized = JSON.stringify(planOrHandoff, Object.keys(planOrHandoff as object).sort());
+      normalized = canonicalJsonStringify(planOrHandoff);
     } catch {
       normalized = String(planOrHandoff);
     }
   }
   if (!normalized) return "";
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeApprovalResult {
@@ -103,14 +120,33 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
   const approver = options.approver || "Human Maintainer (/approve)";
 
   // 3. Approval Integrity Binding: Canonical plan hash & base commit anchoring
-  const rawPlan =
-    options.plan ||
-    dashData?.phases?.architect?.details?.plan ||
-    dashData?.phases?.architect?.details?.changes ||
-    state.approvedPlan ||
-    dashData?.phases?.architect?.summary;
+  let rawPlan: any = undefined;
+  if (options.plan !== undefined) {
+    rawPlan = typeof options.plan === "string" ? options.plan.trim() : options.plan;
+  } else {
+    rawPlan =
+      dashData?.phases?.architect?.details?.plan ||
+      dashData?.phases?.architect?.details?.changes ||
+      state.approvedPlan ||
+      dashData?.phases?.architect?.summary;
+  }
 
-  const planHash = rawPlan ? computePlanHash(rawPlan) : undefined;
+  if (!rawPlan) {
+    return {
+      success: false,
+      error:
+        "SCOPE_GATE_BLOCKED (MANDATORY_PLAN_REQUIRED): Cannot approve scope without a canonical architecture plan. " +
+        "Architect must produce a validated plan before the Human Scope Gate can be approved.",
+    };
+  }
+
+  const planHash = computePlanHash(rawPlan);
+  if (!planHash) {
+    return {
+      success: false,
+      error: "SCOPE_GATE_BLOCKED: Failed to compute canonical plan hash for architecture plan.",
+    };
+  }
 
   let baseRef = options.baseRef || state.baseRef;
   if (!baseRef) {

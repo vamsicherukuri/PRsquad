@@ -26,9 +26,22 @@ export type HandoffValidation<T> = ValidationSuccess<T> | ValidationFailure;
  */
 export function extractJsonFromOutput(raw: unknown): any | null {
   if (!raw) return null;
-  if (typeof raw === "object") return raw;
 
-  const text = String(raw).trim();
+  let target = raw;
+  if (typeof target === "object" && target !== null) {
+    const obj = target as Record<string, any>;
+    if (typeof obj.textResultForLlm === "string") {
+      target = obj.textResultForLlm;
+    } else if (typeof obj.content === "string") {
+      target = obj.content;
+    } else if (typeof obj.value === "string") {
+      target = obj.value;
+    } else if (obj.status || obj.verdict || obj.assessment) {
+      return obj;
+    }
+  }
+
+  const text = String(target).trim();
 
   // 1. Try markdown fenced json block: ```json ... ```
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
@@ -269,6 +282,15 @@ export function validateDeveloper(output: unknown): HandoffValidation<DeveloperH
     }
     if (!json.diffReference || typeof json.diffReference !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
+    } else {
+      const hasBase = Boolean(json.diffReference.baseRef || json.baseRef);
+      const hasHead = Boolean(json.diffReference.headRef || json.headRef || json.commitSha);
+      if (!hasBase) {
+        errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
+      }
+      if (!hasHead) {
+        errors.push("IMPLEMENTED developer handoff requires 'diffReference.headRef' or 'commitSha'");
+      }
     }
   } else if (status === "BLOCKED") {
     if (!json.blocker || typeof json.blocker !== "object") {
@@ -356,6 +378,24 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
     const hasFailCriteria = Array.isArray(json.acceptanceCriteriaResults) && json.acceptanceCriteriaResults.some((c: any) => c.result === "FAIL");
     if (!hasFailClassification && !hasFindings && !hasFailCriteria && scopeCompliance !== "FAIL") {
       errors.push("QA verdict 'FAIL' requires failureClassification, blockingFindings, or failing acceptance criteria");
+    }
+  } else if (verdict === "PASS") {
+    if (scopeCompliance !== "PASS") {
+      errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
+    }
+    if (Array.isArray(json.acceptanceCriteriaResults)) {
+      const hasFailingCriteria = json.acceptanceCriteriaResults.some(
+        (c: any) => c.result === "FAIL" || c.passed === false || c.result === false
+      );
+      if (hasFailingCriteria) {
+        errors.push("QA verdict 'PASS' is internally contradictory: one or more acceptance criteria reported 'FAIL'");
+      }
+    }
+    if (Array.isArray(json.failureClassification)) {
+      const hasGenuineFixFailures = json.failureClassification.some((f: any) => f.classification === "GENUINE_FIX_CAUSED");
+      if (hasGenuineFixFailures) {
+        errors.push("QA verdict 'PASS' is internally contradictory: failureClassification contains 'GENUINE_FIX_CAUSED'");
+      }
     }
   }
 

@@ -43,6 +43,18 @@ export function validateCommandForAgent(
 ): BashValidationResult {
   const trimmed = command.trim();
 
+  // Global Safety: Autonomous agents cannot execute scope-approve to self-mint locks
+  const AGENT_SELF_APPROVE_REGEX = /\bscope-approve(?:\.ts|\.js)?\b/i;
+  if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve'. Scope authorization is exclusively reserved for the human maintainer.",
+    };
+  }
+
+  // Shell chaining / composition operators
+  const SHELL_CHAINING_REGEX = /[;&|\n]/;
+
   // 1. Code Review Agent: Strict Allowlist (supports qualified names)
   if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
     // Disallow output redirection
@@ -50,6 +62,14 @@ export function validateCommandForAgent(
       return {
         allowed: false,
         reason: "POLICY_DENIAL: Code Review agent is strictly read-only and cannot use file redirects ('>' or '>>').",
+      };
+    }
+
+    // Disallow shell chaining operators (;, &&, ||, |)
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): Code Review agent cannot use shell composition or chaining operators (';', '&&', '||', '|').",
       };
     }
 
@@ -106,7 +126,15 @@ export function validateCommandForAgent(
       };
     }
 
-    // B. Explicit check against mutating git commands
+    // B. Disallow shell chaining operators (;, &&, ||, |)
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): QA agent cannot use shell composition or chaining operators (';', '&&', '||', '|').",
+      };
+    }
+
+    // C. Explicit check against mutating git commands
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,

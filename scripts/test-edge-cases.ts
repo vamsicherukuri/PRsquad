@@ -25,6 +25,7 @@
 import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
 import {
   loadState,
   saveState,
@@ -32,6 +33,7 @@ import {
   loadApprovalLock,
   revokeApprovalLock,
   getRepoRoot,
+  toPosixRelative,
 } from "../src/guardrails/stateStore.js";
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
@@ -45,7 +47,14 @@ import {
   validateReview,
   extractJsonFromOutput,
 } from "../src/guardrails/handoffValidator.js";
-import { approveScopeGate, computePlanHash } from "../src/guardrails/scopeApprover.js";
+import {
+  approveScopeGate,
+  computePlanHash,
+  canonicalJsonStringify,
+} from "../src/guardrails/scopeApprover.js";
+import { isCommandAllowedByTooling, detectRepoStack } from "../src/guardrails/toolingBridge.js";
+import { fetchIssueDeterministic } from "../src/guardrails/ingestIssue.js";
+import { runSymbolSweep } from "../src/guardrails/symbolSweep.js";
 
 const REPO_ROOT = getRepoRoot();
 let initialBranch = "";
@@ -241,8 +250,13 @@ async function runEdgeCases() {
     assert(selfApprovalExitCode === 1, "Hook strictly denies Developer when model attempts prompt self-approval without lock");
     assert(loadApprovalLock() === null, "Approval lock is strictly NOT minted from agent prompt markers");
 
-    // Verify deterministic approval action (approveScopeGate) mints physical lock
-    const mintRes = approveScopeGate({ preferredDir: REPO_ROOT, scope: "src/services/billing/", issue: 42 });
+    // Verify deterministic approval action (approveScopeGate) mints physical lock with mandatory plan
+    const mintRes = approveScopeGate({
+      preferredDir: REPO_ROOT,
+      scope: "src/services/billing/",
+      issue: 42,
+      plan: "### 📐 Approved Architecture Plan\nImplement discount rounding fix in src/services/billing/.",
+    });
     assert(mintRes.success && mintRes.lock?.status === "ACTIVE", "approveScopeGate() mints active physical approval.lock");
   }
 
@@ -913,7 +927,7 @@ async function runEdgeCases() {
     const hashA_crlf = computePlanHash(planA.replace(/\n/g, "\r\n") + "   ");
     const hashB = computePlanHash(planB);
 
-    assert(hashA.length === 32, "computePlanHash produces 32-char hex digest");
+    assert(hashA.length === 64, "computePlanHash produces 64-char SHA-256 hex digest");
     assert(hashA === hashA_crlf, "computePlanHash normalizes line endings and whitespace");
     assert(hashA !== hashB, "Different plans produce distinct plan hashes");
 
@@ -1076,6 +1090,211 @@ async function runEdgeCases() {
     } catch {}
     assert(intakeDenialReceived, "Issue intake hook fails safe (decision: 'deny') on malformed input");
     assert(intakeReason.includes("INTAKE_VALIDATION_FAILURE"), "Intake hook denial cites INTAKE_VALIDATION_FAILURE");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 17: Fail-Closed Specialist Handoffs, Wrapper Unwrapping & Contract Enforcement
+  // -------------------------------------------------------------------------
+  logCase(17, "Fail-Closed Specialist Handoffs, Wrapper Unwrapping & Contract Enforcement");
+  {
+    // 1. extractJsonFromOutput unwraps Copilot wrapper objects
+    const wrappedTriage = {
+      resultType: "success",
+      textResultForLlm: JSON.stringify({ status: "NOT_READY", missing: ["repro_steps"] }),
+    };
+    const parsed = extractJsonFromOutput(wrappedTriage);
+    assert(parsed?.status === "NOT_READY", "extractJsonFromOutput unwraps Copilot result wrapper");
+
+    // 2. validateDeveloper strictly enforces diffReference contract
+    const devNoDiff = validateDeveloper({
+      status: "IMPLEMENTED",
+      filesChanged: ["src/a.ts"],
+      tests: { status: "PASS" },
+    });
+    assert(!devNoDiff.valid, "Developer handoff rejected without diffReference");
+
+    const devValidDiff = validateDeveloper({
+      status: "IMPLEMENTED",
+      filesChanged: ["src/a.ts"],
+      tests: { status: "PASS" },
+      diffReference: { baseRef: "main", headRef: "fix/issue-1" },
+    });
+    assert(devValidDiff.valid, "Developer handoff accepted with baseRef and headRef");
+
+    // 3. validateQA strictly fails if scope is expanded or criteria/classification fails
+    const qaScopeFail = validateQA({
+      verdict: "PASS",
+      scopeCompliance: "SCOPE_EXPANDED",
+      acceptanceCriteriaResults: [{ criterion: "Fix bug", passed: true }],
+      testResults: { passed: true },
+    });
+    assert(!qaScopeFail.valid, "QA validation fails closed when scopeCompliance is not PASS");
+
+    const qaCritFail = validateQA({
+      verdict: "PASS",
+      scopeCompliance: "PASS",
+      acceptanceCriteriaResults: [{ criterion: "Fix bug", passed: false }],
+      testResults: { passed: true },
+    });
+    assert(!qaCritFail.valid, "QA validation fails closed when acceptance criteria has failures");
+
+    const qaClassFail = validateQA({
+      verdict: "PASS",
+      scopeCompliance: "PASS",
+      acceptanceCriteriaResults: [{ criterion: "Fix bug", passed: true }],
+      testResults: { passed: true },
+      failureClassification: [{ failure: "broken test", classification: "GENUINE_FIX_CAUSED" }],
+    });
+    assert(!qaClassFail.valid, "QA validation fails closed when genuine fix failures are classified");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 18: Cross-Repository Path Containment & Isolation
+  // -------------------------------------------------------------------------
+  logCase(18, "Cross-Repository Path Containment & Isolation");
+  {
+    const inRepoPath = path.join(REPO_ROOT, "src/guardrails/stateStore.ts");
+    const localRel = toPosixRelative(inRepoPath, REPO_ROOT);
+    assert(localRel === "src/guardrails/stateStore.ts", "toPosixRelative normalizes in-repo path");
+
+    const foreignDir = fs.mkdtempSync(path.join(os.tmpdir(), "foreign-repo-"));
+    try {
+      execSync("git init", { cwd: foreignDir, stdio: "ignore" });
+      const foreignFile = path.join(foreignDir, "secret.txt");
+      fs.writeFileSync(foreignFile, "secret");
+      const foreignRel = toPosixRelative(foreignFile, REPO_ROOT);
+      assert(foreignRel.startsWith(".."), "toPosixRelative does NOT relativize foreign repository files into current repo");
+    } finally {
+      fs.rmSync(foreignDir, { recursive: true, force: true });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 19: Recursive Plan Canonicalization & Mandatory Integrity Binding
+  // -------------------------------------------------------------------------
+  logCase(19, "Recursive Plan Canonicalization & Mandatory Integrity Binding");
+  {
+    const planObj1 = { b: 2, a: { z: 10, y: 20 }, c: [1, 2] };
+    const planObj2 = { c: [1, 2], a: { y: 20, z: 10 }, b: 2 };
+    const json1 = canonicalJsonStringify(planObj1);
+    const json2 = canonicalJsonStringify(planObj2);
+    assert(json1 === json2, "canonicalJsonStringify produces identical JSON regardless of key insertion order");
+
+    const h1 = computePlanHash(planObj1);
+    const h2 = computePlanHash(planObj2);
+    assert(h1 === h2 && h1.length === 64, "computePlanHash produces matching 64-char SHA-256 for key-permuted plans");
+
+    const noPlanApprove = approveScopeGate({
+      preferredDir: REPO_ROOT,
+      scope: "src/billing/",
+      issue: 99,
+      plan: "",
+      approver: "Human Maintainer",
+    });
+    assert(!noPlanApprove.success, "approveScopeGate fails closed when plan is missing");
+    assert(noPlanApprove.error?.includes("MANDATORY_PLAN_REQUIRED"), "Rejection cites MANDATORY_PLAN_REQUIRED");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 20: Production Ingestion Safety / No Fabricated Fixtures
+  // -------------------------------------------------------------------------
+  logCase(20, "Production Ingestion Safety / No Fabricated Fixtures");
+  {
+    const prevEnv = process.env.NODE_ENV;
+    const prevAllow = process.env.PRSQUAD_ALLOW_FIXTURES;
+    delete process.env.PRSQUAD_ALLOW_FIXTURES;
+    process.env.NODE_ENV = "production";
+    let prodIngestThrew = false;
+    try {
+      fetchIssueDeterministic("nonexistent-owner-abc", "nonexistent-repo-xyz", 999999, REPO_ROOT);
+    } catch {
+      prodIngestThrew = true;
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+      if (prevAllow) process.env.PRSQUAD_ALLOW_FIXTURES = prevAllow;
+    }
+    assert(prodIngestThrew, "fetchIssueDeterministic throws in production when gh fails rather than fabricating mock data");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 21: Safe Branch Isolation & Reviewer Gate Pre-Conditions
+  // -------------------------------------------------------------------------
+  logCase(21, "Safe Branch Isolation & Reviewer Gate Pre-Conditions");
+  {
+    const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
+    let savedDashContent = "";
+    if (fs.existsSync(dashFile)) savedDashContent = fs.readFileSync(dashFile, "utf-8");
+
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "qa",
+      status: "FAIL",
+      details: { verdict: "FAIL" },
+    });
+
+    let reviewerExitCode = 0;
+    let reviewerDenialReason = "";
+    try {
+      const inputPayload = JSON.stringify({
+        cwd: REPO_ROOT,
+        tool: "agent",
+        toolArgs: { name: "gated-change-reviewer", prompt: "Perform review" },
+      });
+      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input: inputPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e: any) {
+      reviewerExitCode = e.status;
+      try {
+        const parsed = JSON.parse(e.stdout || e.output?.[1] || "{}");
+        reviewerDenialReason = parsed.reason || "";
+      } catch {}
+    }
+
+    assert(reviewerExitCode === 1, "Reviewer invocation strictly blocked (Exit 1) when QA has not passed");
+    assert(reviewerDenialReason.includes("independent QA verification has passed"), "Denial cites QA requirement");
+
+    if (savedDashContent) fs.writeFileSync(dashFile, savedDashContent, "utf-8");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 22: Lean Shell Sandbox Hardening
+  // -------------------------------------------------------------------------
+  logCase(22, "Lean Shell Sandbox Hardening");
+  {
+    const devApprove = validateCommandForAgent("npx tsx scripts/guardrails/scope-approve.ts", "gated-change-developer");
+    assert(!devApprove.allowed && devApprove.reason?.includes("HUMAN_ONLY_GATE"), "Developer blocked from executing scope-approve.ts");
+    const qaApprove = validateCommandForAgent("npx tsx scripts/guardrails/scope-approve.ts", "gated-change-qa");
+    assert(!qaApprove.allowed && qaApprove.reason?.includes("HUMAN_ONLY_GATE"), "QA blocked from executing scope-approve.ts");
+
+    const qaChain = validateCommandForAgent("npm test; echo hacked", "gated-change-qa");
+    assert(!qaChain.allowed && qaChain.reason?.includes("SHELL_COMPOSITION_NOT_PERMITTED"), "QA blocked from command chaining (';')");
+    const revChain = validateCommandForAgent("git diff && rm -rf .", "gated-change-reviewer");
+    assert(!revChain.allowed && revChain.reason?.includes("SHELL_COMPOSITION_NOT_PERMITTED"), "Reviewer blocked from command chaining ('&&')");
+    const qaPipe = validateCommandForAgent("npm test | grep ok", "gated-change-qa");
+    assert(!qaPipe.allowed && qaPipe.reason?.includes("SHELL_COMPOSITION_NOT_PERMITTED"), "QA blocked from piping ('|')");
+
+    const tooling = detectRepoStack(REPO_ROOT);
+    const npmPublishAllowed = isCommandAllowedByTooling("npm publish", tooling);
+    assert(!npmPublishAllowed, "Tooling bridge blocks 'npm publish'");
+    const npmInstallAllowed = isCommandAllowedByTooling("npm install malicious-pkg", tooling);
+    assert(!npmInstallAllowed, "Tooling bridge blocks 'npm install'");
+    const npmTestAllowed = isCommandAllowedByTooling("npm test", tooling);
+    assert(npmTestAllowed, "Tooling bridge allows configured 'npm test'");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 23: Cumulative Symbol Sweep & Multi-Path Scopes
+  // -------------------------------------------------------------------------
+  logCase(23, "Cumulative Symbol Sweep & Multi-Path Scopes");
+  {
+    const sweepComma = runSymbolSweep(["src/guardrails/scopeEnforcer.ts"], "src/guardrails, src/actions", REPO_ROOT);
+    assert(["LOW", "MEDIUM", "HIGH"].includes(sweepComma.riskAssessment) && sweepComma.totalSymbolsAnalyzed > 0, "Symbol sweep handles comma-separated scopes");
+    const sweepSemi = runSymbolSweep(["src/guardrails/scopeEnforcer.ts"], "src/guardrails; src/actions", REPO_ROOT);
+    assert(["LOW", "MEDIUM", "HIGH"].includes(sweepSemi.riskAssessment) && sweepSemi.totalSymbolsAnalyzed > 0, "Symbol sweep handles semicolon-separated scopes");
   }
 
   // -------------------------------------------------------------------------

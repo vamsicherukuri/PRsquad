@@ -92,16 +92,33 @@ export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot(
   let rel = relative(rootDir, full);
 
   // If relative path escaped rootDir with '..' but filePath is an absolute path,
-  // attempt to locate the true worktree root for filePath
+  // attempt to locate the true worktree root ONLY IF the target belongs to the same git repository
   if (rel.startsWith("..") && isAbsolute(filePath)) {
     try {
-      const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+      const currentGitCommon = execSync("git rev-parse --git-common-dir", {
+        cwd: rootDir,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+      const targetGitCommon = execSync("git rev-parse --git-common-dir", {
         cwd: dirname(filePath),
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],
-      }).trim().replace(/\\/g, "/");
-      if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
-        return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+      }).trim();
+
+      const currentCommonAbs = resolve(rootDir, currentGitCommon).replace(/\\/g, "/").toLowerCase();
+      const targetCommonAbs = resolve(dirname(filePath), targetGitCommon).replace(/\\/g, "/").toLowerCase();
+
+      // Enforce repository boundary: only relativize if git common directory matches exactly
+      if (currentCommonAbs === targetCommonAbs) {
+        const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
+          cwd: dirname(filePath),
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim().replace(/\\/g, "/");
+        if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
+          return cleanFilePath.slice(fileWorktreeRoot.length + 1);
+        }
       }
     } catch {}
   }

@@ -166,14 +166,65 @@ export function detectRepoStack(rootDir: string = getRepoRoot()): ToolingConfig 
 
 /**
  * Checks whether a command is a permitted test command for QA based on the repository's stack.
+ * Strictly verifies test runner subcommands and rejects arbitrary package commands (e.g. npm publish, npm install).
  */
 export function isCommandAllowedByTooling(command: string, config: ToolingConfig): boolean {
   const trimmed = command.trim();
-  const baseTest = config.testCommand.split(" ")[0]; // e.g. "mvn", "pytest", "cargo", "npm"
+  const tokens = trimmed.split(/\s+/);
 
-  // Allow the exact configured test command or running tests via the stack's native runner
-  if (trimmed.startsWith(config.testCommand)) return true;
-  if (trimmed.startsWith(baseTest)) return true;
+  // 1. Exact match with configured test command
+  if (trimmed === config.testCommand) return true;
+
+  // 2. Allow configured test command with arguments (e.g. "npm test -- tests/auth.test.ts")
+  if (trimmed.startsWith(config.testCommand + " ") || trimmed.startsWith(config.testCommand + "=")) {
+    return true;
+  }
+
+  // 3. Allow configured build or lint command
+  if (config.buildCommand && (trimmed === config.buildCommand || trimmed.startsWith(config.buildCommand + " "))) {
+    return true;
+  }
+  if (config.lintCommand && (trimmed === config.lintCommand || trimmed.startsWith(config.lintCommand + " "))) {
+    return true;
+  }
+
+  // 3. Allow recognized test runner patterns for the stack
+  if (config.stack === "npm" || config.stack === "typescript" || config.stack === "node") {
+    if (tokens[0] === "npm" && (tokens[1] === "test" || tokens[1] === "t" || (tokens[1] === "run" && tokens[2]?.startsWith("test")))) {
+      return true;
+    }
+    if (tokens[0] === "pnpm" && (tokens[1] === "test" || tokens[1] === "t" || (tokens[1] === "run" && tokens[2]?.startsWith("test")))) {
+      return true;
+    }
+    if (tokens[0] === "yarn" && (tokens[1] === "test" || (tokens[1] === "run" && tokens[2]?.startsWith("test")))) {
+      return true;
+    }
+    return false;
+  }
+
+  if (config.stack === "maven") {
+    return tokens[0] === "mvn" && tokens.includes("test");
+  }
+
+  if (config.stack === "gradle") {
+    return (tokens[0] === "gradle" || tokens[0] === "./gradlew") && tokens.includes("test");
+  }
+
+  if (config.stack === "pytest") {
+    return tokens[0] === "pytest" || (tokens[0].startsWith("python") && tokens.includes("pytest"));
+  }
+
+  if (config.stack === "cargo") {
+    return tokens[0] === "cargo" && tokens[1] === "test";
+  }
+
+  if (config.stack === "go") {
+    return tokens[0] === "go" && tokens[1] === "test";
+  }
+
+  if (config.stack === "dotnet") {
+    return tokens[0] === "dotnet" && tokens[1] === "test";
+  }
 
   return false;
 }

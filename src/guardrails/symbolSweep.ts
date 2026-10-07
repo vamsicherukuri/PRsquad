@@ -206,19 +206,21 @@ export function runSymbolSweep(
     };
   }
 
+  const scopePrefixes = approvedScopePrefix
+    .split(/[,;]/)
+    .map((s) => s.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, ""))
+    .filter(Boolean);
+
   const allFiles = getAllSourceFiles(rootDir, rootDir);
-  const normalizedScope = approvedScopePrefix
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
 
   // Files outside approved scope
-  const externalFiles = allFiles.filter(
-    (f) =>
-      !f.startsWith(normalizedScope + "/") &&
-      f !== normalizedScope &&
-      !changedFiles.includes(f)
-  );
+  const externalFiles = allFiles.filter((f) => {
+    if (changedFiles.includes(f)) return false;
+    const isInsideScope = scopePrefixes.some(
+      (prefix) => f === prefix || f.startsWith(prefix + "/")
+    );
+    return !isInsideScope;
+  });
 
   const externalReferencesFound: ExternalReference[] = [];
 

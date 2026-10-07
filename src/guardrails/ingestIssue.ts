@@ -48,43 +48,50 @@ export function fetchIssueDeterministic(
       state: (parsed.state ?? "OPEN").toUpperCase(),
     };
   } catch {
-    // 2. Fallback to local examples fixture if available
-    const candidates = [
-      join(rootDir, "examples", `sample-issue-${issueNumber}.json`),
-      join(rootDir, "examples", "sample-issue-ready.json"),
-      join(rootDir, "examples", "sample-issue-vague.json"),
-    ];
+    // 2. Fallback to local examples fixture ONLY if testing environment explicitly permits
+    const allowFixtures =
+      process.env.NODE_ENV === "test" ||
+      process.env.PRSQUAD_ALLOW_FIXTURES === "true" ||
+      process.env.PRSQUAD_ALLOW_FIXTURES === "1";
 
-    for (const candidate of candidates) {
-      if (existsSync(candidate)) {
-        try {
-          const raw = readFileSync(candidate, "utf-8");
-          const parsed = JSON.parse(raw);
-          if (parsed.id === issueNumber || parsed.number === issueNumber || candidate.endsWith("-ready.json")) {
-            return {
-              owner: owner || "local",
-              repo: repo || "sample-repo",
-              number: parsed.id ?? parsed.number ?? issueNumber,
-              title: parsed.title ?? "",
-              body: parsed.body ?? "",
-              author: "fixture-author",
-              labels: parsed.labels ?? [],
-              comments: (parsed.comments ?? []).map((c: any) => ({
-                author: c.author ?? "commenter",
-                body: c.body ?? (typeof c === "string" ? c : ""),
-                createdAt: new Date().toISOString(),
-              })),
-              state: (parsed.state ?? "OPEN").toUpperCase(),
-            };
+    if (allowFixtures) {
+      const candidates = [
+        join(rootDir, "examples", `sample-issue-${issueNumber}.json`),
+        join(rootDir, "examples", "sample-issue-ready.json"),
+        join(rootDir, "examples", "sample-issue-vague.json"),
+      ];
+
+      for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+          try {
+            const raw = readFileSync(candidate, "utf-8");
+            const parsed = JSON.parse(raw);
+            if (parsed.id === issueNumber || parsed.number === issueNumber || candidate.endsWith("-ready.json")) {
+              return {
+                owner: owner || "local",
+                repo: repo || "sample-repo",
+                number: parsed.id ?? parsed.number ?? issueNumber,
+                title: parsed.title ?? "",
+                body: parsed.body ?? "",
+                author: "fixture-author",
+                labels: parsed.labels ?? [],
+                comments: (parsed.comments ?? []).map((c: any) => ({
+                  author: c.author ?? "commenter",
+                  body: c.body ?? (typeof c === "string" ? c : ""),
+                  createdAt: new Date().toISOString(),
+                })),
+                state: (parsed.state ?? "OPEN").toUpperCase(),
+              };
+            }
+          } catch {
+            // Continue to next candidate
           }
-        } catch {
-          // Continue to next candidate
         }
       }
     }
 
     throw new Error(
-      `Could not fetch issue #${issueNumber} from GitHub CLI ('gh') or local fixtures in 'examples/'.`
+      `Could not fetch issue #${issueNumber} from GitHub CLI ('gh'). Native issue ingestion failed and mock fixtures are disabled in production.`
     );
   }
 }
