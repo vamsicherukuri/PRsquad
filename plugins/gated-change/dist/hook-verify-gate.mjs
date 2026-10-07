@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync7, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync3 } from "node:fs";
-import { join as join7 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync6, readdirSync as readdirSync3, statSync as statSync3 } from "node:fs";
+import { join as join6 } from "node:path";
 import { homedir as homedir2 } from "node:os";
-import { execSync as execSync4 } from "node:child_process";
+import { execSync as execSync3 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
@@ -37,21 +37,6 @@ function getRepoRoot(preferredDir) {
     if (!preferredDir) cachedRepoRoot = fallback;
     return fallback;
   }
-}
-function getRepoOwnerAndName(rootDir = getRepoRoot()) {
-  try {
-    const remoteUrl = execSync("git remote get-url origin", {
-      cwd: rootDir,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-    const match = remoteUrl.match(/[:/]([^/:]+)\/([^/:]+?)(?:\.git)?$/);
-    if (match) {
-      return { owner: match[1], repo: match[2] };
-    }
-  } catch {
-  }
-  return { owner: "", repo: "" };
 }
 function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   let cleanFilePath = filePath.replace(/\\/g, "/");
@@ -1269,251 +1254,9 @@ function generateAstPreFetchMap(declaredScope, rootDir = process.cwd()) {
   return out;
 }
 
-// src/guardrails/prCreator.ts
-import { writeFileSync as writeFileSync3, unlinkSync as unlinkSync2, existsSync as existsSync4 } from "node:fs";
-import { join as join4 } from "node:path";
-import { tmpdir as tmpdir2 } from "node:os";
-import { execSync as execSync3, execFileSync as execFileSync2 } from "node:child_process";
-function buildPullRequestBody(params) {
-  const rootDir = getRepoRoot(params.rootDir);
-  const headCommit = params.headCommit || (() => {
-    try {
-      return execSync3("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8" }).trim();
-    } catch {
-      return "0000000000000000000000000000000000000000";
-    }
-  })();
-  const shortSha = headCommit.slice(0, 7);
-  const lock = loadApprovalLock(rootDir);
-  const state = loadState(rootDir);
-  return `## \u{1F6E1}\uFE0F PRSquad Governed Pull Request
-
-<p align="left">
-  <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
-  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
-  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
-</p>
-
-Closes #${params.issueNum}
-
-### \u{1F4CB} Overview
-${params.issueTitle}
-
-### \u{1F50F} Cryptographic Provenance & Scope Lock
-- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
-- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
-- **Approved Scope**: \`${lock?.approvedScope || state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
-- **Feature Branch**: \`${params.activeBranch}\`
-- **Base Target**: \`${params.baseBranch}\`
-
-### \u{1F528} Implementation Summary
-- **Commit SHA**: \`${shortSha}\` (\`${headCommit}\`)
-- **Author**: Autonomous \`@prsquad-dev\` via native PowerShell
-- **Scope Compliance**: 100% strictly bounded to approved scope
-
-### \u{1F9EA} QA Independent Verification
-- **Verdict**: \`PASS\`
-- **Evidence**: Verified clean via independent Red-Green test execution cycle
-- **All Assertions**: 100% passing
-
-### \u{1F50D} Security & Code Review
-- **Code Review Verdict**: \`APPROVED\`
-- **Diff Inspection**: Verified read-only, 0 unexpected modifications, 0 security concerns
-
----
-> *Pull Request opened automatically by **PRSquad** upon human **PR Gate** confirmation.*  
-> *Merging is strictly reserved for human maintainers on GitHub after PR review.*
-`;
-}
-function createPullRequest(options = {}) {
-  const rootDir = getRepoRoot(options.preferredDir);
-  const state = loadState(rootDir);
-  try {
-    let activeBranch = "";
-    try {
-      activeBranch = execSync3("git rev-parse --abbrev-ref HEAD", {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-    } catch {
-    }
-    if (!activeBranch || activeBranch === "HEAD" || activeBranch === "main" || activeBranch === "master") {
-      activeBranch = state.activeBranch || "";
-    }
-    if (!activeBranch || activeBranch === "main" || activeBranch === "master") {
-      return {
-        success: false,
-        error: `Cannot create PR from base branch '${activeBranch}'. Must be on a designated feature branch.`
-      };
-    }
-    let baseBranch = options.baseBranch;
-    if (!baseBranch) {
-      try {
-        const remotes = execSync3("git branch -r", { cwd: rootDir, encoding: "utf-8" });
-        if (remotes.includes("origin/copilot-app-plugin-alignment")) {
-          baseBranch = "copilot-app-plugin-alignment";
-        } else {
-          baseBranch = "main";
-        }
-      } catch {
-        baseBranch = "copilot-app-plugin-alignment";
-      }
-    }
-    let issueNum = 0;
-    const branchMatch = activeBranch.match(/(?:issue-?|#)(\d+)/i);
-    if (branchMatch) {
-      issueNum = parseInt(branchMatch[1], 10);
-    }
-    if (!issueNum) {
-      const lock = loadApprovalLock(rootDir);
-      if (lock?.issueNumber && lock.issueNumber > 0) {
-        issueNum = lock.issueNumber;
-      }
-    }
-    if (!issueNum && state.issue?.number && state.issue.number > 0) {
-      issueNum = state.issue.number;
-    }
-    if (!issueNum) {
-      issueNum = 11;
-    }
-    const remoteInfo = getRepoOwnerAndName(rootDir);
-    const owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    const repo = state.issue?.repo || remoteInfo.repo || "prsquad";
-    let issueTitle = state.issue?.title;
-    if (!issueTitle || state.issue?.number && state.issue.number !== issueNum || issueTitle === "Multi-path scope enforcer alignment") {
-      try {
-        const out = execFileSync2("gh", ["issue", "view", String(issueNum), "--repo", `${owner}/${repo}`, "--json", "title"], {
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"]
-        });
-        const parsed = JSON.parse(out);
-        if (parsed.title) issueTitle = parsed.title;
-      } catch {
-      }
-    }
-    if (!issueTitle) issueTitle = `Issue #${issueNum} resolution`;
-    if (!state.issue) {
-      state.issue = { owner, repo, number: issueNum, title: issueTitle };
-    } else {
-      state.issue.number = issueNum;
-      state.issue.title = issueTitle;
-    }
-    saveState(state, rootDir);
-    try {
-      execFileSync2("git", ["push", "-u", "origin", activeBranch], {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "pipe"]
-      });
-    } catch (pushErr) {
-    }
-    try {
-      const existingOut = execFileSync2("gh", [
-        "pr",
-        "view",
-        activeBranch,
-        "--repo",
-        `${owner}/${repo}`,
-        "--json",
-        "url,number"
-      ], {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-      if (existingOut) {
-        const parsed = JSON.parse(existingOut);
-        if (parsed.url) {
-          syncWorkflowDashboard(rootDir, {
-            phase: "mergeGate",
-            status: "PR_OPEN",
-            summary: `PR #${parsed.number} is open: ${parsed.url}. Awaiting human maintainer review on GitHub.`
-          });
-          return {
-            success: true,
-            prUrl: parsed.url,
-            prNumber: parsed.number,
-            branch: activeBranch
-          };
-        }
-      }
-    } catch {
-    }
-    const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
-    const prBody = buildPullRequestBody({
-      rootDir,
-      issueNum,
-      issueTitle,
-      activeBranch,
-      baseBranch
-    });
-    const tempBodyPath = join4(tmpdir2(), `gated-change-pr-body-${Date.now()}.md`);
-    writeFileSync3(tempBodyPath, prBody, "utf-8");
-    try {
-      const prCreateOut = execFileSync2("gh", [
-        "pr",
-        "create",
-        "--repo",
-        `${owner}/${repo}`,
-        "--base",
-        baseBranch,
-        "--head",
-        activeBranch,
-        "--title",
-        prTitle,
-        "--body-file",
-        tempBodyPath
-      ], {
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "pipe"]
-      }).trim();
-      const prUrl = prCreateOut.split("\n").filter((l) => l.startsWith("http"))[0] || prCreateOut;
-      const numMatch = prUrl.match(/\/pull\/(\d+)/);
-      const prNumber = numMatch ? parseInt(numMatch[1], 10) : void 0;
-      if (prNumber) {
-        try {
-          execFileSync2("gh", [
-            "pr",
-            "edit",
-            String(prNumber),
-            "--repo",
-            `${owner}/${repo}`,
-            "--add-label",
-            "prsquad-verified,governance:supervised"
-          ], {
-            encoding: "utf-8",
-            stdio: ["ignore", "ignore", "ignore"]
-          });
-        } catch {
-        }
-      }
-      syncWorkflowDashboard(rootDir, {
-        phase: "mergeGate",
-        status: "PR_OPEN",
-        summary: `PR ${prNumber ? `#${prNumber}` : ""} opened: ${prUrl}. Awaiting human maintainer review on GitHub.`
-      });
-      return {
-        success: true,
-        prUrl,
-        prNumber,
-        branch: activeBranch
-      };
-    } finally {
-      if (existsSync4(tempBodyPath)) {
-        unlinkSync2(tempBodyPath);
-      }
-    }
-  } catch (err) {
-    return {
-      success: false,
-      error: String(err?.message || err)
-    };
-  }
-}
-
 // src/guardrails/repoSkillResolver.ts
-import { existsSync as existsSync5, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
-import { join as join5, relative as relative2 } from "node:path";
+import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
+import { join as join4, relative as relative2 } from "node:path";
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
   if (!match) {
@@ -1620,8 +1363,8 @@ function sliceCopilotInstructions(repoRoot, targetAgent) {
   if (isAgentMatch(targetAgent, "prsquad") || isAgentMatch(targetAgent, "prsquad-triage")) {
     return null;
   }
-  const instructionPath = join5(repoRoot, ".github", "copilot-instructions.md");
-  if (!existsSync5(instructionPath)) {
+  const instructionPath = join4(repoRoot, ".github", "copilot-instructions.md");
+  if (!existsSync4(instructionPath)) {
     return null;
   }
   try {
@@ -1675,12 +1418,12 @@ function sliceCopilotInstructions(repoRoot, targetAgent) {
   }
 }
 function scanSkillFiles(dir) {
-  if (!existsSync5(dir)) return [];
+  if (!existsSync4(dir)) return [];
   const results = [];
   try {
     const entries = readdirSync2(dir);
     for (const entry of entries) {
-      const fullPath = join5(dir, entry);
+      const fullPath = join4(dir, entry);
       const stat = statSync2(fullPath);
       if (stat.isDirectory()) {
         results.push(...scanSkillFiles(fullPath));
@@ -1698,11 +1441,11 @@ function resolveRepoSkills(repoRoot, targetAgent, approvedScope) {
   }
   const candidateDirs = [];
   if (approvedScope && approvedScope !== "NONE" && approvedScope.trim()) {
-    const scopeDir = join5(repoRoot, approvedScope.replace(/[\/\\]$/, ""));
-    candidateDirs.push({ path: join5(scopeDir, ".prsquad", "skills"), isProximity: true });
+    const scopeDir = join4(repoRoot, approvedScope.replace(/[\/\\]$/, ""));
+    candidateDirs.push({ path: join4(scopeDir, ".prsquad", "skills"), isProximity: true });
   }
-  candidateDirs.push({ path: join5(repoRoot, ".prsquad", "skills"), isProximity: false });
-  candidateDirs.push({ path: join5(repoRoot, ".github", "skills"), isProximity: false });
+  candidateDirs.push({ path: join4(repoRoot, ".prsquad", "skills"), isProximity: false });
+  candidateDirs.push({ path: join4(repoRoot, ".github", "skills"), isProximity: false });
   const resolved = [];
   const seenPaths = /* @__PURE__ */ new Set();
   for (const { path: dir, isProximity } of candidateDirs) {
@@ -1758,15 +1501,15 @@ ${skill.content}`);
 }
 
 // src/guardrails/toolingBridge.ts
-import { existsSync as existsSync6, readFileSync as readFileSync5 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
+import { join as join5 } from "node:path";
 function detectRepoStack(rootDir = getRepoRoot()) {
   const explicitPaths = [
-    join6(rootDir, ".prsquad", "config.json"),
-    join6(rootDir, ".prsquad.json")
+    join5(rootDir, ".prsquad", "config.json"),
+    join5(rootDir, ".prsquad.json")
   ];
   for (const configPath of explicitPaths) {
-    if (existsSync6(configPath)) {
+    if (existsSync5(configPath)) {
       try {
         const raw = readFileSync5(configPath, "utf-8");
         const parsed = JSON.parse(raw);
@@ -1784,7 +1527,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       }
     }
   }
-  if (existsSync6(join6(rootDir, "pom.xml"))) {
+  if (existsSync5(join5(rootDir, "pom.xml"))) {
     return {
       stack: "maven",
       testCommand: "mvn test",
@@ -1794,8 +1537,8 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "build.gradle")) || existsSync6(join6(rootDir, "build.gradle.kts"))) {
-    const gradleCmd = existsSync6(join6(rootDir, "gradlew")) ? "./gradlew" : "gradle";
+  if (existsSync5(join5(rootDir, "build.gradle")) || existsSync5(join5(rootDir, "build.gradle.kts"))) {
+    const gradleCmd = existsSync5(join5(rootDir, "gradlew")) ? "./gradlew" : "gradle";
     return {
       stack: "gradle",
       testCommand: `${gradleCmd} test`,
@@ -1805,11 +1548,11 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "package.json"))) {
+  if (existsSync5(join5(rootDir, "package.json"))) {
     let runner = "npm test";
-    if (existsSync6(join6(rootDir, "pnpm-lock.yaml"))) {
+    if (existsSync5(join5(rootDir, "pnpm-lock.yaml"))) {
       runner = "pnpm test";
-    } else if (existsSync6(join6(rootDir, "yarn.lock"))) {
+    } else if (existsSync5(join5(rootDir, "yarn.lock"))) {
       runner = "yarn test";
     }
     return {
@@ -1821,7 +1564,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "pytest.ini")) || existsSync6(join6(rootDir, "pyproject.toml")) || existsSync6(join6(rootDir, "requirements.txt"))) {
+  if (existsSync5(join5(rootDir, "pytest.ini")) || existsSync5(join5(rootDir, "pyproject.toml")) || existsSync5(join5(rootDir, "requirements.txt"))) {
     return {
       stack: "pytest",
       testCommand: "pytest",
@@ -1830,7 +1573,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "Cargo.toml"))) {
+  if (existsSync5(join5(rootDir, "Cargo.toml"))) {
     return {
       stack: "cargo",
       testCommand: "cargo test",
@@ -1840,7 +1583,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "go.mod"))) {
+  if (existsSync5(join5(rootDir, "go.mod"))) {
     return {
       stack: "go",
       testCommand: "go test ./...",
@@ -1850,7 +1593,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync6(join6(rootDir, "*.sln")) || existsSync6(join6(rootDir, "*.csproj"))) {
+  if (existsSync5(join5(rootDir, "*.sln")) || existsSync5(join5(rootDir, "*.csproj"))) {
     return {
       stack: "dotnet",
       testCommand: "dotnet test",
@@ -1916,25 +1659,25 @@ async function main() {
     if (!state2?.sessionId) {
       const home = homedir2();
       const candidates = [
-        join7(home, "factory/sample repos/copilot-worktrees/prsquad"),
-        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
-        join7(home, "factory/sample repos/prsquad"),
-        join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
-        join7(home, "factory/sample repos/gated-fix-pipeline")
+        join6(home, "factory/sample repos/copilot-worktrees/prsquad"),
+        join6(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
+        join6(home, "factory/sample repos/prsquad"),
+        join6(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join6(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join6(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
       let bestMtime = 0;
       let bestRepo = repoRoot2;
       for (const parent of candidates) {
-        if (existsSync7(parent)) {
+        if (existsSync6(parent)) {
           try {
             const entries = readdirSync3(parent, { withFileTypes: true });
-            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join7(parent, d.name));
+            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join6(parent, d.name));
             dirs.push(parent);
             for (const d of dirs) {
-              const stateFile = join7(d, ".gated-change", "state.json");
-              if (existsSync7(stateFile)) {
+              const stateFile = join6(d, ".gated-change", "state.json");
+              if (existsSync6(stateFile)) {
                 try {
                   const stat = statSync3(stateFile);
                   if (stat.mtimeMs > bestMtime) {
@@ -1959,8 +1702,8 @@ async function main() {
       }
     }
     let phases = {};
-    const dashFile = join7(repoRoot2, ".gated-change", "dashboard.json");
-    if (existsSync7(dashFile)) {
+    const dashFile = join6(repoRoot2, ".gated-change", "dashboard.json");
+    if (existsSync6(dashFile)) {
       try {
         const parsed = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (parsed.phases) phases = parsed.phases;
@@ -2104,14 +1847,14 @@ async function main() {
     const branchName = `fix/issue-${resolvedIssue2}`;
     let branchStatus = "unknown";
     try {
-      const currentBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
+      const currentBranch = execSync3("git rev-parse --abbrev-ref HEAD", {
         cwd: repoRoot2,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]
       }).trim();
       const isBaseBranch = currentBranch === "main" || currentBranch === "master" || currentBranch === "HEAD" || currentBranch.startsWith("origin/") || process.env.FORCE_BRANCH_SWITCH === "true";
       if (isBaseBranch && currentBranch !== branchName) {
-        execSync4(`git checkout -B ${branchName}`, {
+        execSync3(`git checkout -B ${branchName}`, {
           cwd: repoRoot2,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"]
@@ -2346,9 +2089,9 @@ ${instructionText}`;
   }
   function buildDeveloperHandoffPayload(repoPath, stateObj, fallbackPrompt, issueNum) {
     let details = {};
-    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join6(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync7(dashFile)) {
+    if (existsSync6(dashFile)) {
       try {
         dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (dashData?.phases?.developer?.details) {
@@ -2363,14 +2106,14 @@ ${instructionText}`;
     }
     if (!details.commitSha) {
       try {
-        details.commitSha = execSync4("git rev-parse HEAD", { cwd: repoPath, encoding: "utf-8" }).trim();
+        details.commitSha = execSync3("git rev-parse HEAD", { cwd: repoPath, encoding: "utf-8" }).trim();
       } catch {
         details.commitSha = "HEAD";
       }
     }
     if (!details.changedFiles || details.changedFiles.length === 0) {
       try {
-        const files = execSync4("git diff-tree --no-commit-id --name-only -r HEAD", { cwd: repoPath, encoding: "utf-8" }).trim().split("\n").filter(Boolean);
+        const files = execSync3("git diff-tree --no-commit-id --name-only -r HEAD", { cwd: repoPath, encoding: "utf-8" }).trim().split("\n").filter(Boolean);
         if (files.length > 0) details.changedFiles = files;
       } catch {
       }
@@ -2410,9 +2153,9 @@ ${stateObj.issue.body.trim()}`);
   }
   function buildQAHandoffPayload(repoPath, stateObj, fallbackPrompt) {
     let details = {};
-    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join6(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync7(dashFile)) {
+    if (existsSync6(dashFile)) {
       try {
         dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
         if (dashData?.phases?.qa?.details) {
@@ -2487,11 +2230,11 @@ ${stateObj.issue.body.trim()}`);
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
       try {
-        const statusOut = execSync4("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
+        const statusOut = execSync3("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
         if (statusOut) {
-          execSync4("git add -u", { cwd: repoRoot2, stdio: "ignore" });
+          execSync3("git add -u", { cwd: repoRoot2, stdio: "ignore" });
           const commitMsg = `fix(issue-${resolvedIssue2}): implement verified changes within approved scope`;
-          execSync4(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
+          execSync3(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
         }
       } catch {
       }
@@ -2549,31 +2292,27 @@ ${stateObj.issue.body.trim()}`);
         summary: `Read-only diff security audit complete: ${verdict}`,
         details: revDetails
       });
-      let prNumber;
-      let prUrl;
-      try {
-        const prRes = createPullRequest({ preferredDir: repoRoot2 });
-        if (prRes.success) {
-          prNumber = prRes.prNumber;
-          prUrl = prRes.prUrl;
-        }
-      } catch {
-      }
+      state2.phase = "PR_READY";
+      state2.currentPhase = "WAITING_FOR_HUMAN";
+      saveState(state2, repoRoot2);
       const dashMerge = syncWorkflowDashboard(repoRoot2, {
         sessionId: input.sessionId || state2.sessionId,
         phase: "mergeGate",
-        status: "PR_OPEN",
-        summary: prUrl ? `Pull Request ${prNumber ? `#${prNumber}` : ""} is officially OPEN on GitHub: ${prUrl}. Merging is reserved for human maintainers on GitHub after PR review.` : "Audit complete. Pull Request is open and awaiting human maintainer review on GitHub.",
+        status: "WAITING_FOR_HUMAN",
+        summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
         details: {
-          prNumber,
-          prUrl,
           baseBranch: "copilot-app-plugin-alignment",
           headBranch: state2.activeBranch || `fix/issue-${resolvedIssue2}`,
-          prOpen: true
+          prOpen: false,
+          awaitingHumanApproval: true
         }
       });
       const chatMeter = formatChatCreditMeter(dashMerge);
-      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this final \u26A1 AI Credit Meter table at the PR Approval Gate.") : { decision: "allow" };
+      const out = chatMeter ? buildEnrichedPostToolOutput(
+        input,
+        chatMeter,
+        "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final \u26A1 AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
+      ) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     }
@@ -2645,9 +2384,9 @@ ${prompt}` : prompt;
     ensureNodeModulesInWorktree(repoRoot);
     let testReport = "";
     try {
-      const testFile = join7(repoRoot, "scripts", "test-guardrails.ts");
-      const testCmd = existsSync7(testFile) ? "npx -y tsx scripts/test-guardrails.ts" : "npm test";
-      const testStdout = execSync4(testCmd, {
+      const testFile = join6(repoRoot, "scripts", "test-guardrails.ts");
+      const testCmd = existsSync6(testFile) ? "npx -y tsx scripts/test-guardrails.ts" : "npm test";
+      const testStdout = execSync3(testCmd, {
         cwd: repoRoot,
         encoding: "utf-8",
         timeout: 25e3,
@@ -2744,13 +2483,13 @@ Execute for verification: \`${tooling.testCommand}\`
       const base = state.baseRef || "HEAD~1";
       let diffOutput = "";
       try {
-        diffOutput = execSync4(`git diff ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
+        diffOutput = execSync3(`git diff ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
       } catch {
-        diffOutput = execSync4(`git diff HEAD~1 HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
+        diffOutput = execSync3(`git diff HEAD~1 HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
       }
       let changedFiles = [];
       try {
-        changedFiles = execSync4("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
+        changedFiles = execSync3("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
       } catch {
       }
       const sweep = runSymbolSweep(changedFiles, state.approvedScope || "", repoRoot);

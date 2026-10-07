@@ -20,7 +20,6 @@ import {
   extractReviewerDetails,
 } from "../../src/guardrails/issueDashboard.js";
 import { generateAstPreFetchMap, runSymbolSweep } from "../../src/guardrails/symbolSweep.js";
-import { createPullRequest } from "../../src/guardrails/prCreator.js";
 import { packageRepoIntelligence } from "../../src/guardrails/repoSkillResolver.js";
 import { detectRepoStack } from "../../src/guardrails/toolingBridge.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
@@ -805,36 +804,31 @@ async function main() {
         details: revDetails,
       });
 
-      let prNumber: number | undefined;
-      let prUrl: string | undefined;
-
-      try {
-        const prRes = createPullRequest({ preferredDir: repoRoot });
-        if (prRes.success) {
-          prNumber = prRes.prNumber;
-          prUrl = prRes.prUrl;
-        }
-      } catch {}
+      // Transition state: REVIEW_COMPLETE -> PR_READY -> WAITING_FOR_HUMAN
+      state.phase = "PR_READY";
+      state.currentPhase = "WAITING_FOR_HUMAN";
+      saveState(state, repoRoot);
 
       const dashMerge = syncWorkflowDashboard(repoRoot, {
         sessionId: input.sessionId || state.sessionId,
         phase: "mergeGate",
-        status: "PR_OPEN",
-        summary: prUrl
-          ? `Pull Request ${prNumber ? `#${prNumber}` : ""} is officially OPEN on GitHub: ${prUrl}. Merging is reserved for human maintainers on GitHub after PR review.`
-          : "Audit complete. Pull Request is open and awaiting human maintainer review on GitHub.",
+        status: "WAITING_FOR_HUMAN",
+        summary: `Read-only diff security audit complete: ${verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
         details: {
-          prNumber,
-          prUrl,
           baseBranch: "copilot-app-plugin-alignment",
           headBranch: state.activeBranch || `fix/issue-${resolvedIssue}`,
-          prOpen: true,
+          prOpen: false,
+          awaitingHumanApproval: true,
         },
       });
 
       const chatMeter = formatChatCreditMeter(dashMerge);
       const out = chatMeter
-        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this final ⚡ AI Credit Meter table at the PR Approval Gate.")
+        ? buildEnrichedPostToolOutput(
+            input,
+            chatMeter,
+            "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final ⚡ AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts."
+          )
         : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
