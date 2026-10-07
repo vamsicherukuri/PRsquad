@@ -89,33 +89,6 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
-```mermaid
-flowchart TB
-    O["<b>ORCHESTRATOR</b> · @prsquad<br/>Chat Interface & Delegation · GitHub Copilot App<br/>Governs 5 Stateless Specialists · 0 code-editing tools<br/>🪝 hook-verify-gate before + after every dispatch"]
-
-    subgraph FLOW[" "]
-        direction LR
-        T["<b>STAGE 1</b><br/>Intake Triage<br/>Def. of ready<br/>Zero-tool air-gap<br/>(0 repo tools)<br/>🪝 intake-ingest"]
-        A["<b>STAGE 2</b><br/>Architect<br/>Root-cause plan<br/>Read-only<br/>AST sweep (0 tokens)"]
-        G1["<b>GATE 1</b><br/>Scope Gate<br/>/approve<br/>approval.lock<br/>AI Meter table"]
-        D["<b>STAGE 3</b><br/>Developer<br/>Fix + tests<br/>Isolated worktree fix<br/>OS write barrier<br/>🪝 enforce-scope<br/>🪝 sandbox-bash"]
-        Q["<b>STAGE 4</b><br/>QA Specialist<br/>Criteria tests<br/>Bash sandbox<br/>No mutating git<br/>🪝 sandbox-bash"]
-        R["<b>STAGE 5</b><br/>Reviewer<br/>Read-only diff<br/>Security/Audit check<br/>🪝 sandbox-bash"]
-        G2["<b>GATE 2</b><br/>PR Gate<br/>/create-pr<br/>Human merge<br/>(0 auto-merge)"]
-        T --> A --> G1 --> D --> Q --> R --> G2
-    end
-
-    O --> FLOW
-
-    classDef orch fill:#EFF6FF,stroke:#2563EB,color:#111827
-    classDef stage fill:#F8FAFC,stroke:#CBD5E1,color:#111827
-    classDef gate fill:#FFFBEB,stroke:#D97706,color:#111827
-    class O orch
-    class T,A,D,Q,R stage
-    class G1,G2 gate
-    style FLOW fill:none,stroke:none
-```
-
 | Hook | Trigger Point | Deterministic Guardrail |
 |---|---|---|
 | `hook-verify-gate` | `[preToolUse]` & `[postToolUse]` on every agent dispatch | Verifies stage order, enforces active cryptographic `approval.lock` before Developer, and provides unified diff + symbol sweep |
