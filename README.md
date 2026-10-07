@@ -1,5 +1,6 @@
 <p align="center">
-  <img src="docs/images/prsquad-architecture.svg" alt="PRSquad — Supervised Agentic Workflow" width="900" />
+  <strong>PRSquad</strong><br/>
+  <em>Supervised Agentic Workflow for GitHub Copilot</em>
 </p>
 
 # PRSquad: Supervised Agentic Workflow
@@ -10,11 +11,13 @@ PRSquad is a GitHub Copilot plugin that takes a GitHub issue through planning, i
 
 The agents remain probabilistic: they reason, plan, write code, validate behavior, and review changes. PRSquad adds a **deterministic control plane** around that reasoning to enforce critical workflow boundaries such as human approvals, scope containment, branch isolation, command restrictions, stage ordering, bounded retries, evidence integrity, and PR eligibility.
 
-> PRSquad does not make LLM reasoning deterministic. It makes the critical boundaries around agent autonomy deterministic.
+> **PRSquad does not make LLM reasoning deterministic. It makes the critical boundaries around agent autonomy deterministic.**
 
 ---
 
-## ⚡ 30-Second Setup
+## ⚡ Quick Setup
+
+> **Current build note:** PRSquad's hook runtime currently uses repository-relative paths. Validate installation in the target repository before treating the current build as fully portable across arbitrary repositories.
 
 ### GitHub Copilot App
 
@@ -28,18 +31,17 @@ The agents remain probabilistic: they reason, plan, write code, validate behavio
 
 ### Visual Studio Code
 
-1. Make sure GitHub Copilot Chat is available and Agent Plugins are enabled:
+1. Make sure GitHub Copilot Chat is available.
+2. Enable Agent Plugins:
    ```json
    "chat.plugins.enabled": true
    ```
-2. Open **Chat: Open Customizations → Plugins** or the Agent Plugins view in Extensions.
-3. Add the PRSquad marketplace from:
+3. Open the **Chat: Plugins** command or the **Agent Plugins** view in Extensions.
+4. Add or install PRSquad from:
    ```text
    https://github.com/vamsicherukuri/PRsquad
    ```
-4. Install **`prsquad`** and open the target repository.
-
-> VS Code also supports installing Agent Plugins from a Git repository or managing marketplaces with `/plugin` commands.
+5. Open the target repository.
 
 ---
 
@@ -79,48 +81,43 @@ This creates a supervised workflow where the model can remain flexible without b
 
 ---
 
-# Agentic Workflow. Deterministic Control Plane.
+## Agentic Workflow. Deterministic Control Plane.
 
-## Architecture
+### Architecture
 
-`@prsquad` is the supervisor and routing authority. It delegates each stage, receives the specialist's structured handoff, validates the result, and decides what happens next. Agents do not bypass the orchestrator to hand work directly to another specialist.
+`@prsquad` is the supervisor and routing authority. It delegates each stage, receives the specialist's structured handoff, validates the result, and determines the next action. Specialists do not bypass the orchestrator to hand work directly to one another.
 
 ```mermaid
 flowchart TB
     U["User / GitHub Issue"] --> O["@prsquad<br/>Orchestrator"]
 
     O -->|Delegate| T["@prsquad-triage<br/>Issue readiness"]
-    T -->|Structured handoff| O
+    T -->|"Structured handoff"| O
 
-    O -->|READY| A["@prsquad-architect<br/>Plan + impact"]
-    A -->|Structured handoff| O
+    O -->|READY| A["@prsquad-architect<br/>Plan + blast radius"]
+    A -->|"Structured handoff"| O
 
     O --> SG{{"Human Scope Gate"}}
-    SG -->|"approval.lock"| O
+    SG -->|"Maintainer runs scope-approve.ts<br/>approval.lock minted"| O
 
-    O -->|Approved scope| D["@prsquad-dev<br/>Implementation"]
-    D -->|Structured handoff| O
+    O -->|"Approved scope"| D["@prsquad-dev<br/>Implementation"]
+    D -->|"Structured handoff"| O
 
     O --> Q["@prsquad-qa<br/>Independent verification"]
-    Q -->|PASS / FAIL / BLOCKED| O
+    Q -->|"PASS / FAIL / BLOCKED"| O
     O -->|"FAIL · bounded retry"| D
 
     O -->|"QA PASS"| R["@prsquad-review<br/>Read-only review"]
-    R -->|Structured handoff| O
+    R -->|"Structured handoff"| O
 
     O --> PG{{"Human PR Gate"}}
-    PG --> PC["Deterministic PR Creator"]
+    PG -->|"Maintainer runs pr-create.ts"| PC["Deterministic PR Creator"]
     PC --> PR["Pull Request"]
     PR --> HM["Human Maintainer<br/>Review + Merge"]
 
-    CP["Deterministic Control Plane<br/>Gate verification · Scope enforcement · Shell sandbox<br/>State + evidence · Retry ceilings · Audit + telemetry"]
+    CP["Deterministic Control Plane<br/>Gate verification · Scope enforcement · Shell sandbox<br/>State · Evidence · Retry ceilings · Audit · Telemetry"]
 
-    CP -. enforces .-> O
-    CP -. enforces .-> SG
-    CP -. enforces .-> D
-    CP -. enforces .-> Q
-    CP -. enforces .-> R
-    CP -. enforces .-> PG
+    CP -. "governs transitions and actions" .-> O
 ```
 
 ### The Two Layers
@@ -136,13 +133,11 @@ flowchart TB
 
 **Agents decide how to solve the problem. The control plane decides what they are allowed to do and when they are allowed to proceed.**
 
----
-
-## What the Control Plane Enforces
+### What the Control Plane Enforces
 
 | Control | What PRSquad does |
 |---|---|
-| **🔒 Human authorization** | Implementation cannot start without an active human-approved scope lock. PR creation is also reserved for explicit human authorization. |
+| **🔒 Human authorization** | Implementation cannot start without an active human-approved scope lock. Pull-request creation is also reserved for explicit human authorization. |
 | **🛡 Scope & execution containment** | Agent writes are restricted to approved paths, protected branches are guarded, and shell commands are constrained by specialist role. |
 | **🔁 Bounded autonomy** | Developer ↔ QA repair cycles have a fixed retry ceiling rather than allowing uncontrolled autonomous loops. |
 | **✅ Independent verification** | QA is separate from the Developer and must verify the issue's acceptance criteria before review can proceed. |
@@ -153,38 +148,13 @@ Core governance guarantees are also represented as machine-readable security inv
 
 ---
 
-## How Supervision Works
-
-The orchestrator is the single coordination point:
-
-```text
-                         ┌───────────────┐
-                         │   @prsquad    │
-                         │ Orchestrator  │
-                         └───────┬───────┘
-                                 │
-          ┌──────────────┬───────┼───────┬──────────────┐
-          │              │       │       │              │
-          ▼              ▼       ▼       ▼              ▼
-       Triage        Architect   Dev      QA          Reviewer
-          │              │       │       │              │
-          └──────────────┴───────┴───────┴──────────────┘
-                                 │
-                   Structured handoffs return
-                     to the orchestrator
-```
-
-The orchestrator does not inspect or implement product code itself. Its job is to coordinate specialist execution, validate handoff contracts, route outcomes, respect human gates, and stop or escalate when deterministic policy denies progression.
-
----
-
 ## Boundaries
 
-- **LLM reasoning is probabilistic.** Determinism applies to governance and execution boundaries, not to generated plans, code, QA reasoning, or review judgment.
-- **Human authority is preserved.** Agents cannot mint their own scope approval or autonomously open/merge a pull request.
+- **LLM reasoning remains probabilistic.** Determinism applies to governance and execution boundaries, not to generated plans, code, QA reasoning, or review judgment.
+- **Human authority is preserved.** Autonomous agents cannot mint their own scope approval or invoke PR creation on their own.
 - **PRSquad stops at pull-request creation.** Final review and merge remain human-maintainer responsibilities.
 - **Telemetry depends on runtime availability.** AIU/token reporting uses Copilot session telemetry when that data is available.
-- **Plugin portability should be validated for your environment.** The current hook configuration invokes bundled runtime scripts through repository-relative paths, so external-repository installation should be verified before treating the current build as fully portable.
+- **External-repository portability is still being validated.** The current hook configuration invokes bundled runtime scripts through repository-relative paths.
 
 ---
 
@@ -209,7 +179,7 @@ Every specialist returns its result to `@prsquad`; specialists do not directly d
 <details>
 <summary><strong>Deterministic hooks</strong></summary>
 
-PRSquad currently registers deterministic `preToolUse` / `postToolUse` hooks around critical actions:
+PRSquad registers deterministic `preToolUse` / `postToolUse` hooks around critical actions:
 
 | Hook | Purpose |
 |---|---|
@@ -218,7 +188,7 @@ PRSquad currently registers deterministic `preToolUse` / `postToolUse` hooks aro
 | `hook-enforce-scope` | Blocks file writes outside the approved scope |
 | `hook-sandbox-bash` | Restricts terminal commands according to agent role |
 
-Policy failures are designed to stop progression rather than be treated as ordinary transient agent errors.
+Policy denials are treated as deliberate control-plane decisions, not transient agent errors.
 
 </details>
 
@@ -263,7 +233,15 @@ The scope approval lock binds human authorization to the approved workflow state
 <details>
 <summary><strong>Repository-aware context and tooling</strong></summary>
 
-PRSquad can detect or configure repository tooling for common ecosystems including npm, Maven, Gradle, Pytest, Cargo, Go, and .NET.
+PRSquad can detect or configure repository tooling for common ecosystems including:
+
+- npm / Node.js
+- Maven
+- Gradle
+- Pytest
+- Cargo
+- Go
+- .NET
 
 Repository instructions and skills are selected by specialist role and approved scope so agents receive relevant context without loading the full repository guidance into every stage.
 
@@ -274,11 +252,23 @@ Repository instructions and skills are selected by specialist role and approved 
 
 ### Scope Gate
 
-The current implementation requires the maintainer to explicitly authorize implementation before Developer execution can begin. The resulting `.gated-change/approval.lock` is then mechanically verified by the control plane.
+Implementation cannot begin until the maintainer explicitly authorizes the proposed plan by executing:
+
+```text
+npx -y tsx scripts/guardrails/scope-approve.ts
+```
+
+This creates `.gated-change/approval.lock`, which the control plane verifies before Developer delegation is allowed.
 
 ### PR Gate
 
-PR creation requires verified QA/review evidence and explicit human authorization. PRSquad never performs the final merge.
+After QA and Review complete, the maintainer explicitly authorizes pull-request creation by executing:
+
+```text
+npx -y tsx scripts/guardrails/pr-create.ts
+```
+
+PRSquad opens the pull request but never performs the final merge.
 
 </details>
 
