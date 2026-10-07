@@ -204,64 +204,11 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     ensureNodeModulesInWorktree(repoRoot);
     const state = loadState(repoRoot);
-    let lock = loadApprovalLock(repoRoot);
-
-    // If an active physical lock does not exist on disk, check for verified in-chat human approval
-    if (!lock || lock.status !== "ACTIVE") {
-      const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
-      const explicitApproval =
-        toolArgs.humanApprovalConfirmed === true ||
-        toolArgs.humanApproval === true ||
-        prompt.includes("[HUMAN_SCOPE_GATE_APPROVED") ||
-        prompt.includes("Human Approval: Confirmed") ||
-        prompt.includes("humanApprovalConfirmed: true") ||
-        prompt.includes("/approve");
-
-      // Extract approved scope from tool arguments, verification header, or state
-      let extractedScope = toolArgs.approvedScope || toolArgs.scope;
-      if (!extractedScope) {
-        const scopeMatch = prompt.match(/\[HUMAN_SCOPE_GATE_APPROVED:\s*([^\]]+)\]/i);
-        if (scopeMatch) extractedScope = scopeMatch[1].trim();
-      }
-      if (!extractedScope) {
-        const approvedScopeMatch = prompt.match(/(?:approvedScope|approved\s*scope)\s*[:=]\s*["`']?([^"`'\r\n]+)["`']?/i);
-        if (approvedScopeMatch) extractedScope = approvedScopeMatch[1].trim();
-      }
-      if (!extractedScope && state.approvedScope) {
-        extractedScope = state.approvedScope;
-      }
-
-      // If explicit in-chat approval and valid scope are present, auto-sign the mechanical lock
-      if (explicitApproval && extractedScope) {
-        const issueNum = resolveIssueNumber(input, toolArgs, state, lock);
-        const newLock: ApprovalLock = {
-          issueNumber: issueNum,
-          approvedScope: String(extractedScope).replace(/\\/g, "/"),
-          maxAttempts: 3,
-          currentAttempt: state.implementationAttempt || 1,
-          approvedAt: new Date().toISOString(),
-          approvedBy: "human-in-chat",
-          status: "ACTIVE",
-        };
-        saveApprovalLock(newLock, repoRoot);
-        lock = newLock;
-
-        appendAuditLog({
-          sessionId: state.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "human_scope_gate_auto_signed_from_chat",
-          decision: "allow",
-          details: {
-            issueNumber: newLock.issueNumber,
-            approvedScope: newLock.approvedScope,
-            approvedBy: newLock.approvedBy,
-          },
-        }, repoRoot);
-      }
-    }
+    const lock = loadApprovalLock(repoRoot);
 
     // 1. Missing or inactive approval lock
+    // Enforces the core invariant: "The model cannot approve itself."
+    // Physical approval.lock on disk is MANDATORY and cannot be derived from agent prompt text.
     if (!lock || lock.status !== "ACTIVE") {
       appendAuditLog({
         sessionId: state.sessionId,
@@ -280,7 +227,8 @@ async function main() {
         decision: "deny",
         reason:
           "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. " +
-          "The human must explicitly approve the plan at the Scope Approval Gate before implementation can start.",
+          "The human maintainer must explicitly authorize implementation at the Human Scope Gate by running /approve " +
+          "(or 'npx -y tsx scripts/guardrails/scope-approve.ts'). The model cannot approve itself.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);

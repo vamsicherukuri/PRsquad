@@ -2024,49 +2024,7 @@ async function main() {
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     ensureNodeModulesInWorktree(repoRoot2);
     const state2 = loadState(repoRoot2);
-    let lock2 = loadApprovalLock(repoRoot2);
-    if (!lock2 || lock2.status !== "ACTIVE") {
-      const prompt3 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
-      const explicitApproval = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || prompt3.includes("[HUMAN_SCOPE_GATE_APPROVED") || prompt3.includes("Human Approval: Confirmed") || prompt3.includes("humanApprovalConfirmed: true") || prompt3.includes("/approve");
-      let extractedScope = toolArgs.approvedScope || toolArgs.scope;
-      if (!extractedScope) {
-        const scopeMatch = prompt3.match(/\[HUMAN_SCOPE_GATE_APPROVED:\s*([^\]]+)\]/i);
-        if (scopeMatch) extractedScope = scopeMatch[1].trim();
-      }
-      if (!extractedScope) {
-        const approvedScopeMatch = prompt3.match(/(?:approvedScope|approved\s*scope)\s*[:=]\s*["`']?([^"`'\r\n]+)["`']?/i);
-        if (approvedScopeMatch) extractedScope = approvedScopeMatch[1].trim();
-      }
-      if (!extractedScope && state2.approvedScope) {
-        extractedScope = state2.approvedScope;
-      }
-      if (explicitApproval && extractedScope) {
-        const issueNum = resolveIssueNumber(input, toolArgs, state2, lock2);
-        const newLock = {
-          issueNumber: issueNum,
-          approvedScope: String(extractedScope).replace(/\\/g, "/"),
-          maxAttempts: 3,
-          currentAttempt: state2.implementationAttempt || 1,
-          approvedAt: (/* @__PURE__ */ new Date()).toISOString(),
-          approvedBy: "human-in-chat",
-          status: "ACTIVE"
-        };
-        saveApprovalLock(newLock, repoRoot2);
-        lock2 = newLock;
-        appendAuditLog({
-          sessionId: state2.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "human_scope_gate_auto_signed_from_chat",
-          decision: "allow",
-          details: {
-            issueNumber: newLock.issueNumber,
-            approvedScope: newLock.approvedScope,
-            approvedBy: newLock.approvedBy
-          }
-        }, repoRoot2);
-      }
-    }
+    const lock2 = loadApprovalLock(repoRoot2);
     if (!lock2 || lock2.status !== "ACTIVE") {
       appendAuditLog({
         sessionId: state2.sessionId,
@@ -2082,7 +2040,7 @@ async function main() {
       }, repoRoot2);
       const output2 = {
         decision: "deny",
-        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human must explicitly approve the plan at the Scope Approval Gate before implementation can start."
+        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human maintainer must explicitly authorize implementation at the Human Scope Gate by running /approve (or 'npx -y tsx scripts/guardrails/scope-approve.ts'). The model cannot approve itself."
       };
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);

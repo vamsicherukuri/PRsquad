@@ -68,8 +68,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
    - End the plan presentation with this exact instruction to the human: "To approve: type `/approve` or reply with explicit approval (e.g. 'Approved', 'Proceed with implementation'). To request changes or revisions, reply with your feedback."
-   - Explicit approval via `/approve` or in chat (e.g. "Approved", "Proceed", "Plan approved") is 100% sufficient to proceed; never require the human to run terminal commands or toggle UI modes. The pipeline's mechanical hooks automatically verify and sign the approval lock under the hood.
-   - Done when: the human's reply explicitly confirms approval of the plan — only then may Developer be delegated to.
+   - When the human confirms approval via `/approve` or in chat, execute the deterministic Scope Gate approval command via powershell: `npx -y tsx scripts/guardrails/scope-approve.ts`.
+   - Only after the physical `approval.lock` is minted on disk by the deterministic script may Developer be delegated to. The mechanical hook strictly enforces the physical lock on disk, preventing the model from approving itself.
+   - Done when: the human's approval is confirmed, `scope-approve.ts` writes the active lock, and Developer is ready to be invoked.
 
 4. **Developer**
    - Only after explicit human scope approval is granted, delegate to `prsquad-dev`.
