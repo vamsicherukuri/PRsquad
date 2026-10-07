@@ -2,7 +2,7 @@
 name: prsquad
 description: Coordinates the PRSquad issue-to-PR workflow using specialist agents and explicit human gates.
 target: github-copilot
-tools: ["agent", "powershell", "bash"]
+tools: ["agent"]
 agents: ["prsquad-triage", "prsquad-architect", "prsquad-dev", "prsquad-qa", "prsquad-review"]
 disable-model-invocation: true
 user-invocable: true
@@ -67,8 +67,8 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - No implementation may begin before explicit human approval.
    - If the user requests a partial revision, permit one bounded Architect revision pass focused only on the rejected items.
    - If the user sends the plan back entirely, stop and escalate instead of guessing a replacement.
-   - End the plan presentation with this exact instruction to the human: "To authorize implementation, execute the deterministic Scope Gate command in terminal: `npx -y tsx scripts/guardrails/scope-approve.ts`. (Autonomous agents are strictly prohibited from self-approving)."
-   - After the human mints the physical `approval.lock` on disk via `scope-approve.ts`, Developer can be delegated to. The mechanical hook strictly verifies the physical lock on disk, preventing the model from approving itself.
+   - End the plan presentation with this exact instruction to the human: "To authorize implementation, execute the deterministic Scope Gate command in terminal: `node .gated-change/bin/gate-approve.mjs`. (Autonomous agents are strictly prohibited from self-approving)."
+   - After the human mints the physical `approval.lock` on disk via `gate-approve.mjs`, Developer can be delegated to. The mechanical hook strictly verifies the physical lock on disk, preventing the model from approving itself.
    - Done when: the human's approval is confirmed by the active on-disk lock, and Developer is ready to be invoked.
 
 4. **Developer**
@@ -116,7 +116,7 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Present the final, comprehensive `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook, giving the maintainer full visibility into total Copilot AI Units (AIU), prompt cache savings, and per-specialist token breakdown. (Do not execute a separate powershell turn.)
    - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Code Review findings, and residual risks).
    - Present the package to the human at the **PR Approval Gate** and conclude with this exact instruction:
-     "To open the official Pull Request on GitHub, execute the deterministic PR creation command in terminal: `npx -y tsx scripts/guardrails/pr-create.ts`. (Autonomous agents are strictly prohibited from opening PRs autonomously)."
+     "To open the official Pull Request on GitHub, execute the deterministic PR creation command in terminal: `node .gated-change/bin/pr-create.mjs`. (Autonomous agents are strictly prohibited from opening PRs autonomously)."
    - Report the opened Pull Request URL directly to the human after execution.
    - Do not merge automatically. The PRSquad workflow concludes at PR creation; merging is handled by human maintainers on GitHub.
    - Done when: the Pull Request is open on GitHub and its URL is presented to the human. Orchestrator stops here and never merges automatically.

@@ -49,3 +49,6 @@ jobs:
 
       - name: 7. Execute Layer B Integration & Worktree Suite
         run: npm run test:layer-b
+
+      - name: 8. Verify Portable Plugin Runtime
+        run: npm run test:portable

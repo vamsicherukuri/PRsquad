@@ -1,18 +1,32 @@
 #!/usr/bin/env node
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const action = process.argv[2] || "hook-verify-gate";
 
-// Fail-safe self-registration: If .gated-change exists in the active workspace,
-// save the absolute path to the plugin root (parent of dist/) for non-hook CLI callers
+// Fail-safe self-registration & Human CLI provisioning:
+// When .gated-change exists in the active workspace, provision .gated-change/bin/
+// with standalone gate-approve.mjs and pr-create.mjs for frictionless terminal execution
 try {
   const stateDir = resolve(process.cwd(), ".gated-change");
   if (existsSync(stateDir)) {
     const pluginRoot = resolve(__dirname, "..");
     writeFileSync(join(stateDir, "plugin-root.txt"), pluginRoot, "utf-8");
+
+    const binDir = join(stateDir, "bin");
+    if (!existsSync(binDir)) {
+      mkdirSync(binDir, { recursive: true });
+    }
+    const gateApproveSrc = resolve(__dirname, "gate-approve.mjs");
+    if (existsSync(gateApproveSrc)) {
+      copyFileSync(gateApproveSrc, join(binDir, "gate-approve.mjs"));
+    }
+    const prCreateSrc = resolve(__dirname, "pr-create.mjs");
+    if (existsSync(prCreateSrc)) {
+      copyFileSync(prCreateSrc, join(binDir, "pr-create.mjs"));
+    }
   }
 } catch {}
 
