@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-sandbox-bash.ts
-import { readFileSync as readFileSync2 } from "node:fs";
+import { readFileSync as readFileSync3 } from "node:fs";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
@@ -156,13 +156,130 @@ function isAgentMatch(targetAgent, expectedName) {
   return targetAgent === expectedName || targetAgent.endsWith(`:${expectedName}`) || targetAgent.endsWith(`/${expectedName}`);
 }
 
+// src/guardrails/toolingBridge.ts
+import { existsSync as existsSync2, readFileSync as readFileSync2 } from "node:fs";
+import { join as join2 } from "node:path";
+function detectRepoStack(rootDir = getRepoRoot()) {
+  const explicitPaths = [
+    join2(rootDir, ".prsquad", "config.json"),
+    join2(rootDir, ".prsquad.json")
+  ];
+  for (const configPath of explicitPaths) {
+    if (existsSync2(configPath)) {
+      try {
+        const raw = readFileSync2(configPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        if (parsed.tooling && parsed.tooling.testCommand) {
+          return {
+            stack: parsed.stack || "custom",
+            testCommand: parsed.tooling.testCommand,
+            testFileCommand: parsed.tooling.testFileCommand,
+            buildCommand: parsed.tooling.buildCommand,
+            lintCommand: parsed.tooling.lintCommand,
+            isExplicitConfig: true
+          };
+        }
+      } catch {
+      }
+    }
+  }
+  if (existsSync2(join2(rootDir, "pom.xml"))) {
+    return {
+      stack: "maven",
+      testCommand: "mvn test",
+      testFileCommand: "mvn test -Dtest=${file}",
+      buildCommand: "mvn compile -DskipTests",
+      lintCommand: "mvn spotbugs:check",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "build.gradle")) || existsSync2(join2(rootDir, "build.gradle.kts"))) {
+    const gradleCmd = existsSync2(join2(rootDir, "gradlew")) ? "./gradlew" : "gradle";
+    return {
+      stack: "gradle",
+      testCommand: `${gradleCmd} test`,
+      testFileCommand: `${gradleCmd} test --tests ${"${file}"}`,
+      buildCommand: `${gradleCmd} assemble`,
+      lintCommand: `${gradleCmd} check`,
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "package.json"))) {
+    let runner = "npm test";
+    if (existsSync2(join2(rootDir, "pnpm-lock.yaml"))) {
+      runner = "pnpm test";
+    } else if (existsSync2(join2(rootDir, "yarn.lock"))) {
+      runner = "yarn test";
+    }
+    return {
+      stack: "npm",
+      testCommand: runner,
+      testFileCommand: `${runner} -- \${file}`,
+      buildCommand: "npm run build",
+      lintCommand: "npm run lint",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "pytest.ini")) || existsSync2(join2(rootDir, "pyproject.toml")) || existsSync2(join2(rootDir, "requirements.txt"))) {
+    return {
+      stack: "pytest",
+      testCommand: "pytest",
+      testFileCommand: "pytest ${file}",
+      lintCommand: "flake8 .",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "Cargo.toml"))) {
+    return {
+      stack: "cargo",
+      testCommand: "cargo test",
+      testFileCommand: "cargo test --test ${file}",
+      buildCommand: "cargo build",
+      lintCommand: "cargo clippy",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "go.mod"))) {
+    return {
+      stack: "go",
+      testCommand: "go test ./...",
+      testFileCommand: "go test -v ${file}",
+      buildCommand: "go build ./...",
+      lintCommand: "golangci-lint run",
+      isExplicitConfig: false
+    };
+  }
+  if (existsSync2(join2(rootDir, "*.sln")) || existsSync2(join2(rootDir, "*.csproj"))) {
+    return {
+      stack: "dotnet",
+      testCommand: "dotnet test",
+      testFileCommand: "dotnet test --filter ${file}",
+      buildCommand: "dotnet build",
+      isExplicitConfig: false
+    };
+  }
+  return {
+    stack: "unknown",
+    testCommand: "npm test",
+    isExplicitConfig: false
+  };
+}
+function isCommandAllowedByTooling(command, config) {
+  const trimmed = command.trim();
+  const baseTest = config.testCommand.split(" ")[0];
+  if (trimmed.startsWith(config.testCommand)) return true;
+  if (trimmed.startsWith(baseTest)) return true;
+  return false;
+}
+
 // src/guardrails/bashSandbox.ts
-var REVIEWER_ALLOWLIST_REGEX = /^\s*git\s+(diff|status|show|log|ls-files|rev-parse)(\s+.*)?$/i;
+var GIT_INSPECTION_ALLOWLIST_REGEX = /^\s*git\s+(diff|status|show|log|ls-files|rev-parse)(\s+.*)?$/i;
+var TEST_RUNNER_ALLOWLIST_REGEX = /^\s*(?:(?:npm|pnpm|yarn|bun)\s+(?:test|run\s+test\S*)|npx(?:\s+-[a-zA-Z0-9_\-]+)*\s+(?:vitest|jest|mocha|playwright|cypress|tsx|ts-node|ava|tape|pytest|karma|jasmine|tap)|pytest|python(?:3)?\s+-m\s+(?:unittest|pytest)|(?:mvn|gradle|\.\/gradlew)\s+(?:test|verify|check)|go\s+test|cargo\s+test|dotnet\s+test)(?:\s+.*)?$/i;
 var QA_MUTATING_GIT_REGEX = /\bgit\s+(push|commit|checkout|switch|merge|rebase|reset|clean)\b/i;
 var PROTECTED_BASE_BRANCH_REGEX = /\bgit\s+(checkout|switch|commit|push|merge|rebase|reset|branch\s+-(?:d|D))\b.*?\b(?:origin\/)?(main|master)\b/i;
 var BRANCH_DELETION_REGEX = /\bgit\s+branch\s+-(?:d|D)\b/i;
 var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wget\s+--post)\b/i;
-function validateCommandForAgent(command, agent = "unknown") {
+function validateCommandForAgent(command, agent = "unknown", rootDir) {
   const trimmed = command.trim();
   if (isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "gated-change-reviewer")) {
     if (trimmed.includes(">") || trimmed.includes(">>")) {
@@ -171,10 +288,10 @@ function validateCommandForAgent(command, agent = "unknown") {
         reason: "POLICY_DENIAL: Code Review agent is strictly read-only and cannot use file redirects ('>' or '>>')."
       };
     }
-    if (!REVIEWER_ALLOWLIST_REGEX.test(trimmed)) {
+    if (!GIT_INSPECTION_ALLOWLIST_REGEX.test(trimmed)) {
       return {
         allowed: false,
-        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`
+        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files, git rev-parse). Command '${trimmed}' is blocked.`
       };
     }
     return { allowed: true };
@@ -198,13 +315,43 @@ function validateCommandForAgent(command, agent = "unknown") {
     };
   }
   if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {
+    if (trimmed.includes(">") || trimmed.includes(">>")) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL: QA agent cannot use file redirects ('>' or '>>'). QA executes tests for validation only with zero disk mutations."
+      };
+    }
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
         reason: `POLICY_DENIAL: QA agent cannot execute mutating git commands ('${trimmed}'). QA executes tests for validation only.`
       };
     }
-    return { allowed: true };
+    if (GIT_INSPECTION_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+    try {
+      const config = detectRepoStack(rootDir || getRepoRoot());
+      if (config) {
+        if (isCommandAllowedByTooling(trimmed, config)) {
+          return { allowed: true };
+        }
+        if (config.buildCommand && trimmed.startsWith(config.buildCommand)) {
+          return { allowed: true };
+        }
+        if (config.lintCommand && trimmed.startsWith(config.lintCommand)) {
+          return { allowed: true };
+        }
+      }
+    } catch {
+    }
+    if (TEST_RUNNER_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL: QA agent is strictly restricted to test execution and non-mutating git inspections. Command '${trimmed}' is blocked by policy.`
+    };
   }
   if (isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "gated-change-developer")) {
     if (/\bgit\s+push\b/i.test(trimmed)) {
@@ -223,7 +370,7 @@ async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync2(0, "utf-8");
+      rawInput = readFileSync3(0, "utf-8");
     } catch {
     }
   }
@@ -241,7 +388,7 @@ async function main() {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
-    const result = validateCommandForAgent(command, agent);
+    const result = validateCommandForAgent(command, agent, repoRoot);
     if (!result.allowed) {
       appendAuditLog({
         sessionId: state.sessionId,

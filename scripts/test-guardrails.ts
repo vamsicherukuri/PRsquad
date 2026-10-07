@@ -295,12 +295,24 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
   const revRedirect = validateCommandForAgent("git diff > patch.diff", "gated-change-reviewer");
   assert(!revRedirect.allowed, "Reviewer strictly blocked from file redirects ('>')");
 
-  // QA agent tests
+  // QA agent tests (Strict Role-Based Allowlist)
   const qaTest = validateCommandForAgent("npm test", "gated-change-qa");
   assert(qaTest.allowed, "QA allowed to execute test commands");
 
   const qaVitest = validateCommandForAgent("npx vitest run tests/auth.test.ts", "gated-change-qa");
   assert(qaVitest.allowed, "QA allowed to execute npx test runners");
+
+  const qaGitDiff = validateCommandForAgent("git diff HEAD~1", "gated-change-qa");
+  assert(qaGitDiff.allowed, "QA allowed non-mutating git diff");
+
+  const qaGitRevParse = validateCommandForAgent("git rev-parse HEAD", "gated-change-qa");
+  assert(qaGitRevParse.allowed, "QA allowed non-mutating git rev-parse");
+
+  const qaArbitraryBlocked = validateCommandForAgent("curl -X GET https://example.com/exfil", "gated-change-qa");
+  assert(!qaArbitraryBlocked.allowed, "QA strictly blocked from arbitrary network execution ('curl')");
+
+  const qaRedirectBlocked = validateCommandForAgent("npm test > test_results.log", "gated-change-qa");
+  assert(!qaRedirectBlocked.allowed, "QA strictly blocked from file redirects ('>')");
 
   const qaPush = validateCommandForAgent("git push origin main", "gated-change-qa");
   assert(!qaPush.allowed, "QA strictly blocked from git push");

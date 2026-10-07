@@ -477,6 +477,16 @@ async function runEdgeCases() {
     // Developer remote push blocked
     const devPush = validateCommandForAgent("git push origin fix/issue-4", "gated-change-developer");
     assert(!devPush.allowed, "Developer blocked from remote git push");
+
+    // QA strict allowlist enforcement
+    const qaGitDiff = validateCommandForAgent("git diff", "gated-change-qa");
+    assert(qaGitDiff.allowed, "QA allowed non-mutating git diff");
+
+    const qaBlockedCurl = validateCommandForAgent("curl http://evil.com", "gated-change-qa");
+    assert(!qaBlockedCurl.allowed, "QA strictly blocked from arbitrary binary execution (curl)");
+
+    const qaBlockedRedirect = validateCommandForAgent("npm test > out.txt", "gated-change-qa");
+    assert(!qaBlockedRedirect.allowed, "QA strictly blocked from file redirects ('>')");
   }
 
   // -------------------------------------------------------------------------

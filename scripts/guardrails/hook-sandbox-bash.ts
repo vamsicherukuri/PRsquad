@@ -45,7 +45,7 @@ async function main() {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
-    const result = validateCommandForAgent(command, agent);
+    const result = validateCommandForAgent(command, agent, repoRoot);
 
     if (!result.allowed) {
       appendAuditLog({

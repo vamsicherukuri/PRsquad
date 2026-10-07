@@ -1,13 +1,18 @@
-import { isAgentMatch } from "./stateStore.js";
+import { isAgentMatch, getRepoRoot } from "./stateStore.js";
+import { detectRepoStack, isCommandAllowedByTooling } from "./toolingBridge.js";
 
 export interface BashValidationResult {
   allowed: boolean;
   reason?: string;
 }
 
-// Reviewer may ONLY execute non-mutating git inspection commands
-const REVIEWER_ALLOWLIST_REGEX =
+// Non-mutating git inspection commands allowed for Reviewer and QA
+const GIT_INSPECTION_ALLOWLIST_REGEX =
   /^\s*git\s+(diff|status|show|log|ls-files|rev-parse)(\s+.*)?$/i;
+
+// Generic/native test runner regex patterns
+const TEST_RUNNER_ALLOWLIST_REGEX =
+  /^\s*(?:(?:npm|pnpm|yarn|bun)\s+(?:test|run\s+test\S*)|npx(?:\s+-[a-zA-Z0-9_\-]+)*\s+(?:vitest|jest|mocha|playwright|cypress|tsx|ts-node|ava|tape|pytest|karma|jasmine|tap)|pytest|python(?:3)?\s+-m\s+(?:unittest|pytest)|(?:mvn|gradle|\.\/gradlew)\s+(?:test|verify|check)|go\s+test|cargo\s+test|dotnet\s+test)(?:\s+.*)?$/i;
 
 // Mutating git operations that QA must never run
 const QA_MUTATING_GIT_REGEX =
@@ -29,7 +34,8 @@ const DANGEROUS_SYSTEM_REGEX =
  */
 export function validateCommandForAgent(
   command: string,
-  agent: string = "unknown"
+  agent: string = "unknown",
+  rootDir?: string
 ): BashValidationResult {
   const trimmed = command.trim();
 
@@ -43,10 +49,10 @@ export function validateCommandForAgent(
       };
     }
 
-    if (!REVIEWER_ALLOWLIST_REGEX.test(trimmed)) {
+    if (!GIT_INSPECTION_ALLOWLIST_REGEX.test(trimmed)) {
       return {
         allowed: false,
-        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files). Command '${trimmed}' is blocked.`,
+        reason: `POLICY_DENIAL: Code Review agent is restricted to non-mutating git inspection commands (git diff, git status, git show, git log, git ls-files, git rev-parse). Command '${trimmed}' is blocked.`,
       };
     }
 
@@ -77,15 +83,55 @@ export function validateCommandForAgent(
     };
   }
 
-  // 5. QA Agent: Prevent mutating git repository state (supports qualified names)
+  // 5. QA Agent: Strict Allowlist (Test execution & non-mutating git inspection only)
   if (isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "gated-change-qa")) {
+    // A. Disallow shell file redirection
+    if (trimmed.includes(">") || trimmed.includes(">>")) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL: QA agent cannot use file redirects ('>' or '>>'). QA executes tests for validation only with zero disk mutations.",
+      };
+    }
+
+    // B. Explicit check against mutating git commands
     if (QA_MUTATING_GIT_REGEX.test(trimmed)) {
       return {
         allowed: false,
         reason: `POLICY_DENIAL: QA agent cannot execute mutating git commands ('${trimmed}'). QA executes tests for validation only.`,
       };
     }
-    return { allowed: true };
+
+    // C. Non-mutating git inspections
+    if (GIT_INSPECTION_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+
+    // D. Configured repository tooling
+    try {
+      const config = detectRepoStack(rootDir || getRepoRoot());
+      if (config) {
+        if (isCommandAllowedByTooling(trimmed, config)) {
+          return { allowed: true };
+        }
+        if (config.buildCommand && trimmed.startsWith(config.buildCommand)) {
+          return { allowed: true };
+        }
+        if (config.lintCommand && trimmed.startsWith(config.lintCommand)) {
+          return { allowed: true };
+        }
+      }
+    } catch {}
+
+    // E. Generic / native test runner patterns
+    if (TEST_RUNNER_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+
+    // F. Deny everything else
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL: QA agent is strictly restricted to test execution and non-mutating git inspections. Command '${trimmed}' is blocked by policy.`,
+    };
   }
 
   // 6. Developer Agent: Block git push to remotes (supports qualified names)
