@@ -134,6 +134,10 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
     status: "ACTIVE",
   }, TEST_ISOLATED_DIR);
 
+  // Set canonical approved plan in state to verify zero-token plan injection
+  state.approvedPlan = "Modify src/services/billing/calculator.ts to fix rounding error";
+  saveState(state, TEST_ISOLATED_DIR);
+
   // Attempt to invoke developer with active lock -> Must succeed
   try {
     const input = JSON.stringify({ cwd: TEST_ISOLATED_DIR, tool: "agent", toolArgs: { name: "gated-change-developer" } });
@@ -146,6 +150,8 @@ console.log("\nSuite 2: Guardrail 1 — Mechanical Scope Gate Hook");
     const parsed = JSON.parse(stdout);
     assert(parsed.decision === "allow", "Hook permits developer invocation when active lock is present");
     assert(parsed.modifiedArgs?.activeBranch === "fix/issue-999", "Hook passes activeBranch in modifiedArgs to Developer");
+    assert(parsed.additionalContext?.includes("Canonical Approved Architecture Plan"), "Hook injects canonical architecture plan into Developer context");
+    assert(parsed.additionalContext?.includes("calculator.ts"), "Injected plan preserves exact approved plan content");
     const stateAfterHook = loadState(TEST_ISOLATED_DIR);
     assert(stateAfterHook.activeBranch === "fix/issue-999", "Hook records activeBranch fix/issue-999 in state");
   } catch (err: any) {

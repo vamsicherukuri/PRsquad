@@ -74,10 +74,10 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
 
 4. **Developer**
    - Only after explicit human scope approval is granted, delegate to `prsquad-dev`.
-   - In your delegation prompt to `prsquad-dev`, you must include:
-     - Header: `[HUMAN_SCOPE_GATE_APPROVED: <approvedScope>]`
-     - Fields: `humanApprovalConfirmed: true` and `approvedScope: "<approvedScope>"`
-   - Pass the approved plan, original acceptance criteria, risk tier, approved scope, and implementation-attempt number. Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
+   - Use a concise delegation prompt (e.g. `@prsquad-dev Implement approved changes for issue #<issueNumber> on branch <branch> within approved scope <approvedScope>`).
+   - Include in your delegation prompt header: `[HUMAN_SCOPE_GATE_APPROVED: <approvedScope>]` and field `humanApprovalConfirmed: true`.
+   - The guardrail hook automatically injects the canonical approved architecture plan, acceptance criteria, branch boundaries, and repository skills directly into Developer's context with 0 token overhead. Do not repeat verbatim plan essays or code snippets.
+   - Require Developer to capture `baseRef` with `git rev-parse HEAD` before its first edit.
    - Developer is the only agent allowed to write product code and regression tests.
    - Require Developer to return its complete structured handoff: status, changed files, tests added or changed, test-to-criterion coverage, validation results, diff reference, scope-amendment request, assumptions, and residual risk.
    - When Developer completes, display the compact credit indicator provided by the hook before delegating to QA.

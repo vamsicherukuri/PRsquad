@@ -388,7 +388,7 @@ async function main() {
         approvedBy: lock.approvedBy,
         approvedAt: lock.approvedAt,
         activeBranch: branchName,
-        plan: extractedPlan || undefined,
+        ...(extractedPlan ? { plan: extractedPlan } : {}),
       },
     });
 
@@ -436,11 +436,36 @@ async function main() {
 
     const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, lock.approvedScope);
 
+    // Deterministic Canonical Plan Injection (0 Token Overhead)
+    // Injects the exact canonical plan approved at the Scope Gate directly from dashboard/state
+    let canonicalPlan = "";
+    if (dashDev?.phases?.architect?.details?.plan) {
+      canonicalPlan = dashDev.phases.architect.details.plan;
+    } else if (dashDev?.phases?.scopeGate?.details?.plan) {
+      canonicalPlan = dashDev.phases.scopeGate.details.plan;
+    } else if (state.approvedPlan) {
+      canonicalPlan = state.approvedPlan;
+    } else if (extractedPlan) {
+      canonicalPlan = extractedPlan;
+    }
+
+    const specBody = state.issue?.body || dashDev?.phases?.intake?.details?.problem || "";
+
+    const planSection = canonicalPlan
+      ? `\n\n### 📐 Canonical Approved Architecture Plan (Injected by Scope Gate Hook)\n${canonicalPlan.trim()}`
+      : "";
+
+    const specSection = specBody
+      ? `\n\n### 📋 Verified Issue Specification & Acceptance Criteria\n${specBody.trim()}`
+      : "";
+
     const addCtx =
       `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
       `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
       `ACTIVE_FEATURE_BRANCH: "${branchName}"\n` +
       "Developer write actions are strictly bounded to this prefix and branch." +
+      planSection +
+      specSection +
       (chatMeter ? `\n\n${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Include this ⚡ AI Credit Meter status in your implementation handoff summary.` : "") +
       (repoIntel ? `\n\n${repoIntel}` : "");
 

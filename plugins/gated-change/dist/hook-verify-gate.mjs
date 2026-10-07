@@ -2287,7 +2287,7 @@ async function main() {
         approvedBy: lock2.approvedBy,
         approvedAt: lock2.approvedAt,
         activeBranch: branchName,
-        plan: extractedPlan || void 0
+        ...extractedPlan ? { plan: extractedPlan } : {}
       }
     });
     const dashDev = syncWorkflowDashboard(repoRoot2, {
@@ -2326,10 +2326,29 @@ ${prompt2}`;
       activeBranch: branchName
     };
     const repoIntel = formatRepoIntelligenceForPrompt(repoRoot2, targetAgent, lock2.approvedScope);
+    let canonicalPlan = "";
+    if (dashDev?.phases?.architect?.details?.plan) {
+      canonicalPlan = dashDev.phases.architect.details.plan;
+    } else if (dashDev?.phases?.scopeGate?.details?.plan) {
+      canonicalPlan = dashDev.phases.scopeGate.details.plan;
+    } else if (state2.approvedPlan) {
+      canonicalPlan = state2.approvedPlan;
+    } else if (extractedPlan) {
+      canonicalPlan = extractedPlan;
+    }
+    const specBody = state2.issue?.body || dashDev?.phases?.intake?.details?.problem || "";
+    const planSection = canonicalPlan ? `
+
+### \u{1F4D0} Canonical Approved Architecture Plan (Injected by Scope Gate Hook)
+${canonicalPlan.trim()}` : "";
+    const specSection = specBody ? `
+
+### \u{1F4CB} Verified Issue Specification & Acceptance Criteria
+${specBody.trim()}` : "";
     const addCtx = `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
 APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
 ACTIVE_FEATURE_BRANCH: "${branchName}"
-Developer write actions are strictly bounded to this prefix and branch.` + (chatMeter ? `
+Developer write actions are strictly bounded to this prefix and branch.` + planSection + specSection + (chatMeter ? `
 
 ${chatMeter}
 
