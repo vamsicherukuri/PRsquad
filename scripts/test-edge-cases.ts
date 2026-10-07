@@ -745,8 +745,11 @@ async function runEdgeCases() {
 
     // 3. Base Branch Protection on createPullRequest()
     try {
-      execSync("git checkout master", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
+      execSync("git checkout -B master", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
     } catch {}
+    const baseState = loadState(REPO_ROOT);
+    baseState.activeBranch = "master";
+    saveState(baseState, REPO_ROOT);
 
     const baseBranchPRResult = createPullRequest({
       preferredDir: REPO_ROOT,
@@ -756,7 +759,10 @@ async function runEdgeCases() {
     assert(baseBranchPRResult.error?.includes("Cannot create PR from base branch"), "Rejection error explicitly cites base branch lockdown");
 
     // 4. Fail-Closed Evidence Enforcement on Feature Branch (Proposal 11)
-    // Setup simulated feature branch in state
+    // Setup simulated feature branch in state and git
+    try {
+      execSync("git checkout -B fix/issue-42-token-leak", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
+    } catch {}
     preState.activeBranch = "fix/issue-42-token-leak";
     saveState(preState, REPO_ROOT);
 
@@ -804,6 +810,10 @@ async function runEdgeCases() {
 
     // Clean up test lock and restore state & dashboard
     revokeApprovalLock("REVOKED", REPO_ROOT);
+    try {
+      execSync(`git checkout ${initialBranch || "master"}`, { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
+      execSync("git branch -D fix/issue-42-token-leak", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
+    } catch {}
     preState.activeBranch = initialBranch || "master";
     saveState(preState, REPO_ROOT);
     if (savedDash && fs.existsSync(dashFile)) {

@@ -438,6 +438,9 @@ async function runSecurityInvariants() {
 
     const preState = loadState(REPO_ROOT);
     const savedBranch = preState.activeBranch;
+    try {
+      execSync("git checkout -B fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
+    } catch {}
     preState.activeBranch = "fix/issue-inv-14";
     preState.issue = { owner: "test", repo: "test", number: 14, title: "Test issue" };
     saveState(preState, REPO_ROOT);
@@ -468,6 +471,10 @@ async function runSecurityInvariants() {
     const passed = result.success === false && (result.error?.includes("STALE_EVIDENCE") ?? false);
 
     // Clean up
+    try {
+      execSync(`git checkout ${savedBranch || "master"}`, { cwd: REPO_ROOT, stdio: "ignore" });
+      execSync("git branch -D fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
+    } catch {}
     preState.activeBranch = savedBranch;
     saveState(preState, REPO_ROOT);
     revokeApprovalLock("REVOKED", REPO_ROOT);

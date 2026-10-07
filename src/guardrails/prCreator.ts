@@ -148,14 +148,15 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       }).trim();
     } catch {}
 
-    if (!activeBranch || activeBranch === "HEAD" || activeBranch === "main" || activeBranch === "master") {
+    const gitBranch = activeBranch;
+    if (!activeBranch || activeBranch === "HEAD") {
       activeBranch = state.activeBranch || "";
     }
 
-    if (!activeBranch || activeBranch === "main" || activeBranch === "master") {
+    if (gitBranch === "main" || gitBranch === "master" || activeBranch === "main" || activeBranch === "master" || !activeBranch) {
       return {
         success: false,
-        error: `Cannot create PR from base branch '${activeBranch}'. Must be on a designated feature branch.`,
+        error: `Cannot create PR from base branch '${gitBranch === "main" || gitBranch === "master" ? gitBranch : activeBranch}'. Must be on a designated feature branch.`,
       };
     }
 
