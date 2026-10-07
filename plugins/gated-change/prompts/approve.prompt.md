@@ -10,7 +10,8 @@ The human maintainer explicitly authorizes implementation for the proposed techn
 
 ## Actions to perform immediately:
 1. Run the deterministic Scope Gate approval command via powershell/terminal:
-   `npx -y tsx scripts/guardrails/scope-approve.ts`
+   `node "${PLUGIN_ROOT}/dist/run-hook.mjs" gate-approve`
+   (Windows PowerShell: `node "$env:PLUGIN_ROOT/dist/run-hook.mjs" gate-approve`)
 2. Confirm to the maintainer:
    "Human Scope Gate explicitly APPROVED. Deterministic approval lock minted on disk with approval integrity binding."
 3. Delegate to `prsquad-dev` (or `gated-change-developer`) to begin implementation strictly bounded to the approved scope.

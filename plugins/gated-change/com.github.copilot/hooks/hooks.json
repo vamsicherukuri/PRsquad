@@ -5,29 +5,29 @@
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
-        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-verify-gate"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-verify-gate",
         "timeoutSec": 60
       },
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-intake-ingest"],
-        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-intake-ingest",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-intake-ingest"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-intake-ingest",
         "timeoutSec": 15
       },
       {
         "tools": ["edit", "edit_file", "write_to_file", "create_file"],
         "command": "node",
-        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-enforce-scope"],
-        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-enforce-scope",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-enforce-scope"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-enforce-scope",
         "timeoutSec": 15
       },
       {
         "tools": ["bash", "execute", "terminal", "powershell"],
         "command": "node",
-        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-sandbox-bash"],
-        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-sandbox-bash"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-sandbox-bash",
         "timeoutSec": 15
       }
     ],
@@ -35,8 +35,8 @@
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
-        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-verify-gate"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-verify-gate",
         "timeoutSec": 60
       }
     ]
