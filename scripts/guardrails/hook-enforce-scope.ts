@@ -21,11 +21,7 @@ async function main() {
 
   let input: HookInput = {};
   if (rawInput.trim()) {
-    try {
-      input = JSON.parse(rawInput);
-    } catch {
-      // Ignore parse failure
-    }
+    input = JSON.parse(rawInput);
   }
 
   const firstTool = input.toolCalls?.[0];
@@ -104,7 +100,15 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+main().catch((err: any) => {
+  const errMsg = err?.message || String(err);
+  process.stderr.write(`[hook-enforce-scope] Internal enforcement error (Fail-Closed): ${errMsg}\n`);
+  process.stdout.write(
+    JSON.stringify({
+      decision: "deny",
+      permissionDecision: "deny",
+      reason: `SECURITY_ENFORCEMENT_FAILURE: Scope enforcement hook encountered an unexpected error: ${errMsg}. File modification blocked by policy (Fail-Closed).`,
+    }) + "\n"
+  );
   process.exit(0);
 });

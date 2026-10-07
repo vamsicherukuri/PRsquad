@@ -229,10 +229,7 @@ async function main() {
   }
   let input = {};
   if (rawInput.trim()) {
-    try {
-      input = JSON.parse(rawInput);
-    } catch {
-    }
+    input = JSON.parse(rawInput);
   }
   const firstTool = input.toolCalls?.[0];
   const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
@@ -280,7 +277,16 @@ async function main() {
   process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+main().catch((err) => {
+  const errMsg = err?.message || String(err);
+  process.stderr.write(`[hook-sandbox-bash] Internal enforcement error (Fail-Closed): ${errMsg}
+`);
+  process.stdout.write(
+    JSON.stringify({
+      decision: "deny",
+      permissionDecision: "deny",
+      reason: `SECURITY_SANDBOX_FAILURE: Shell sandbox hook encountered an unexpected error: ${errMsg}. Command execution blocked by policy (Fail-Closed).`
+    }) + "\n"
+  );
   process.exit(0);
 });

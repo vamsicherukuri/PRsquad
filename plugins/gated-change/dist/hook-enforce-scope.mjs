@@ -197,21 +197,12 @@ function ensureIsolatedBranch(issueNumber = 0, rootDir = process.cwd()) {
   }
   const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
   try {
-    try {
-      execSync2(`git checkout ${targetBranch}`, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      });
-      return { ok: true, branch: targetBranch };
-    } catch {
-      execSync2(`git checkout -b ${targetBranch}`, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      });
-      return { ok: true, branch: targetBranch };
-    }
+    execSync2(`git checkout -B ${targetBranch}`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    return { ok: true, branch: targetBranch };
   } catch {
     return {
       ok: false,
@@ -306,10 +297,7 @@ async function main() {
   }
   let input = {};
   if (rawInput.trim()) {
-    try {
-      input = JSON.parse(rawInput);
-    } catch {
-    }
+    input = JSON.parse(rawInput);
   }
   const firstTool = input.toolCalls?.[0];
   const tool = (input.toolName || input.tool || firstTool?.name || "").toLowerCase();
@@ -365,7 +353,16 @@ async function main() {
   process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+main().catch((err) => {
+  const errMsg = err?.message || String(err);
+  process.stderr.write(`[hook-enforce-scope] Internal enforcement error (Fail-Closed): ${errMsg}
+`);
+  process.stdout.write(
+    JSON.stringify({
+      decision: "deny",
+      permissionDecision: "deny",
+      reason: `SECURITY_ENFORCEMENT_FAILURE: Scope enforcement hook encountered an unexpected error: ${errMsg}. File modification blocked by policy (Fail-Closed).`
+    }) + "\n"
+  );
   process.exit(0);
 });

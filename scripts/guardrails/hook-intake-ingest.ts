@@ -23,11 +23,7 @@ async function main() {
 
   let input: HookInput = {};
   if (rawInput.trim()) {
-    try {
-      input = JSON.parse(rawInput);
-    } catch {
-      // Ignore parse failure
-    }
+    input = JSON.parse(rawInput);
   }
 
   const firstTool = input.toolCalls?.[0];
@@ -200,7 +196,15 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
+main().catch((err: any) => {
+  const errMsg = err?.message || String(err);
+  process.stderr.write(`[hook-intake-ingest] Internal error (Fail-Safe): ${errMsg}\n`);
+  process.stdout.write(
+    JSON.stringify({
+      decision: "deny",
+      permissionDecision: "deny",
+      reason: `INTAKE_VALIDATION_FAILURE: Issue intake hook encountered an unexpected error: ${errMsg}. Triage blocked until issue state can be verified.`,
+    }) + "\n"
+  );
   process.exit(0);
 });

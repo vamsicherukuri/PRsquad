@@ -45,21 +45,12 @@ export function ensureIsolatedBranch(
 
   const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
   try {
-    try {
-      execSync(`git checkout ${targetBranch}`, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return { ok: true, branch: targetBranch };
-    } catch {
-      execSync(`git checkout -b ${targetBranch}`, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      return { ok: true, branch: targetBranch };
-    }
+    execSync(`git checkout -B ${targetBranch}`, {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return { ok: true, branch: targetBranch };
   } catch {
     return {
       ok: false,

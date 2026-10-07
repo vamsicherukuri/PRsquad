@@ -18,6 +18,8 @@
  *   Edge Case 12: Dynamic Hook Portability, Dispatch Resilience & Payload Passthrough
  *   Edge Case 13: Pull Request Provenance, Deterministic Lock Fidelity & Badge Fallbacks
  *   Edge Case 14: Deterministic Specialist Handoff Validation & Schema Guardrails
+ *   Edge Case 15: Approval Integrity Binding & Plan Drift Detection
+ *   Edge Case 16: Fail-Closed Enforcement on Guardrail Exceptions & Corrupted Payloads
  */
 
 import { execSync } from "node:child_process";
@@ -791,6 +793,85 @@ async function runEdgeCases() {
     }
     assert(driftExitCode === 1, "Hook strictly denies Developer when plan drifts from approved lock (Exit 1)");
     assert(driftReason.includes("Approval Integrity Drift"), "Denial reason explicitly cites Approval Integrity Drift");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 16: Fail-Closed Enforcement on Guardrail Exceptions & Corrupted Payloads
+  // -------------------------------------------------------------------------
+  logCase(16, "Fail-Closed Enforcement on Guardrail Exceptions & Corrupted Payloads");
+  {
+    const malformedPayload = "{ bad_json: invalid syntax ::: 123 }";
+
+    // 1. Scope Enforcement Hook Fail-Closed (Never allows file modification on crash/corrupted payload)
+    let scopeDenialReceived = false;
+    let scopeReason = "";
+    try {
+      const stdout = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+        cwd: REPO_ROOT,
+        input: malformedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const parsed = JSON.parse(stdout);
+      scopeDenialReceived = parsed.decision === "deny";
+      scopeReason = parsed.reason || "";
+    } catch {}
+    assert(scopeDenialReceived, "Scope enforcement hook fails closed (decision: 'deny') on malformed input");
+    assert(scopeReason.includes("SECURITY_ENFORCEMENT_FAILURE"), "Scope hook denial cites SECURITY_ENFORCEMENT_FAILURE");
+
+    // 2. Shell Command Sandbox Hook Fail-Closed (Never allows command execution on crash/corrupted payload)
+    let sandboxDenialReceived = false;
+    let sandboxReason = "";
+    try {
+      const stdout = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+        cwd: REPO_ROOT,
+        input: malformedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const parsed = JSON.parse(stdout);
+      sandboxDenialReceived = parsed.decision === "deny";
+      sandboxReason = parsed.reason || "";
+    } catch {}
+    assert(sandboxDenialReceived, "Shell sandbox hook fails closed (decision: 'deny') on malformed input");
+    assert(sandboxReason.includes("SECURITY_SANDBOX_FAILURE"), "Sandbox hook denial cites SECURITY_SANDBOX_FAILURE");
+
+    // 3. Human Gate Verification Hook Fail-Closed (Strict Exit 1 and deny on crash/corrupted payload)
+    let gateExitCode = 0;
+    let gateReason = "";
+    try {
+      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input: malformedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e: any) {
+      gateExitCode = e.status;
+      try {
+        const out = JSON.parse(e.stdout || e.output?.[1] || "{}");
+        gateReason = out.reason || "";
+      } catch {}
+    }
+    assert(gateExitCode === 1, "Human gate hook strictly exits with code 1 (Fail-Closed) on malformed input");
+    assert(gateReason.includes("SECURITY_GATE_FAILURE"), "Human gate denial cites SECURITY_GATE_FAILURE");
+
+    // 4. Issue Intake Hook Fail-Safe (Blocks unvalidated triage on crash/corrupted payload)
+    let intakeDenialReceived = false;
+    let intakeReason = "";
+    try {
+      const stdout = execSync("node plugins/gated-change/dist/hook-intake-ingest.mjs", {
+        cwd: REPO_ROOT,
+        input: malformedPayload,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const parsed = JSON.parse(stdout);
+      intakeDenialReceived = parsed.decision === "deny";
+      intakeReason = parsed.reason || "";
+    } catch {}
+    assert(intakeDenialReceived, "Issue intake hook fails safe (decision: 'deny') on malformed input");
+    assert(intakeReason.includes("INTAKE_VALIDATION_FAILURE"), "Intake hook denial cites INTAKE_VALIDATION_FAILURE");
   }
 
   // -------------------------------------------------------------------------

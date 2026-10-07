@@ -2029,10 +2029,7 @@ async function main() {
   }
   let input = {};
   if (rawInput.trim()) {
-    try {
-      input = JSON.parse(rawInput);
-    } catch {
-    }
+    input = JSON.parse(rawInput);
   }
   const firstTool = input.toolCalls?.[0];
   const toolArgs = input.toolArgs || firstTool?.args || {};
@@ -2876,7 +2873,16 @@ ${truncatedDiff}
   process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
   process.exit(0);
 }
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow", permissionDecision: "allow" }) + "\n");
-  process.exit(0);
+main().catch((err) => {
+  const errMsg = err?.message || String(err);
+  process.stderr.write(`[hook-verify-gate] Internal enforcement error (Fail-Closed): ${errMsg}
+`);
+  process.stdout.write(
+    JSON.stringify({
+      decision: "deny",
+      permissionDecision: "deny",
+      reason: `SECURITY_GATE_FAILURE: Human gate verification hook encountered an internal failure: ${errMsg}. Specialist invocation blocked by policy (Fail-Closed).`
+    }) + "\n"
+  );
+  process.exit(1);
 });
