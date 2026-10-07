@@ -42,9 +42,13 @@ import {
   validateReview,
   extractJsonFromOutput,
 } from "../src/guardrails/handoffValidator.js";
-import { approveScopeGate } from "../src/guardrails/scopeApprover.js";
+import { approveScopeGate, computePlanHash } from "../src/guardrails/scopeApprover.js";
 
 const REPO_ROOT = getRepoRoot();
+let initialBranch = "";
+try {
+  initialBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+} catch {}
 let passed = 0;
 let total = 0;
 
@@ -712,11 +716,96 @@ async function runEdgeCases() {
   }
 
   // -------------------------------------------------------------------------
+  // EDGE CASE 15: Approval Integrity Binding & Plan Drift Detection
+  // -------------------------------------------------------------------------
+  logCase(15, "Approval Integrity Binding & Plan Drift Detection");
+  {
+    const planA = "### 📐 Approved Architecture Plan\nModify calculateDiscount in src/services/billing/ to fix rounding error.";
+    const planB = "### 📐 Approved Architecture Plan\nDelete all billing logs and drop authentication checks in src/services/billing/.";
+
+    // 1. Deterministic hashing invariants
+    const hashA = computePlanHash(planA);
+    const hashA_crlf = computePlanHash(planA.replace(/\n/g, "\r\n") + "   ");
+    const hashB = computePlanHash(planB);
+
+    assert(hashA.length === 32, "computePlanHash produces 32-char hex digest");
+    assert(hashA === hashA_crlf, "computePlanHash normalizes line endings and whitespace");
+    assert(hashA !== hashB, "Different plans produce distinct plan hashes");
+
+    // 2. Mint lock bound to Plan A
+    const boundLock = approveScopeGate({
+      preferredDir: REPO_ROOT,
+      scope: "src/services/billing/",
+      issue: 42,
+      plan: planA,
+      approver: "Human Maintainer (/approve)",
+    });
+    assert(boundLock.success && boundLock.lock?.planHash === hashA, "Approval lock binds to Plan A hash");
+
+    // 3. Developer invoked with matching Plan A -> Allowed
+    let matchAllowed = false;
+    try {
+      const input = JSON.stringify({
+        tool: "agent",
+        toolArgs: {
+          name: "gated-change-developer",
+          planHash: hashA,
+          prompt: `${planA}\nImplement fix within approved scope`,
+        },
+      });
+      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      });
+      const parsed = JSON.parse(stdout);
+      matchAllowed = parsed.decision === "allow";
+    } catch {}
+    assert(matchAllowed, "Developer permitted when plan hash matches approved plan lock");
+
+    // 4. Developer invoked with drifted Plan B -> Blocked by Policy (Exit 1)
+    let driftExitCode = 0;
+    let driftReason = "";
+    try {
+      const input = JSON.stringify({
+        tool: "agent",
+        toolArgs: {
+          name: "gated-change-developer",
+          planHash: hashB,
+          prompt: `${planB}\nImplement unauthorized modifications`,
+        },
+      });
+      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (e: any) {
+      driftExitCode = e.status;
+      try {
+        const out = JSON.parse(e.stdout || e.output?.[1] || "{}");
+        driftReason = out.reason || "";
+      } catch {}
+    }
+    assert(driftExitCode === 1, "Hook strictly denies Developer when plan drifts from approved lock (Exit 1)");
+    assert(driftReason.includes("Approval Integrity Drift"), "Denial reason explicitly cites Approval Integrity Drift");
+  }
+
+  // -------------------------------------------------------------------------
   // SUMMARY
   // -------------------------------------------------------------------------
   console.log("\n=======================================================");
   console.log(`  EDGE CASES TEST COMPLETE: ${passed}/${total} checks passed (${Math.round((passed / total) * 100)}%)`);
   console.log("=======================================================\n");
+
+  if (initialBranch && initialBranch !== "HEAD") {
+    try {
+      execSync(`git checkout ${initialBranch}`, { cwd: REPO_ROOT, stdio: "ignore" });
+      execSync(`git branch -D fix/issue-42`, { cwd: REPO_ROOT, stdio: "ignore" });
+    } catch {}
+  }
 
   if (passed !== total) {
     process.exit(1);

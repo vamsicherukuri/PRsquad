@@ -41,6 +41,7 @@ export interface ApprovalLock {
   issueNumber: number;
   approvedScope: string;
   planHash?: string;
+  baseRef?: string;
   maxAttempts: number;
   currentAttempt: number;
   approvedAt: string;

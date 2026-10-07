@@ -29,6 +29,7 @@ import {
   validateQA,
   validateReview,
 } from "../../src/guardrails/handoffValidator.js";
+import { computePlanHash } from "../../src/guardrails/scopeApprover.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, approvedScope?: string): string {
@@ -234,7 +235,70 @@ async function main() {
       process.exit(1);
     }
 
-    // 2. Attempt budget exceeded
+    // 2. Approval Integrity Binding: verify plan hash and base commit
+    // Enforces that the plan passed to Developer exactly matches the plan approved by the human maintainer.
+    if (lock.planHash) {
+      const prompt = String(toolArgs.prompt || input.toolArgs?.prompt || "");
+      let currentPlan = toolArgs.plan || toolArgs.planMarkdown;
+      if (!currentPlan && !toolArgs.planHash) {
+        const planMatch = prompt.match(/(?:###\s*📐\s*Approved Architecture Plan|PLAN_READY|Technical Plan)[\s\S]*?(?=(?:###|$))/i);
+        if (planMatch) currentPlan = planMatch[0].trim();
+      }
+
+      if (currentPlan) {
+        const currentHash = computePlanHash(currentPlan);
+        if (currentHash && currentHash !== lock.planHash) {
+          appendAuditLog({
+            sessionId: state.sessionId,
+            agent: "controller",
+            tool: "agent",
+            action: "developer_invocation_blocked_plan_drift",
+            decision: "deny",
+            details: {
+              expectedPlanHash: lock.planHash,
+              actualPlanHash: currentHash,
+              lockIssue: lock.issueNumber,
+            },
+          }, repoRoot);
+
+          const output: HookOutput = {
+            decision: "deny",
+            reason:
+              `BLOCKED BY POLICY (Approval Integrity Drift): The technical plan passed to Developer does not match ` +
+              `the plan approved by the human maintainer at the Scope Gate (expected planHash: ${lock.planHash}, actual: ${currentHash}). ` +
+              `Re-approval is required before implementation can proceed.`,
+          };
+          process.stdout.write(JSON.stringify(output) + "\n");
+          process.exit(1);
+        }
+      }
+
+      if (toolArgs.planHash && toolArgs.planHash !== lock.planHash) {
+        appendAuditLog({
+          sessionId: state.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "developer_invocation_blocked_plan_drift",
+          decision: "deny",
+          details: {
+            expectedPlanHash: lock.planHash,
+            actualPlanHash: toolArgs.planHash,
+            lockIssue: lock.issueNumber,
+          },
+        }, repoRoot);
+
+        const output: HookOutput = {
+          decision: "deny",
+          reason:
+            `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match ` +
+            `the approved planHash '${lock.planHash}'. Re-approval is required.`,
+        };
+        process.stdout.write(JSON.stringify(output) + "\n");
+        process.exit(1);
+      }
+    }
+
+    // 3. Attempt budget exceeded
     if (lock.currentAttempt > lock.maxAttempts) {
       revokeApprovalLock("EXHAUSTED", repoRoot);
       state.phase = "ESCALATED";

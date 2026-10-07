@@ -1875,6 +1875,24 @@ function validateReview(output) {
   };
 }
 
+// src/guardrails/scopeApprover.ts
+import { createHash } from "node:crypto";
+function computePlanHash(planOrHandoff) {
+  if (!planOrHandoff) return "";
+  let normalized = "";
+  if (typeof planOrHandoff === "string") {
+    normalized = planOrHandoff.replace(/\r\n/g, "\n").trim();
+  } else if (typeof planOrHandoff === "object") {
+    try {
+      normalized = JSON.stringify(planOrHandoff, Object.keys(planOrHandoff).sort());
+    } catch {
+      normalized = String(planOrHandoff);
+    }
+  }
+  if (!normalized) return "";
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
+}
+
 // scripts/guardrails/hook-verify-gate.ts
 function formatRepoIntelligenceForPrompt(repoRoot, targetAgent, approvedScope) {
   const intel = packageRepoIntelligence(repoRoot, targetAgent, approvedScope);
@@ -2044,6 +2062,57 @@ async function main() {
       };
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);
+    }
+    if (lock2.planHash) {
+      const prompt3 = String(toolArgs.prompt || input.toolArgs?.prompt || "");
+      let currentPlan = toolArgs.plan || toolArgs.planMarkdown;
+      if (!currentPlan && !toolArgs.planHash) {
+        const planMatch = prompt3.match(/(?:###\s*📐\s*Approved Architecture Plan|PLAN_READY|Technical Plan)[\s\S]*?(?=(?:###|$))/i);
+        if (planMatch) currentPlan = planMatch[0].trim();
+      }
+      if (currentPlan) {
+        const currentHash = computePlanHash(currentPlan);
+        if (currentHash && currentHash !== lock2.planHash) {
+          appendAuditLog({
+            sessionId: state2.sessionId,
+            agent: "controller",
+            tool: "agent",
+            action: "developer_invocation_blocked_plan_drift",
+            decision: "deny",
+            details: {
+              expectedPlanHash: lock2.planHash,
+              actualPlanHash: currentHash,
+              lockIssue: lock2.issueNumber
+            }
+          }, repoRoot2);
+          const output2 = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (Approval Integrity Drift): The technical plan passed to Developer does not match the plan approved by the human maintainer at the Scope Gate (expected planHash: ${lock2.planHash}, actual: ${currentHash}). Re-approval is required before implementation can proceed.`
+          };
+          process.stdout.write(JSON.stringify(output2) + "\n");
+          process.exit(1);
+        }
+      }
+      if (toolArgs.planHash && toolArgs.planHash !== lock2.planHash) {
+        appendAuditLog({
+          sessionId: state2.sessionId,
+          agent: "controller",
+          tool: "agent",
+          action: "developer_invocation_blocked_plan_drift",
+          decision: "deny",
+          details: {
+            expectedPlanHash: lock2.planHash,
+            actualPlanHash: toolArgs.planHash,
+            lockIssue: lock2.issueNumber
+          }
+        }, repoRoot2);
+        const output2 = {
+          decision: "deny",
+          reason: `BLOCKED BY POLICY (Approval Integrity Drift): The planHash '${toolArgs.planHash}' does not match the approved planHash '${lock2.planHash}'. Re-approval is required.`
+        };
+        process.stdout.write(JSON.stringify(output2) + "\n");
+        process.exit(1);
+      }
     }
     if (lock2.currentAttempt > lock2.maxAttempts) {
       revokeApprovalLock("EXHAUSTED", repoRoot2);

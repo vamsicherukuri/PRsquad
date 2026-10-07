@@ -59,7 +59,7 @@ ${params.issueTitle}
 - **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
 - **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
 - **Approved Scope**: \`${lock?.approvedScope || state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
-- **Feature Branch**: \`${params.activeBranch}\`
+${lock?.planHash ? `- **Approval Integrity Binding (planHash)**: \`${lock.planHash.slice(0, 16)}\`\n` : ""}- **Feature Branch**: \`${params.activeBranch}\`
 - **Base Target**: \`${params.baseBranch}\`
 
 ### 🔨 Implementation Summary
