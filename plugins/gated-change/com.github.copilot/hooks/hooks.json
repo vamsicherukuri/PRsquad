@@ -5,29 +5,29 @@
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs"],
-        "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs'",
+        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
+        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
         "timeoutSec": 15
       },
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-intake-ingest.mjs"],
-        "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-intake-ingest.mjs'",
+        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-intake-ingest"],
+        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-intake-ingest",
         "timeoutSec": 15
       },
       {
         "tools": ["edit", "edit_file", "write_to_file", "create_file"],
         "command": "node",
-        "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-enforce-scope.mjs"],
-        "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-enforce-scope.mjs'",
+        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-enforce-scope"],
+        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-enforce-scope",
         "timeoutSec": 15
       },
       {
         "tools": ["bash", "execute", "terminal", "powershell"],
         "command": "node",
-        "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-sandbox-bash.mjs"],
-        "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-sandbox-bash.mjs'",
+        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-sandbox-bash"],
+        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash",
         "timeoutSec": 15
       }
     ],
@@ -35,8 +35,8 @@
       {
         "tools": ["agent", "task"],
         "command": "node",
-        "args": ["C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs"],
-        "powershell": "node 'C:/Users/vcherukuri/OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline/plugins/gated-change/dist/hook-verify-gate.mjs'",
+        "args": ["./plugins/gated-change/dist/run-hook.mjs", "hook-verify-gate"],
+        "powershell": "node ./plugins/gated-change/dist/run-hook.mjs hook-verify-gate",
         "timeoutSec": 15
       }
     ]

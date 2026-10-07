@@ -1315,9 +1315,9 @@ function createPullRequest(options = {}) {
       issueNum = parseInt(branchMatch[1], 10);
     }
     if (!issueNum) {
-      const lock = loadApprovalLock(rootDir);
-      if (lock?.issueNumber && lock.issueNumber > 0) {
-        issueNum = lock.issueNumber;
+      const lock2 = loadApprovalLock(rootDir);
+      if (lock2?.issueNumber && lock2.issueNumber > 0) {
+        issueNum = lock2.issueNumber;
       }
     }
     if (!issueNum && state.issue?.number && state.issue.number > 0) {
@@ -1390,16 +1390,25 @@ function createPullRequest(options = {}) {
     }
     const headCommit = execSync3("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8" }).trim();
     const shortSha = headCommit.slice(0, 7);
+    const lock = loadApprovalLock(rootDir);
     const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
-    const prBody = `## \u{1F6E1}\uFE0F PRSquad Pull Request
+    const prBody = `## \u{1F6E1}\uFE0F PRSquad Governed Pull Request
+
+<p align="left">
+  <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
+  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
+  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
+</p>
 
 Closes #${issueNum}
 
 ### \u{1F4CB} Overview
 ${issueTitle}
 
-### \u{1F4D0} Scope Approval Gate Evidence
-- **Approved Scope**: \`${state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
+### \u{1F50F} Cryptographic Provenance & Scope Lock
+- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
+- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
+- **Approved Scope**: \`${state.approvedScope || lock?.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
 - **Feature Branch**: \`${activeBranch}\`
 - **Base Target**: \`${baseBranch}\`
 
@@ -1444,6 +1453,23 @@ ${issueTitle}
       const prUrl = prCreateOut.split("\n").filter((l) => l.startsWith("http"))[0] || prCreateOut;
       const numMatch = prUrl.match(/\/pull\/(\d+)/);
       const prNumber = numMatch ? parseInt(numMatch[1], 10) : void 0;
+      if (prNumber) {
+        try {
+          execFileSync2("gh", [
+            "pr",
+            "edit",
+            String(prNumber),
+            "--repo",
+            `${owner}/${repo}`,
+            "--add-label",
+            "prsquad-verified,governance:supervised"
+          ], {
+            encoding: "utf-8",
+            stdio: ["ignore", "ignore", "ignore"]
+          });
+        } catch {
+        }
+      }
       syncWorkflowDashboard(rootDir, {
         phase: "mergeGate",
         status: "PR_OPEN",

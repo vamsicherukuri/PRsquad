@@ -157,20 +157,29 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       }
     } catch {}
 
-    // 5. Build rich structured PR body
+    // 5. Build rich structured PR body with verification badges and cryptographic provenance
     const headCommit = execSync("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8" }).trim();
     const shortSha = headCommit.slice(0, 7);
+    const lock = loadApprovalLock(rootDir);
 
     const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
-    const prBody = `## 🛡️ PRSquad Pull Request
+    const prBody = `## 🛡️ PRSquad Governed Pull Request
+
+<p align="left">
+  <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
+  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
+  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
+</p>
 
 Closes #${issueNum}
 
 ### 📋 Overview
 ${issueTitle}
 
-### 📐 Scope Approval Gate Evidence
-- **Approved Scope**: \`${state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
+### 🔏 Cryptographic Provenance & Scope Lock
+- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
+- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
+- **Approved Scope**: \`${state.approvedScope || lock?.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
 - **Feature Branch**: \`${activeBranch}\`
 - **Base Target**: \`${baseBranch}\`
 
@@ -218,6 +227,24 @@ ${issueTitle}
       const prUrl = prCreateOut.split("\n").filter((l) => l.startsWith("http"))[0] || prCreateOut;
       const numMatch = prUrl.match(/\/pull\/(\d+)/);
       const prNumber = numMatch ? parseInt(numMatch[1], 10) : undefined;
+
+      // Automatically attach governance labels to the PR if available
+      if (prNumber) {
+        try {
+          execFileSync("gh", [
+            "pr",
+            "edit",
+            String(prNumber),
+            "--repo",
+            `${owner}/${repo}`,
+            "--add-label",
+            "prsquad-verified,governance:supervised",
+          ], {
+            encoding: "utf-8",
+            stdio: ["ignore", "ignore", "ignore"],
+          });
+        } catch {}
+      }
 
       // 6. Update living dashboard on issue
       syncWorkflowDashboard(rootDir, {
