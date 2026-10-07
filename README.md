@@ -5,14 +5,6 @@
   <a href="https://github.com/vamsicherukuri/PRsquad/releases"><img src="https://img.shields.io/badge/releases-v0.2.8-blue" alt="Releases" /></a>
 </p>
 
-<p align="center">
-  <strong>README</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <strong>Code of Conduct</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <strong>Contributing</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <strong>License</strong> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <strong>Security</strong>
-</p>
-
 **Probabilistic agents · Deterministic control plane · Human-in-the-loop control.**
 
 PR Squad is a GitHub Copilot App/VS Code plugin that takes a GitHub issue through planning, implementation, independent QA, code review, and pull-request creation using specialized AI agents.
