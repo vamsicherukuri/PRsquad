@@ -91,7 +91,14 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
   const issueNumber =
     options.issue ||
     state.issue?.number ||
-    (dashData?.issueNumber ? Number(dashData.issueNumber) : 42);
+    (dashData?.issueNumber ? Number(dashData.issueNumber) : 0);
+
+  if (!issueNumber || issueNumber <= 0) {
+    return {
+      success: false,
+      error: "Cannot approve scope gate without a valid issue number.",
+    };
+  }
 
   const approver = options.approver || "Human Maintainer (/approve)";
 

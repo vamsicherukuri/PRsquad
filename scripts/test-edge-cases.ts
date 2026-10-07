@@ -36,6 +36,7 @@ import {
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { buildPullRequestBody, createPullRequest } from "../src/guardrails/prCreator.js";
+import { syncWorkflowDashboard } from "../src/guardrails/issueDashboard.js";
 import {
   validateTriage,
   validateArchitect,
@@ -552,11 +553,21 @@ async function runEdgeCases() {
   }
 
   // -------------------------------------------------------------------------
-  // EDGE CASE 13: PR Provenance, Deterministic Lock Fidelity & Badge Fallbacks
+  // EDGE CASE 13: PR Provenance, Deterministic Lock Fidelity & Fail-Closed Evidence Gates
   // -------------------------------------------------------------------------
-  logCase(13, "PR Provenance, Deterministic Scope Lock Fidelity & Badge Fallbacks");
+  logCase(13, "PR Provenance, Deterministic Scope Lock Fidelity & Fail-Closed Evidence Gates");
   {
-    // 1. Missing Lock Fallback: Gracefully renders default provenance without null reference error
+    // Clean dashboard phases for unrecorded evidence test isolation
+    const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
+    let savedDash: string | null = null;
+    if (fs.existsSync(dashFile)) {
+      savedDash = fs.readFileSync(dashFile, "utf-8");
+      const parsed = JSON.parse(savedDash);
+      parsed.phases = {};
+      fs.writeFileSync(dashFile, JSON.stringify(parsed, null, 2), "utf-8");
+    }
+
+    // 1. Missing Lock & Unrecorded Evidence: Renders NOT RECORDED without fabricated positive evidence
     revokeApprovalLock("REVOKED", REPO_ROOT);
     const bodyWithoutLock = buildPullRequestBody({
       rootDir: REPO_ROOT,
@@ -568,11 +579,14 @@ async function runEdgeCases() {
     });
 
     assert(bodyWithoutLock.includes("PRsquad-Supervised%20Workflow-8250df"), "PR body embeds Supervised Workflow shield badge");
-    assert(bodyWithoutLock.includes("Deterministic%20Policy-Enforced%20(55%2F55)-2ea043"), "PR body embeds Deterministic Policy (55/55) badge");
+    assert(bodyWithoutLock.includes("Deterministic%20Policy-Enforced-2ea043"), "PR body embeds Deterministic Policy badge");
     assert(bodyWithoutLock.includes("Scope%20Gate-Deterministically%20Locked-0969da"), "PR body embeds Deterministic Scope Gate badge");
     assert(bodyWithoutLock.includes("Closes #42"), "PR body references target issue #42");
-    assert(bodyWithoutLock.includes("Approval Lock Status**: `ACTIVE`"), "Missing lock safely falls back to status ACTIVE");
-    assert(bodyWithoutLock.includes("Authorized By**: `Human Maintainer`"), "Missing lock safely falls back to default Human Maintainer");
+    assert(bodyWithoutLock.includes("Approval Lock Status**: `REVOKED`"), "Revoked lock accurately renders status REVOKED instead of fabricated ACTIVE");
+    assert(bodyWithoutLock.includes("Authorized By**: `NOT RECORDED`"), "Revoked/missing lock displays NOT RECORDED for maintainer identity");
+    assert(bodyWithoutLock.includes("Approved Scope**: `NOT RECORDED`"), "Revoked/missing lock displays NOT RECORDED for scope");
+    assert(bodyWithoutLock.includes("Verdict**: `NOT RECORDED`"), "Missing QA evidence displays NOT RECORDED instead of fabricated PASS");
+    assert(bodyWithoutLock.includes("Code Review Verdict**: `NOT RECORDED`"), "Missing Reviewer evidence displays NOT RECORDED instead of fabricated APPROVED");
 
     // 2. Active Custom Deterministic Lock: Accurately reflects custom maintainer identity and approved scope
     const preState = loadState(REPO_ROOT);
@@ -607,9 +621,6 @@ async function runEdgeCases() {
     assert(bodyWithLock.includes("2026-10-06T20:00:00.000Z"), "PR body renders exact approval timestamp");
     assert(bodyWithLock.includes("src/auth/token.ts, src/auth/verifier.ts"), "PR body reflects exact approved scope boundary");
 
-    // Clean up test lock
-    revokeApprovalLock("REVOKED", REPO_ROOT);
-
     // 3. Base Branch Protection on createPullRequest()
     try {
       execSync("git checkout master", { cwd: REPO_ROOT, stdio: ["ignore", "ignore", "ignore"] });
@@ -621,6 +632,61 @@ async function runEdgeCases() {
     // Since git HEAD is on master, createPullRequest must return success: false
     assert(!baseBranchPRResult.success, "createPullRequest() strictly refuses PR creation from base branch 'master'");
     assert(baseBranchPRResult.error?.includes("Cannot create PR from base branch"), "Rejection error explicitly cites base branch lockdown");
+
+    // 4. Fail-Closed Evidence Enforcement on Feature Branch (Proposal 11)
+    // Setup simulated feature branch in state
+    preState.activeBranch = "fix/issue-42-token-leak";
+    saveState(preState, REPO_ROOT);
+
+    // 4a. Refuses PR creation when approval lock is revoked/missing
+    revokeApprovalLock("REVOKED", REPO_ROOT);
+    const noLockPR = createPullRequest({ preferredDir: REPO_ROOT });
+    assert(!noLockPR.success, "createPullRequest() fails closed when approval lock is missing/revoked");
+    assert(noLockPR.error?.includes("PR_GATE_BLOCKED: Missing valid Human Scope Gate approval lock"), "Rejection cites missing approval lock");
+
+    // Re-mint active lock
+    saveApprovalLock({
+      issueNumber: 42,
+      approvedScope: "src/auth/token.ts",
+      approvedBy: "security-auditor@enterprise.internal",
+      approvedAt: "2026-10-06T20:00:00.000Z",
+      status: "ACTIVE",
+    }, REPO_ROOT);
+
+    // 4b. Refuses PR creation when QA evidence is missing
+    const noQAPR = createPullRequest({ preferredDir: REPO_ROOT });
+    assert(!noQAPR.success, "createPullRequest() fails closed when QA verification evidence is missing");
+    assert(noQAPR.error?.includes("PR_GATE_BLOCKED: QA verification not recorded or failed"), "Rejection cites missing QA evidence");
+
+    // 4c. Refuses PR creation when QA verdict is FAIL
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "qa",
+      status: "FAIL",
+      details: { verdict: "FAIL", testNotes: "1 regression test failed" },
+    });
+    const failQAPR = createPullRequest({ preferredDir: REPO_ROOT });
+    assert(!failQAPR.success, "createPullRequest() fails closed when QA verdict is FAIL");
+    assert(failQAPR.error?.includes("PR_GATE_BLOCKED: QA verification not recorded or failed"), "Rejection cites QA failure");
+
+    // 4d. Refuses PR creation when Reviewer clearance is missing
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "qa",
+      status: "PASS",
+      details: { verdict: "PASS", testNotes: "All assertions passed" },
+    });
+    const noRevPR = createPullRequest({ preferredDir: REPO_ROOT });
+    assert(!noRevPR.success, "createPullRequest() fails closed when Reviewer clearance is missing");
+    assert(noRevPR.error?.includes("PR_GATE_BLOCKED: Security and code review audit not recorded"), "Rejection cites missing Reviewer clearance");
+
+    // Clean up test lock and restore state & dashboard
+    revokeApprovalLock("REVOKED", REPO_ROOT);
+    preState.activeBranch = initialBranch || "master";
+    saveState(preState, REPO_ROOT);
+    if (savedDash && fs.existsSync(dashFile)) {
+      fs.writeFileSync(dashFile, savedDash, "utf-8");
+    }
   }
 
   // -------------------------------------------------------------------------

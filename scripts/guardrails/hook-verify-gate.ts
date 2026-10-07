@@ -669,13 +669,13 @@ async function main() {
       details = { ...fromPrompt, ...details };
     }
 
-    const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "src/scopeTool.ts, scripts/test-guardrails.ts";
+    const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "NOT RECORDED";
 
     const mdParts = [
       `### 🧪 Deterministic QA Verification Evidence (Injected by Hook)`,
-      `> **Verdict:** \`${details.verdict || "PASS"}\`  `,
-      `> **Scope Compliance:** \`${details.scopeCompliance || "PASS"}\` (Strictly within \`${approvedScope}\`)  `,
-      details.criteriaSummary ? `> **Acceptance Criteria:** ${details.criteriaSummary}  ` : `> **Acceptance Criteria:** 4/4 acceptance criteria PASSED  `,
+      `> **Verdict:** \`${details.verdict || "NOT RECORDED"}\`  `,
+      `> **Scope Compliance:** \`${details.scopeCompliance || "NOT RECORDED"}\`${approvedScope !== "NOT RECORDED" ? ` (Strictly within \`${approvedScope}\`)` : ""}  `,
+      details.criteriaSummary ? `> **Acceptance Criteria:** ${details.criteriaSummary}  ` : `> **Acceptance Criteria:** NOT RECORDED  `,
       details.testNotes ? `> **QA Test Notes:** ${details.testNotes}` : "",
     ].filter(Boolean);
 
@@ -740,7 +740,7 @@ async function main() {
       const planMarkdown = extractPlanMarkdown(rawText);
       const proposedScope = (archVal.valid && archVal.data.proposedScope)
         ? archVal.data.proposedScope
-        : (state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts");
+        : (state.approvedScope || "NOT RECORDED");
 
       const archSummary = archVal.valid
         ? (archStatus === "PLAN_READY"
@@ -831,7 +831,7 @@ async function main() {
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
-      const qaVerdict = qaVal.valid ? qaVal.data.verdict : (qaDetails.verdict || "PASS");
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : (qaDetails.verdict || "BLOCKED");
 
       const qaSummary = qaVal.valid
         ? (qaVerdict === "PASS"

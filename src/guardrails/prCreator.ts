@@ -1,14 +1,15 @@
-import { writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync, execFileSync } from "node:child_process";
 import { loadState, saveState, loadApprovalLock, getRepoRoot, findGatedChangeDir, getRepoOwnerAndName } from "./stateStore.js";
-import { syncWorkflowDashboard } from "./issueDashboard.js";
+import { syncWorkflowDashboard, loadDashboardState } from "./issueDashboard.js";
 
 export interface PROptions {
   preferredDir?: string;
   baseBranch?: string;
   customTitle?: string;
+  skipEvidenceCheck?: boolean;
 }
 
 export interface PRResult {
@@ -42,11 +43,40 @@ export function buildPullRequestBody(params: {
   const lock = loadApprovalLock(rootDir);
   const state = loadState(rootDir);
 
+  // Read raw lock file to detect REVOKED or EXHAUSTED status if inactive
+  let rawLockStatus: string | undefined;
+  try {
+    const searchDir = findGatedChangeDir(rootDir);
+    const lockPath = join(searchDir, "approval.lock");
+    if (existsSync(lockPath)) {
+      const parsed = JSON.parse(readFileSync(lockPath, "utf-8"));
+      if (parsed.status) rawLockStatus = parsed.status;
+    }
+  } catch {}
+
+  // Load ground-truth dashboard evidence if recorded
+  const dashboard = loadDashboardState(rootDir);
+  const qa = dashboard?.phases?.qa;
+  const qaVerdict = qa?.details?.verdict || qa?.status || "NOT RECORDED";
+  const qaEvidence = qa?.summary || qa?.details?.testNotes || (qaVerdict === "PASS" ? "Verified clean via independent test execution cycle" : "NOT RECORDED");
+
+  const rev = dashboard?.phases?.reviewer;
+  const revVerdict = rev?.details?.assessment || rev?.details?.verdict || rev?.status || "NOT RECORDED";
+  const revEvidence = rev?.summary || rev?.details?.mergeGateSummary || ((revVerdict === "CLEAR" || revVerdict === "APPROVED") ? "Verified read-only diff inspection, zero security concerns" : "NOT RECORDED");
+
+  const lockStatus = lock?.status || rawLockStatus || "NOT RECORDED";
+  const approverInfo = lock?.approvedBy
+    ? `\`${lock.approvedBy}\` (${lock.approvedAt || "timestamp not recorded"})`
+    : "`NOT RECORDED`";
+  const approvedScopeStr = (lock && lock.status === "ACTIVE")
+    ? (lock.approvedScope || state.approvedScope || "NOT RECORDED")
+    : "NOT RECORDED";
+
   return `## 🛡️ PRSquad Governed Pull Request
 
 <p align="left">
   <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
-  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
+  <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced-2ea043?style=flat-square"></a>
   <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Deterministically%20Locked-0969da?style=flat-square"></a>
 </p>
 
@@ -56,25 +86,24 @@ Closes #${params.issueNum}
 ${params.issueTitle}
 
 ### 🔒 Deterministic Provenance & Scope Lock
-- **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
-- **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
-- **Approved Scope**: \`${lock?.approvedScope || state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
+- **Approval Lock Status**: \`${lockStatus}\`
+- **Authorized By**: ${approverInfo}
+- **Approved Scope**: \`${approvedScopeStr}\`
 ${lock?.planHash ? `- **Approval Integrity Binding (planHash)**: \`${lock.planHash.slice(0, 16)}\`\n` : ""}- **Feature Branch**: \`${params.activeBranch}\`
 - **Base Target**: \`${params.baseBranch}\`
 
 ### 🔨 Implementation Summary
 - **Commit SHA**: \`${shortSha}\` (\`${headCommit}\`)
 - **Author**: Autonomous \`@prsquad-dev\` via native PowerShell
-- **Scope Compliance**: 100% strictly bounded to approved scope
+- **Scope Compliance**: ${approvedScopeStr !== "NOT RECORDED" ? "100% strictly bounded to approved scope" : "NOT RECORDED"}
 
 ### 🧪 QA Independent Verification
-- **Verdict**: \`PASS\`
-- **Evidence**: Verified clean via independent Red-Green test execution cycle
-- **All Assertions**: 100% passing
+- **Verdict**: \`${qaVerdict}\`
+- **Evidence**: ${qaEvidence}
 
 ### 🔍 Security & Code Review
-- **Code Review Verdict**: \`APPROVED\`
-- **Diff Inspection**: Verified read-only, 0 unexpected modifications, 0 security concerns
+- **Code Review Verdict**: \`${revVerdict}\`
+- **Diff Inspection**: ${revEvidence}
 
 ---
 > *Pull Request opened automatically by **PRSquad** upon human **PR Gate** confirmation.*  
@@ -162,7 +191,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     }
 
     // Deterministically resolve issue number from:
-    // 1. Feature branch name (e.g. vamsicherukuri-issue-11-... or fix/issue-11)
+    // 1. Feature branch name (e.g. fix/issue-11, fix/issue-42)
     // 2. Options custom override
     // 3. Approval lock
     // 4. State store
@@ -180,8 +209,45 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     if (!issueNum && state.issue?.number && state.issue.number > 0) {
       issueNum = state.issue.number;
     }
-    if (!issueNum) {
-      issueNum = 11;
+    if (!issueNum || issueNum <= 0) {
+      return {
+        success: false,
+        error: "PR_GATE_BLOCKED: Cannot determine target issue number from branch, approval lock, or state. Refusing to open PR without verified target issue.",
+      };
+    }
+
+    // Verify Required Governance Evidence (Fail-Closed PR Gate)
+    // Never: Evidence missing -> PASS
+    if (!options.skipEvidenceCheck) {
+      // 4a. Active Human Scope Gate Approval Lock
+      const lock = loadApprovalLock(rootDir);
+      if (!lock || lock.status !== "ACTIVE" || !lock.approvedScope) {
+        return {
+          success: false,
+          error: "PR_GATE_BLOCKED: Missing valid Human Scope Gate approval lock. PR cannot be created without verified human authorization.",
+        };
+      }
+
+      // 4b. Verified Independent QA Evidence
+      const dashboard = loadDashboardState(rootDir);
+      const qaRecord = dashboard?.phases?.qa;
+      const qaVerdict = qaRecord?.details?.verdict || qaRecord?.status;
+      if (!qaVerdict || qaVerdict !== "PASS") {
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED: QA verification not recorded or failed (verdict: ${qaVerdict || "NOT RECORDED"}). PR gate strictly requires verified QA PASS evidence.`,
+        };
+      }
+
+      // 4c. Verified Security & Code Review Clearance Evidence
+      const revRecord = dashboard?.phases?.reviewer;
+      const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
+      if (!revVerdict || (revVerdict !== "CLEAR" && revVerdict !== "APPROVED" && revVerdict !== "CONCERNS")) {
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED: Security and code review audit not recorded (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance evidence.`,
+        };
+      }
     }
 
     const remoteInfo = getRepoOwnerAndName(rootDir);
@@ -189,7 +255,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     const repo = state.issue?.repo || remoteInfo.repo || "prsquad";
 
     let issueTitle = state.issue?.title;
-    if (!issueTitle || (state.issue?.number && state.issue.number !== issueNum) || issueTitle === "Multi-path scope enforcer alignment") {
+    if (!issueTitle || (state.issue?.number && state.issue.number !== issueNum)) {
       try {
         const out = execFileSync("gh", ["issue", "view", String(issueNum), "--repo", `${owner}/${repo}`, "--json", "title"], {
           encoding: "utf-8",
@@ -209,7 +275,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
     }
     saveState(state, rootDir);
 
-    // 3. Push active feature branch to remote origin
+    // 5. Push active feature branch to remote origin
     try {
       execFileSync("git", ["push", "-u", "origin", activeBranch], {
         cwd: rootDir,
@@ -220,7 +286,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       // If push fails because branch already exists or network issue, continue to check if PR exists
     }
 
-    // 4. Check if PR already exists for this branch
+    // 6. Check if PR already exists for this branch
     try {
       const existingOut = execFileSync("gh", [
         "pr",
@@ -253,8 +319,8 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       }
     } catch {}
 
-    // 5. Build rich structured PR body with verification badges and deterministic provenance
-    const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
+    // 7. Build rich structured PR body with verification badges and deterministic provenance
+    const prTitle = options.customTitle || (issueTitle && !issueTitle.startsWith("Issue #") ? `fix: resolve issue #${issueNum} - ${issueTitle}` : `fix: resolve issue #${issueNum}`);
     const prBody = buildPullRequestBody({
       rootDir,
       issueNum,

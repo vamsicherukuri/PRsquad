@@ -61,6 +61,20 @@ export interface DashboardState {
 
 export const DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 
+/**
+ * Safely loads the local dashboard state from .gated-change/dashboard.json.
+ */
+export function loadDashboardState(rootDir: string = getRepoRoot()): DashboardState | null {
+  try {
+    const gatedDir = findGatedChangeDir(rootDir);
+    const dashboardFile = join(gatedDir, "dashboard.json");
+    if (existsSync(dashboardFile)) {
+      return JSON.parse(readFileSync(dashboardFile, "utf-8"));
+    }
+  } catch {}
+  return null;
+}
+
 function getStatusBadge(status?: string): string {
   if (!status || status === "PENDING") return "⚪ `PENDING`";
   if (status === "IN_PROGRESS") return "⏳ `IN_PROGRESS`";
@@ -112,13 +126,13 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
 
   // Node 1: Triage
   const n1Text = stageIdx > 0
-    ? `1. Triage<br/>✅ ${(intakeCredits ?? 1.29).toFixed(2)} AIU`
+    ? `1. Triage${intakeCredits !== undefined ? `<br/>✅ ${intakeCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
     : `1. Triage<br/>⏳ RUNNING`;
   const n1Class = stageIdx > 0 ? "done" : "active";
 
   // Node 2: Architect
   const n2Text = stageIdx > 1
-    ? `2. Architect<br/>✅ ${(architectCredits ?? 7.16).toFixed(2)} AIU`
+    ? `2. Architect${architectCredits !== undefined ? `<br/>✅ ${architectCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
     : stageIdx === 1
     ? `2. Architect<br/>⏳ RUNNING`
     : `2. Architect<br/>⚪ QUEUED`;
@@ -134,7 +148,7 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
 
   // Node 4: Developer
   const n4Text = stageIdx > 3
-    ? `4. Developer<br/>✅ ${(devCredits ?? 33.19).toFixed(2)} AIU`
+    ? `4. Developer${devCredits !== undefined ? `<br/>✅ ${devCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
     : stageIdx === 3
     ? `4. Developer<br/>⏳ RUNNING`
     : `4. Developer<br/>⚪ QUEUED`;
@@ -143,7 +157,7 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
   // Node 5: QA Test
   const isQaFail = p.qa?.status === "FAIL";
   const n5Text = stageIdx > 4
-    ? `5. QA Test<br/>✅ ${(qaCredits ?? 12.47).toFixed(2)} AIU`
+    ? `5. QA Test${qaCredits !== undefined ? `<br/>✅ ${qaCredits.toFixed(2)} AIU` : "<br/>✅ PASS"}`
     : isQaFail
     ? `5. QA Test<br/>❌ FAILED`
     : stageIdx === 4
@@ -154,7 +168,7 @@ export function renderPipelineMermaid(data?: DashboardState | null): string {
   // Node 6: Code Review
   const isRevConcerns = p.reviewer?.status === "CONCERNS";
   const n6Text = stageIdx > 5
-    ? `6. Code Review<br/>✅ ${(reviewerCredits ?? 6.90).toFixed(2)} AIU`
+    ? `6. Code Review${reviewerCredits !== undefined ? `<br/>✅ ${reviewerCredits.toFixed(2)} AIU` : "<br/>✅ CLEAR"}`
     : isRevConcerns
     ? `6. Code Review<br/>⚠️ CONCERNS`
     : stageIdx === 5
@@ -217,11 +231,11 @@ export function formatChatCreditMeterTable(data?: DashboardState | null): string
   const qaCredits = p.qa?.credits !== undefined ? p.qa.credits : subagents[3]?.credits;
   const reviewerCredits = p.reviewer?.credits !== undefined ? p.reviewer.credits : subagents[4]?.credits;
 
-  const intakeStatus = p.intake?.status || (subagents.length > 0 ? "READY" : "PENDING");
-  const architectStatus = p.architect?.status || (subagents.length > 1 ? "PLAN_READY" : "PENDING");
-  const devStatus = p.developer?.status || (subagents.length > 2 ? "IMPLEMENTED" : "PENDING");
-  const qaStatus = p.qa?.status || (subagents.length > 3 ? "PASS" : "PENDING");
-  const reviewerStatus = p.reviewer?.status || (subagents.length > 4 ? "APPROVED" : "PENDING");
+  const intakeStatus = p.intake?.status || "PENDING";
+  const architectStatus = p.architect?.status || "PENDING";
+  const devStatus = p.developer?.status || "PENDING";
+  const qaStatus = p.qa?.status || "PENDING";
+  const reviewerStatus = p.reviewer?.status || "PENDING";
 
   let out = `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)\n\n`;
   out += `> **Billing Model:** \`${t.model}\`  \n`;
@@ -382,9 +396,9 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   const t = data.telemetry;
 
   const mg = (p.mergeGate || {}) as any;
-  const prNum = mg.details?.prNumber || 17;
-  const prUrl = mg.details?.prUrl || `https://github.com/${repoSlug}/pull/${prNum}`;
-  const baseBranch = mg.details?.baseBranch || "copilot-app-plugin-alignment";
+  const prNum = mg.details?.prNumber;
+  const prUrl = mg.details?.prUrl || (prNum ? `https://github.com/${repoSlug}/pull/${prNum}` : undefined);
+  const baseBranch = mg.details?.baseBranch || "main";
   const headBranch = mg.details?.headBranch || currentBranch;
   const isPrReady = ["READY_FOR_MERGE", "PR_OPEN", "OPEN", "DONE", "PR_CREATED"].includes(mg.status) || Boolean(mg.details?.prUrl);
 
@@ -396,7 +410,8 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   // 1. Dynamic Hero Banner
   if (isPrReady) {
-    md += `## 🚀 Fix Ready for Review — [Pull Request #${prNum}](${prUrl})\n\n`;
+    const prHeadline = prNum ? `[Pull Request #${prNum}](${prUrl || "#"})` : (prUrl ? `[Pull Request](${prUrl})` : "Pull Request Open");
+    md += `## 🚀 Fix Ready for Review — ${prHeadline}\n\n`;
     md += `> **Issue:** #${data.issueNumber}${data.issueTitle ? ` — ${data.issueTitle}` : ""}  \n`;
     md += `> **Branch:** \`${headBranch}\` → \`${baseBranch}\`  \n`;
     md += `> **Pipeline Status:** ✅ **All automated checks passed** · Pull Request open awaiting human review  \n`;
@@ -430,31 +445,50 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |\n`;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |\n`;
   md += `| **6. Security & Code Review** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
-  md += `| **7. Pull Request** | ${getStatusBadge(p.mergeGate?.status)} | ${isPrReady ? `[PR #${prNum}](${prUrl}) created · Awaiting human review` : "Awaiting final audit"} | **0.00 AIU** *(Deterministic)* |\n`;
-  md += `| **Total** | 🏁 **${isPrReady ? "PR OPEN · AWAITING REVIEW" : "IN PROGRESS"}** | **${isPrReady ? `Pull Request #${prNum} Open` : "Pipeline active"}** | **${totalCredits}** |\n\n`;
+  const prStageText = isPrReady
+    ? (prNum ? `[PR #${prNum}](${prUrl || "#"}) created · Awaiting human review` : (prUrl ? `[PR](${prUrl}) created · Awaiting human review` : "PR created · Awaiting human review"))
+    : "Awaiting final audit";
+  const prStageStatus = isPrReady ? (prNum ? `Pull Request #${prNum} Open` : "Pull Request Open") : "Pipeline active";
+  md += `| **7. Pull Request** | ${getStatusBadge(p.mergeGate?.status)} | ${prStageText} | **0.00 AIU** *(Deterministic)* |\n`;
+  md += `| **Total** | 🏁 **${isPrReady ? "PR OPEN · AWAITING REVIEW" : "IN PROGRESS"}** | **${prStageStatus}** | **${totalCredits}** |\n\n`;
 
   md += `---\n\n`;
   md += `### 🧠 Agent Findings & Verification Package\n\n`;
 
   // Section 1: QA Acceptance Criteria & Verification (Open by default if PR is ready)
   const qaDetails = p.qa?.details || {};
-  if (qaDetails.verdict || p.qa?.status === "PASS" || p.qa?.summary) {
-    const verdict = qaDetails.verdict || p.qa?.status || "PASS";
+  if (qaDetails.verdict || p.qa?.status || p.qa?.summary) {
+    const verdict = qaDetails.verdict || p.qa?.status || "NOT RECORDED";
     const qaOpen = isPrReady ? "open" : "";
 
     md += `<details ${qaOpen}>\n<summary><b>🧪 1. QA Verification & Acceptance Criteria Matrix</b></summary>\n\n`;
     md += `> **Verdict:** ${getStatusBadge(verdict)}  \n`;
-    md += `> **Scope Compliance:** ✅ \`PASS\` (Strictly bounded to approved scope; zero out-of-scope edits)  \n`;
-    md += `> **Acceptance Criteria Verification:** 4 / 4 PASSED  \n\n`;
+    md += `> **Scope Compliance:** \`${qaDetails.scopeCompliance || "NOT RECORDED"}\`  \n`;
 
-    md += `| Criterion | Description | Verdict | Evidence |\n`;
-    md += `|:---:|:---|:---:|:---|\n`;
-    md += `| **AC-1** | Split \`approvedScope\` by \`;\` and \`,\`, trimming whitespace | ✅ PASS | Verified in Suite 3 tests: semicolon, comma, and padded variants |\n`;
-    md += `| **AC-2** | Match any single approved entry in multi-path scope | ✅ PASS | Verified against both entries of \`"src/scopeTool.ts; scripts/test-guardrails.ts"\` |\n`;
-    md += `| **AC-3** | Retain write-barrier protections outside declared entries | ✅ PASS | Out-of-scope path (\`src/common/errors.ts\`) denied with \`SCOPE_VIOLATION\` |\n`;
-    md += `| **AC-4** | Automated regression test coverage | ✅ PASS | 7 new automated assertions added to \`scripts/test-guardrails.ts\` Suite 3 |\n\n`;
+    if (Array.isArray(qaDetails.acceptanceCriteriaResults) && qaDetails.acceptanceCriteriaResults.length > 0) {
+      const passedCount = qaDetails.acceptanceCriteriaResults.filter(
+        (ac: any) => ac.verdict === "PASS" || ac.pass === true
+      ).length;
+      md += `> **Acceptance Criteria Verification:** ${passedCount} / ${qaDetails.acceptanceCriteriaResults.length} PASSED  \n\n`;
 
-    md += `**Execution:** \`npx tsx scripts/test-guardrails.ts\` — 33/34 checks passed on headRef. (Single failure in Suite 2 confirmed pre-existing on baseline and unrelated to scope changes).\n\n`;
+      md += `| Criterion | Description | Verdict | Evidence |\n`;
+      md += `|:---:|:---|:---:|:---|\n`;
+      for (const ac of qaDetails.acceptanceCriteriaResults) {
+        const acVerdict = ac.verdict || (ac.pass ? "PASS" : "FAIL");
+        md += `| **${ac.id || "AC"}** | ${ac.description || ac.criterion || "—"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |\n`;
+      }
+      md += `\n`;
+    } else if (qaDetails.criteriaSummary) {
+      md += `> **Acceptance Criteria Verification:** ${qaDetails.criteriaSummary}  \n\n`;
+    } else {
+      md += `> **Acceptance Criteria Verification:** *NOT RECORDED*  \n\n`;
+    }
+
+    if (qaDetails.suiteResults) {
+      md += `**Execution:** ${qaDetails.suiteResults}\n\n`;
+    } else if (p.qa?.summary) {
+      md += `**Execution:** ${p.qa.summary}\n\n`;
+    }
 
     if (qaDetails.testNotes) {
       md += `**QA Summary Notes:** ${qaDetails.testNotes}\n\n`;
@@ -464,13 +498,13 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   // Section 2: Security & Code Quality Review Audit (Reviewer)
   const revDetails = p.reviewer?.details || {};
-  if (revDetails.verdict || revDetails.assessment || p.reviewer?.summary) {
-    const assessment = revDetails.assessment || revDetails.verdict || p.reviewer?.status || "CLEAR";
+  if (revDetails.verdict || revDetails.assessment || p.reviewer?.status || p.reviewer?.summary) {
+    const assessment = revDetails.assessment || revDetails.verdict || p.reviewer?.status || "NOT RECORDED";
 
-    md += `<details>\n<summary><b>🔍 2. Security & Code Quality Audit (Reviewer Verdict: CLEAR)</b></summary>\n\n`;
-    md += `> **Assessment:** ${getStatusBadge(assessment)} (Zero security vulnerabilities; diff strictly limited to declared files)  \n`;
-    md += `> **Scope Compliance:** ✅ \`PASS\`  \n`;
-    md += `> **Reviewer Verdict:** ✅ \`CLEAR\` · Approved for Pull Request creation  \n\n`;
+    md += `<details>\n<summary><b>🔍 2. Security & Code Quality Audit (Reviewer Verdict: ${assessment})</b></summary>\n\n`;
+    md += `> **Assessment:** ${getStatusBadge(assessment)}  \n`;
+    md += `> **Scope Compliance:** \`${revDetails.scopeCompliance || "NOT RECORDED"}\`  \n`;
+    md += `> **Reviewer Verdict:** ${getStatusBadge(assessment)}  \n\n`;
 
     const riskFlags = revDetails.riskFlags || [];
     if (riskFlags.length > 0) {
@@ -500,8 +534,8 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   // Section 3: Architecture Plan & Scope Specification (Architect)
   const archPlan = p.architect?.details?.plan || p.scopeGate?.details?.plan;
-  const approvedScope = p.scopeGate?.details?.approvedScope || p.architect?.details?.proposedScope || "src/scopeTool.ts, scripts/test-guardrails.ts";
-  const riskTier = p.architect?.details?.riskTier || "Low";
+  const approvedScope = p.scopeGate?.details?.approvedScope || p.architect?.details?.proposedScope || "NOT RECORDED";
+  const riskTier = p.architect?.details?.riskTier || "NOT RECORDED";
 
   if (archPlan || p.architect?.summary) {
     md += `<details>\n<summary><b>📐 3. Architecture Plan & Scope Specification</b></summary>\n\n`;
@@ -521,32 +555,32 @@ export function renderDashboardMarkdown(data: DashboardState): string {
 
   // Section 4: Developer Implementation & Git Changes (Developer)
   const devDetails = p.developer?.details || {};
-  if (devDetails.commitSha || devDetails.changedFiles || isDevDone) {
-    const commitSha = devDetails.commitSha || "eb7ae6038817a04882b993ed25de540733e26e1f";
-    const shortSha = commitSha.slice(0, 8);
-    const commitUrl = `https://github.com/${repoSlug}/commit/${commitSha}`;
-
+  if (devDetails.commitSha || devDetails.changedFiles || p.developer?.status || isDevDone) {
+    const commitSha = devDetails.commitSha;
     md += `<details>\n<summary><b>🔨 4. Developer Implementation & Git Changes</b></summary>\n\n`;
-    md += `> **Commit:** [\`${shortSha}\`](${commitUrl}) (\`${commitSha}\`)  \n`;
+    if (commitSha) {
+      const shortSha = commitSha.slice(0, 8);
+      const commitUrl = `https://github.com/${repoSlug}/commit/${commitSha}`;
+      md += `> **Commit:** [\`${shortSha}\`](${commitUrl}) (\`${commitSha}\`)  \n`;
+    } else {
+      md += `> **Commit:** *NOT RECORDED*  \n`;
+    }
     md += `> **Active Branch:** \`${currentBranch}\`  \n\n`;
 
-    const changedFiles = devDetails.changedFiles || ["src/scopeTool.ts", "scripts/test-guardrails.ts"];
-    md += `| File | Action | Scope Status |\n`;
-    md += `|:---|:---:|:---|\n`;
-    for (const f of changedFiles) {
-      md += `| \`${f}\` | Modified | ✅ In Approved Scope |\n`;
+    if (Array.isArray(devDetails.changedFiles) && devDetails.changedFiles.length > 0) {
+      md += `| File | Action | Scope Status |\n`;
+      md += `|:---|:---:|:---|\n`;
+      for (const f of devDetails.changedFiles) {
+        md += `| \`${f}\` | Modified | ✅ In Approved Scope |\n`;
+      }
+      md += `\n`;
+    } else {
+      md += `> **Changed Files:** *NOT RECORDED*  \n\n`;
     }
-    md += `\n`;
 
-    const testsAdded = devDetails.testsAddedOrChanged || [
-      "Suite 3: Semicolon-delimited multi-path approved scope parsing",
-      "Suite 3: Comma-delimited multi-path approved scope parsing",
-      "Suite 3: Whitespace and trailing-slash normalization",
-      "Suite 3: Strict out-of-scope write rejection"
-    ];
-    if (testsAdded.length > 0) {
+    if (Array.isArray(devDetails.testsAddedOrChanged) && devDetails.testsAddedOrChanged.length > 0) {
       md += `**Tests Added:**\n`;
-      for (const t of testsAdded) {
+      for (const t of devDetails.testsAddedOrChanged) {
         md += `- ${t}\n`;
       }
       md += `\n`;
