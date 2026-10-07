@@ -17,6 +17,7 @@
  *   Edge Case 11: Base Branch & Branch Deletion Guardrail Protections
  *   Edge Case 12: Dynamic Hook Portability, Dispatch Resilience & Payload Passthrough
  *   Edge Case 13: Pull Request Provenance, Cryptographic Lock Fidelity & Badge Fallbacks
+ *   Edge Case 14: Deterministic Specialist Handoff Validation & Schema Guardrails
  */
 
 import { execSync } from "node:child_process";
@@ -33,6 +34,14 @@ import {
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { buildPullRequestBody, createPullRequest } from "../src/guardrails/prCreator.js";
+import {
+  validateTriage,
+  validateArchitect,
+  validateDeveloper,
+  validateQA,
+  validateReview,
+  extractJsonFromOutput,
+} from "../src/guardrails/handoffValidator.js";
 
 const REPO_ROOT = getRepoRoot();
 let passed = 0;
@@ -568,6 +577,110 @@ async function runEdgeCases() {
     // Since git HEAD is on master, createPullRequest must return success: false
     assert(!baseBranchPRResult.success, "createPullRequest() strictly refuses PR creation from base branch 'master'");
     assert(baseBranchPRResult.error?.includes("Cannot create PR from base branch"), "Rejection error explicitly cites base branch lockdown");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 14: Deterministic Specialist Handoff Validation & Schema Guardrails
+  // -------------------------------------------------------------------------
+  logCase(14, "Deterministic Specialist Handoff Validation & Schema Guardrails");
+  {
+    // 1. Triage: Rejects invalid status and missing acceptance criteria
+    const badTriage = validateTriage({ status: "UNKNOWN", problem: "bug" });
+    assert(!badTriage.valid, "Handoff validator rejects invalid triage status 'UNKNOWN'");
+
+    const incompleteReadyTriage = validateTriage({
+      status: "READY",
+      acceptanceCriteria: [],
+      declaredScope: "src/",
+    });
+    assert(!incompleteReadyTriage.valid, "Handoff validator rejects READY triage with empty acceptanceCriteria");
+
+    const validTriage = validateTriage({
+      status: "READY",
+      acceptanceCriteria: ["Must parse multi-path scope"],
+      declaredScope: "src/guardrails/",
+    });
+    assert(validTriage.valid && validTriage.data.status === "READY", "Handoff validator accepts fully-formed READY triage");
+
+    // 2. Architect: Detects BLOCKED vs PLAN_READY without assuming happy path
+    const blockedArch = validateArchitect({
+      status: "BLOCKED",
+      blockedReason: "Declared scope does not exist in repository",
+    });
+    assert(blockedArch.valid && blockedArch.data.status === "BLOCKED", "Handoff validator validates BLOCKED architect handoff");
+
+    const unbackedPlan = validateArchitect({
+      status: "PLAN_READY",
+      rootCause: "missing null check",
+      changes: [],
+      proposedScope: "src/",
+    });
+    assert(!unbackedPlan.valid, "Handoff validator rejects PLAN_READY architect with empty changes list");
+
+    // 3. Developer: Distinguishes IMPLEMENTED, SCOPE_AMENDMENT_REQUIRED, and BLOCKED
+    const amendmentDev = validateDeveloper({
+      status: "SCOPE_AMENDMENT_REQUIRED",
+      scopeAmendmentRequest: {
+        requestedPaths: ["package.json"],
+        reason: "Need new dependency",
+        impactIfRejected: "Cannot proceed",
+      },
+    });
+    assert(
+      amendmentDev.valid && amendmentDev.data.status === "SCOPE_AMENDMENT_REQUIRED",
+      "Handoff validator identifies SCOPE_AMENDMENT_REQUIRED developer handoff"
+    );
+
+    const invalidDev = validateDeveloper({
+      status: "IMPLEMENTED",
+      filesChanged: [],
+    });
+    assert(!invalidDev.valid, "Handoff validator rejects IMPLEMENTED developer with empty filesChanged");
+
+    // 4. QA: Faithfully captures FAIL verdict and blocks optimistic inference
+    const qaFailHandoff = validateQA({
+      verdict: "FAIL",
+      scopeCompliance: "PASS",
+      failureClassification: [
+        { failure: "Test timeout on concurrent lock", classification: "GENUINE_FIX_CAUSED" },
+      ],
+      blockingFindings: ["Race condition in state store"],
+    });
+    assert(
+      qaFailHandoff.valid && qaFailHandoff.data.verdict === "FAIL",
+      "Handoff validator captures true QA FAIL verdict without optimistic override"
+    );
+
+    const invalidQA = validateQA({
+      verdict: "PASS",
+      scopeCompliance: "INVALID_VALUE",
+    });
+    assert(!invalidQA.valid, "Handoff validator rejects invalid QA scopeCompliance value");
+
+    // 5. Reviewer: Captures CONCERNS and requires riskFlags evidence
+    const reviewerConcerns = validateReview({
+      assessment: "CONCERNS",
+      scopeCompliance: "PASS",
+      riskFlags: [
+        { severity: "MEDIUM", finding: "Unchecked file descriptor leak in loop", evidence: "line 42" },
+      ],
+    });
+    assert(
+      reviewerConcerns.valid && reviewerConcerns.data.assessment === "CONCERNS",
+      "Handoff validator captures Reviewer CONCERNS assessment with risk flags"
+    );
+
+    const unbackedConcerns = validateReview({
+      assessment: "CONCERNS",
+      scopeCompliance: "PASS",
+      riskFlags: [],
+    });
+    assert(!unbackedConcerns.valid, "Handoff validator rejects Reviewer CONCERNS without riskFlags evidence");
+
+    // 6. Markdown fenced code block extraction
+    const fencedOutput = "Here is the result:\n```json\n{\n  \"verdict\": \"PASS\",\n  \"scopeCompliance\": \"PASS\"\n}\n```\nHope this helps!";
+    const extracted = extractJsonFromOutput(fencedOutput);
+    assert(extracted !== null && extracted.verdict === "PASS", "extractJsonFromOutput reliably parses markdown fenced json blocks");
   }
 
   // -------------------------------------------------------------------------

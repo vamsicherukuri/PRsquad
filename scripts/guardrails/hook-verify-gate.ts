@@ -22,6 +22,13 @@ import {
 import { generateAstPreFetchMap, runSymbolSweep } from "../../src/guardrails/symbolSweep.js";
 import { packageRepoIntelligence } from "../../src/guardrails/repoSkillResolver.js";
 import { detectRepoStack } from "../../src/guardrails/toolingBridge.js";
+import {
+  validateTriage,
+  validateArchitect,
+  validateDeveloper,
+  validateQA,
+  validateReview,
+} from "../../src/guardrails/handoffValidator.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, approvedScope?: string): string {
@@ -684,6 +691,16 @@ async function main() {
     }
 
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
+      const triageVal = validateTriage(input.toolResult);
+      const triageStatus = triageVal.valid ? triageVal.data.status : "READY";
+      const triageSummary = triageVal.valid
+        ? (triageStatus === "READY"
+            ? "Issue requirements extracted and acceptance criteria validated"
+            : triageStatus === "NOT_READY"
+              ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})`
+              : `Triage reported ${triageStatus}`)
+        : "Issue requirements extracted and acceptance criteria validated";
+
       const dashIntake = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
         repo: state.issue?.repo || "prsquad",
@@ -691,21 +708,39 @@ async function main() {
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
         phase: "intake",
-        status: "READY",
-        summary: "Issue requirements extracted and acceptance criteria validated",
+        status: triageStatus,
+        summary: triageSummary,
+        details: triageVal.valid ? triageVal.data : undefined,
       });
+
+      const triageInstruction = (triageVal.valid && triageStatus === "NOT_READY")
+        ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
+        : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
 
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter
-        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.")
+        ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction)
         : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
+      const archVal = validateArchitect(input.toolResult);
+      const archStatus = archVal.valid ? archVal.data.status : "PLAN_READY";
       const rawText = typeof input.toolResult === "string"
         ? input.toolResult
         : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
+      const proposedScope = (archVal.valid && archVal.data.proposedScope)
+        ? archVal.data.proposedScope
+        : (state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts");
+
+      const archSummary = archVal.valid
+        ? (archStatus === "PLAN_READY"
+            ? "Technical architecture plan & scope specification generated"
+            : archStatus === "BLOCKED"
+              ? `Architect blocked: ${archVal.data.blockedReason || "Cannot produce confident plan"}`
+              : `Scope amendment ${archStatus}`)
+        : "Technical architecture plan & scope specification generated";
 
       const dashArch = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -714,33 +749,52 @@ async function main() {
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
         phase: "architect",
-        status: "PLAN_READY",
-        summary: "Technical architecture plan & scope specification generated",
+        status: archStatus,
+        summary: archSummary,
         details: {
           plan: planMarkdown || rawText,
-          proposedScope: "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts",
-          riskTier: "Low",
+          proposedScope,
+          riskTier: (archVal.valid && archVal.data.blastRadius?.risk) || "Low",
+          validated: archVal.valid,
         },
       });
 
+      const archInstruction = (archVal.valid && archStatus === "BLOCKED")
+        ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer."
+        : (archVal.valid && archStatus === "SCOPE_AMENDMENT_CONFIRMED")
+          ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation."
+          : "[INSTRUCTION FOR CONTROLLER]: Include this live ⚡ AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
+
       const chatMeter = formatChatCreditMeter(dashArch);
       const out = chatMeter
-        ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this live ⚡ AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.")
+        ? buildEnrichedPostToolOutput(input, chatMeter, archInstruction)
         : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
-      // Deterministic auto-commit (Idea 2): automatically commit changes within approved scope
-      try {
-        const statusOut = execSync("git status --porcelain", { cwd: repoRoot, encoding: "utf-8" }).trim();
-        if (statusOut) {
-          execSync("git add -u", { cwd: repoRoot, stdio: "ignore" });
-          const commitMsg = `fix(issue-${resolvedIssue}): implement verified changes within approved scope`;
-          execSync(`git commit -m "${commitMsg}"`, { cwd: repoRoot, stdio: "ignore" });
-        }
-      } catch {}
+      const devVal = validateDeveloper(input.toolResult);
+      const devStatus = devVal.valid ? devVal.data.status : "IMPLEMENTED";
+
+      // Deterministic auto-commit (Idea 2): only commit if fix was IMPLEMENTED
+      if (devStatus === "IMPLEMENTED") {
+        try {
+          const statusOut = execSync("git status --porcelain", { cwd: repoRoot, encoding: "utf-8" }).trim();
+          if (statusOut) {
+            execSync("git add -u", { cwd: repoRoot, stdio: "ignore" });
+            const commitMsg = `fix(issue-${resolvedIssue}): implement verified changes within approved scope`;
+            execSync(`git commit -m "${commitMsg}"`, { cwd: repoRoot, stdio: "ignore" });
+          }
+        } catch {}
+      }
 
       const devDetails = extractDeveloperDetails(input.toolResult, repoRoot);
+      const devSummary = devVal.valid
+        ? (devStatus === "IMPLEMENTED"
+            ? (devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally")
+            : devStatus === "SCOPE_AMENDMENT_REQUIRED"
+              ? "Developer requested scope amendment outside approved boundary"
+              : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}`)
+        : (devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally");
 
       const dashDev = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -749,23 +803,35 @@ async function main() {
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
         phase: "developer",
-        status: "IMPLEMENTED",
-        summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
+        status: devStatus,
+        summary: devSummary,
         details: devDetails,
       });
+
+      const devInstruction = (devVal.valid && devStatus === "SCOPE_AMENDMENT_REQUIRED")
+        ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review."
+        : (devVal.valid && devStatus === "BLOCKED")
+          ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer."
+          : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
 
       const devAiCredits = dashDev?.telemetry?.actualAiCredits !== undefined
         ? `> ⚡ Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
         : "";
-      const out = buildEnrichedPostToolOutput(
-        input,
-        devAiCredits,
-        "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification."
-      );
+      const out = buildEnrichedPostToolOutput(input, devAiCredits, devInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
+      const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : (qaDetails.verdict || "PASS");
+
+      const qaSummary = qaVal.valid
+        ? (qaVerdict === "PASS"
+            ? "Independent QA verification passed all acceptance criteria"
+            : qaVerdict === "FAIL"
+              ? `Independent QA verification detected failures (${qaVal.data.failureClassification?.map(f => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})`
+              : "QA verification blocked: unable to complete test suite")
+        : (qaDetails.testNotes || "Independent QA verification complete");
 
       const dashQA = syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -774,24 +840,27 @@ async function main() {
         issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state.sessionId,
         phase: "qa",
-        status: "PASS",
-        summary: "Independent QA verification passed all acceptance criteria",
-        details: qaDetails,
+        status: qaVerdict,
+        summary: qaSummary,
+        details: { ...qaDetails, verdict: qaVerdict },
       });
+
+      const qaInstruction = (qaVal.valid && qaVerdict === "FAIL")
+        ? "[INSTRUCTION FOR CONTROLLER]: QA verification failed. Route back to Developer for rework attempt (consume retry budget)."
+        : (qaVal.valid && qaVerdict === "BLOCKED")
+          ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer."
+          : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
 
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== undefined
         ? `> ⚡ Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.`
         : "";
-      const out = buildEnrichedPostToolOutput(
-        input,
-        qaAiCredits,
-        "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit."
-      );
+      const out = buildEnrichedPostToolOutput(input, qaAiCredits, qaInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
+      const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revDetails.verdict || "CONCERNS";
+      const verdict = revVal.valid ? revVal.data.assessment : (revDetails.assessment || revDetails.verdict || "CONCERNS");
 
       syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",

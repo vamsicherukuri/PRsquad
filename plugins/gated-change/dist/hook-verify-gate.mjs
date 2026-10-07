@@ -1014,32 +1014,40 @@ function extractDeveloperDetails(promptOrText, repoRoot) {
   return details;
 }
 function extractQADetails(promptOrText) {
-  const details = {
-    verdict: "PASS",
-    scopeCompliance: "PASS"
-  };
+  const details = {};
   if (!promptOrText) return details;
-  const verdictMatch = promptOrText.match(/QA RESULT\s*(?:\(verdict:\s*([A-Z]+)\))?:\s*([^\n\r]+)/i);
-  if (verdictMatch) {
-    if (verdictMatch[1]) details.verdict = verdictMatch[1].toUpperCase();
-    details.testNotes = verdictMatch[2].trim();
+  const rawText = typeof promptOrText === "string" ? promptOrText : promptOrText.textResultForLlm || promptOrText.content || JSON.stringify(promptOrText);
+  const start = rawText.indexOf("{");
+  const end = rawText.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      const parsed = JSON.parse(rawText.slice(start, end + 1));
+      if (parsed.verdict) details.verdict = String(parsed.verdict).toUpperCase();
+      if (parsed.scopeCompliance) details.scopeCompliance = String(parsed.scopeCompliance).toUpperCase();
+      if (Array.isArray(parsed.failureClassification)) details.failureClassification = parsed.failureClassification;
+      if (Array.isArray(parsed.blockingFindings)) details.blockingFindings = parsed.blockingFindings;
+      if (Array.isArray(parsed.testResults)) details.testResults = parsed.testResults;
+      if (Array.isArray(parsed.acceptanceCriteriaResults)) details.acceptanceCriteriaResults = parsed.acceptanceCriteriaResults;
+    } catch {
+    }
   }
-  const passCriteriaMatch = promptOrText.match(/(\d+\/\d+\s*acceptance criteria PASS[^\n.]*)/i);
-  if (passCriteriaMatch) {
+  const verdictMatch = rawText.match(/QA RESULT\s*(?:\(verdict:\s*([A-Z]+)\))?:\s*([^\n\r]+)/i);
+  if (verdictMatch) {
+    if (verdictMatch[1] && !details.verdict) details.verdict = verdictMatch[1].toUpperCase();
+    if (!details.testNotes) details.testNotes = verdictMatch[2].trim();
+  }
+  const passCriteriaMatch = rawText.match(/(\d+\/\d+\s*acceptance criteria PASS[^\n.]*)/i);
+  if (passCriteriaMatch && !details.criteriaSummary) {
     details.criteriaSummary = passCriteriaMatch[1];
   }
-  const testRunMatch = promptOrText.match(/Test run:\s*([^\n.]+)/i);
-  if (testRunMatch) {
+  const testRunMatch = rawText.match(/Test run:\s*([^\n.]+)/i);
+  if (testRunMatch && !details.suiteResults) {
     details.suiteResults = testRunMatch[1];
   }
   return details;
 }
 function extractReviewerDetails(toolResultOrText) {
-  const details = {
-    verdict: "APPROVED",
-    assessment: "APPROVED",
-    scopeCompliance: "PASS"
-  };
+  const details = {};
   if (!toolResultOrText) return details;
   const rawText = typeof toolResultOrText === "string" ? toolResultOrText : toolResultOrText.textResultForLlm || toolResultOrText.content || JSON.stringify(toolResultOrText);
   const start = rawText.indexOf("{");
@@ -1606,6 +1614,264 @@ function detectRepoStack(rootDir = getRepoRoot()) {
     stack: "unknown",
     testCommand: "npm test",
     isExplicitConfig: false
+  };
+}
+
+// src/guardrails/handoffValidator.ts
+function extractJsonFromOutput(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  const text = String(raw).trim();
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1].trim());
+    } catch {
+    }
+  }
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      return JSON.parse(text.slice(start, end + 1));
+    } catch {
+    }
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+function validateTriage(output) {
+  const json = extractJsonFromOutput(output);
+  if (!json || typeof json !== "object") {
+    return { valid: false, errors: ["Triage output contains no valid JSON object"] };
+  }
+  const errors = [];
+  const validStatuses = ["READY", "NOT_READY", "EMPTY", "FETCH_FAILED"];
+  const status = String(json.status || "").toUpperCase();
+  if (!validStatuses.includes(status)) {
+    errors.push(`Invalid triage status '${json.status}'. Expected one of: ${validStatuses.join(", ")}`);
+  }
+  if (status === "READY") {
+    if (!Array.isArray(json.acceptanceCriteria) || json.acceptanceCriteria.length === 0) {
+      errors.push("READY triage requires at least 1 item in 'acceptanceCriteria'");
+    }
+    if (!json.declaredScope || typeof json.declaredScope !== "string" || !json.declaredScope.trim()) {
+      errors.push("READY triage requires non-empty 'declaredScope' path prefix");
+    }
+  } else if (status === "NOT_READY") {
+    if (!Array.isArray(json.missing) || json.missing.length === 0) {
+      errors.push("NOT_READY triage requires 'missing' array listing unfulfilled Definition-of-Ready items");
+    }
+  } else if (status === "FETCH_FAILED") {
+    if (!json.fetchError) {
+      errors.push("FETCH_FAILED triage requires 'fetchError' explaining the failure");
+    }
+  }
+  if (errors.length > 0) {
+    return { valid: false, errors, rawJson: json };
+  }
+  return {
+    valid: true,
+    data: {
+      status,
+      clarificationRound: json.clarificationRound,
+      issue: json.issue,
+      problem: json.problem,
+      acceptanceCriteria: json.acceptanceCriteria || [],
+      declaredScope: json.declaredScope || null,
+      missing: json.missing || [],
+      clarifyingQuestion: json.clarifyingQuestion || null,
+      fetchError: json.fetchError || null
+    },
+    rawJson: json
+  };
+}
+function validateArchitect(output) {
+  const json = extractJsonFromOutput(output);
+  if (!json || typeof json !== "object") {
+    return { valid: false, errors: ["Architect output contains no valid JSON object"] };
+  }
+  const errors = [];
+  const validStatuses = [
+    "PLAN_READY",
+    "BLOCKED",
+    "SCOPE_AMENDMENT_CONFIRMED",
+    "SCOPE_AMENDMENT_REJECTED"
+  ];
+  const status = String(json.status || "").toUpperCase();
+  if (!validStatuses.includes(status)) {
+    errors.push(`Invalid architect status '${json.status}'. Expected one of: ${validStatuses.join(", ")}`);
+  }
+  if (status === "PLAN_READY") {
+    if (!json.proposedScope || typeof json.proposedScope !== "string" || !json.proposedScope.trim()) {
+      errors.push("PLAN_READY architect requires non-empty 'proposedScope'");
+    }
+    if (!Array.isArray(json.changes) || json.changes.length === 0) {
+      errors.push("PLAN_READY architect requires non-empty 'changes' specification list");
+    }
+    if (!json.rootCause || typeof json.rootCause !== "string") {
+      errors.push("PLAN_READY architect requires 'rootCause' explanation");
+    }
+  } else if (status === "BLOCKED") {
+    if (!json.blockedReason || typeof json.blockedReason !== "string") {
+      errors.push("BLOCKED architect requires 'blockedReason' explanation");
+    }
+  } else if (status === "SCOPE_AMENDMENT_CONFIRMED") {
+    if (!json.proposedScope) {
+      errors.push("SCOPE_AMENDMENT_CONFIRMED requires updated 'proposedScope'");
+    }
+  } else if (status === "SCOPE_AMENDMENT_REJECTED") {
+    if (!json.reason) {
+      errors.push("SCOPE_AMENDMENT_REJECTED requires 'reason' for rejection");
+    }
+  }
+  if (errors.length > 0) {
+    return { valid: false, errors, rawJson: json };
+  }
+  return {
+    valid: true,
+    data: {
+      status,
+      rootCause: json.rootCause,
+      changes: json.changes,
+      proposedScope: json.proposedScope,
+      blastRadius: json.blastRadius,
+      validationPlan: json.validationPlan,
+      plainLanguageSummary: json.plainLanguageSummary,
+      blockedReason: json.blockedReason,
+      revisedPlan: json.revisedPlan,
+      reason: json.reason
+    },
+    rawJson: json
+  };
+}
+function validateDeveloper(output) {
+  const json = extractJsonFromOutput(output);
+  if (!json || typeof json !== "object") {
+    return { valid: false, errors: ["Developer output contains no valid JSON object"] };
+  }
+  const errors = [];
+  const validStatuses = ["IMPLEMENTED", "BLOCKED", "SCOPE_AMENDMENT_REQUIRED"];
+  const status = String(json.status || "").toUpperCase();
+  if (!validStatuses.includes(status)) {
+    errors.push(`Invalid developer status '${json.status}'. Expected one of: ${validStatuses.join(", ")}`);
+  }
+  if (status === "IMPLEMENTED") {
+    if (!Array.isArray(json.filesChanged) || json.filesChanged.length === 0) {
+      errors.push("IMPLEMENTED developer handoff requires non-empty 'filesChanged' list");
+    }
+    if (!json.diffReference || typeof json.diffReference !== "object") {
+      errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
+    }
+  } else if (status === "BLOCKED") {
+    if (!json.blocker || typeof json.blocker !== "object") {
+      errors.push("BLOCKED developer handoff requires 'blocker' object with description and type");
+    }
+  } else if (status === "SCOPE_AMENDMENT_REQUIRED") {
+    if (!json.scopeAmendmentRequest || !Array.isArray(json.scopeAmendmentRequest.requestedPaths) || json.scopeAmendmentRequest.requestedPaths.length === 0) {
+      errors.push("SCOPE_AMENDMENT_REQUIRED developer handoff requires 'scopeAmendmentRequest' with requestedPaths");
+    }
+  }
+  if (errors.length > 0) {
+    return { valid: false, errors, rawJson: json };
+  }
+  return {
+    valid: true,
+    data: {
+      status,
+      filesChanged: json.filesChanged || [],
+      testsAddedOrChanged: json.testsAddedOrChanged || [],
+      planItemsAddressed: json.planItemsAddressed || [],
+      acceptanceCriteriaCoverage: json.acceptanceCriteriaCoverage || [],
+      validationRun: json.validationRun || [],
+      diffReference: json.diffReference || {},
+      scopeAmendmentRequest: json.scopeAmendmentRequest || null,
+      blocker: json.blocker || null,
+      assumptions: json.assumptions || [],
+      residualRisk: json.residualRisk || []
+    },
+    rawJson: json
+  };
+}
+function validateQA(output) {
+  const json = extractJsonFromOutput(output);
+  if (!json || typeof json !== "object") {
+    return { valid: false, errors: ["QA output contains no valid JSON object"] };
+  }
+  const errors = [];
+  const validVerdicts = ["PASS", "FAIL", "BLOCKED"];
+  const verdict = String(json.verdict || "").toUpperCase();
+  if (!validVerdicts.includes(verdict)) {
+    errors.push(`Invalid QA verdict '${json.verdict}'. Expected one of: ${validVerdicts.join(", ")}`);
+  }
+  const validScope = ["PASS", "FAIL"];
+  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase();
+  if (!validScope.includes(scopeCompliance)) {
+    errors.push(`Invalid QA scopeCompliance '${json.scopeCompliance}'. Expected: PASS or FAIL`);
+  }
+  if (verdict === "FAIL") {
+    const hasFailClassification = Array.isArray(json.failureClassification) && json.failureClassification.length > 0;
+    const hasFindings = Array.isArray(json.blockingFindings) && json.blockingFindings.length > 0;
+    const hasFailCriteria = Array.isArray(json.acceptanceCriteriaResults) && json.acceptanceCriteriaResults.some((c) => c.result === "FAIL");
+    if (!hasFailClassification && !hasFindings && !hasFailCriteria && scopeCompliance !== "FAIL") {
+      errors.push("QA verdict 'FAIL' requires failureClassification, blockingFindings, or failing acceptance criteria");
+    }
+  }
+  if (errors.length > 0) {
+    return { valid: false, errors, rawJson: json };
+  }
+  return {
+    valid: true,
+    data: {
+      verdict,
+      scopeCompliance,
+      acceptanceCriteriaResults: json.acceptanceCriteriaResults || [],
+      testResults: json.testResults || [],
+      failureClassification: json.failureClassification || [],
+      blockingFindings: json.blockingFindings || [],
+      notes: json.notes || []
+    },
+    rawJson: json
+  };
+}
+function validateReview(output) {
+  const json = extractJsonFromOutput(output);
+  if (!json || typeof json !== "object") {
+    return { valid: false, errors: ["Reviewer output contains no valid JSON object"] };
+  }
+  const errors = [];
+  const validAssessments = ["CLEAR", "CONCERNS"];
+  const assessment = String(json.assessment || "").toUpperCase();
+  if (!validAssessments.includes(assessment)) {
+    errors.push(`Invalid Reviewer assessment '${json.assessment}'. Expected: CLEAR or CONCERNS`);
+  }
+  const validScope = ["PASS", "CONCERN"];
+  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase();
+  if (!validScope.includes(scopeCompliance)) {
+    errors.push(`Invalid Reviewer scopeCompliance '${json.scopeCompliance}'. Expected: PASS or CONCERN`);
+  }
+  if (assessment === "CONCERNS") {
+    if (!Array.isArray(json.riskFlags) || json.riskFlags.length === 0) {
+      errors.push("Reviewer assessment 'CONCERNS' requires at least 1 entry in 'riskFlags'");
+    }
+  }
+  if (errors.length > 0) {
+    return { valid: false, errors, rawJson: json };
+  }
+  return {
+    valid: true,
+    data: {
+      assessment,
+      scopeCompliance,
+      riskFlags: json.riskFlags || [],
+      qualityNotes: json.qualityNotes || [],
+      residualRisk: json.residualRisk || [],
+      mergeGateSummary: json.mergeGateSummary || ""
+    },
+    rawJson: json
   };
 }
 
@@ -2192,6 +2458,9 @@ ${stateObj.issue.body.trim()}`);
       saveState(state2, repoRoot2);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
+      const triageVal = validateTriage(input.toolResult);
+      const triageStatus = triageVal.valid ? triageVal.data.status : "READY";
+      const triageSummary = triageVal.valid ? triageStatus === "READY" ? "Issue requirements extracted and acceptance criteria validated" : triageStatus === "NOT_READY" ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})` : `Triage reported ${triageStatus}` : "Issue requirements extracted and acceptance criteria validated";
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2199,16 +2468,22 @@ ${stateObj.issue.body.trim()}`);
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
         phase: "intake",
-        status: "READY",
-        summary: "Issue requirements extracted and acceptance criteria validated"
+        status: triageStatus,
+        summary: triageSummary,
+        details: triageVal.valid ? triageVal.data : void 0
       });
+      const triageInstruction = triageVal.valid && triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
       const chatMeter = formatChatCreditMeter(dashIntake);
-      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.") : { decision: "allow" };
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
+      const archVal = validateArchitect(input.toolResult);
+      const archStatus = archVal.valid ? archVal.data.status : "PLAN_READY";
       const rawText = typeof input.toolResult === "string" ? input.toolResult : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
+      const proposedScope = archVal.valid && archVal.data.proposedScope ? archVal.data.proposedScope : state2.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+      const archSummary = archVal.valid ? archStatus === "PLAN_READY" ? "Technical architecture plan & scope specification generated" : archStatus === "BLOCKED" ? `Architect blocked: ${archVal.data.blockedReason || "Cannot produce confident plan"}` : `Scope amendment ${archStatus}` : "Technical architecture plan & scope specification generated";
       const dashArch = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2216,29 +2491,36 @@ ${stateObj.issue.body.trim()}`);
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
         phase: "architect",
-        status: "PLAN_READY",
-        summary: "Technical architecture plan & scope specification generated",
+        status: archStatus,
+        summary: archSummary,
         details: {
           plan: planMarkdown || rawText,
-          proposedScope: "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts",
-          riskTier: "Low"
+          proposedScope,
+          riskTier: archVal.valid && archVal.data.blastRadius?.risk || "Low",
+          validated: archVal.valid
         }
       });
+      const archInstruction = archVal.valid && archStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer." : archVal.valid && archStatus === "SCOPE_AMENDMENT_CONFIRMED" ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation." : "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
       const chatMeter = formatChatCreditMeter(dashArch);
-      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.") : { decision: "allow" };
+      const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, archInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
-      try {
-        const statusOut = execSync3("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
-        if (statusOut) {
-          execSync3("git add -u", { cwd: repoRoot2, stdio: "ignore" });
-          const commitMsg = `fix(issue-${resolvedIssue2}): implement verified changes within approved scope`;
-          execSync3(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
+      const devVal = validateDeveloper(input.toolResult);
+      const devStatus = devVal.valid ? devVal.data.status : "IMPLEMENTED";
+      if (devStatus === "IMPLEMENTED") {
+        try {
+          const statusOut = execSync3("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
+          if (statusOut) {
+            execSync3("git add -u", { cwd: repoRoot2, stdio: "ignore" });
+            const commitMsg = `fix(issue-${resolvedIssue2}): implement verified changes within approved scope`;
+            execSync3(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
+          }
+        } catch {
         }
-      } catch {
       }
       const devDetails = extractDeveloperDetails(input.toolResult, repoRoot2);
+      const devSummary = devVal.valid ? devStatus === "IMPLEMENTED" ? devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally" : devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "Developer requested scope amendment outside approved boundary" : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}` : devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally";
       const dashDev = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2246,20 +2528,20 @@ ${stateObj.issue.body.trim()}`);
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
         phase: "developer",
-        status: "IMPLEMENTED",
-        summary: devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
+        status: devStatus,
+        summary: devSummary,
         details: devDetails
       });
+      const devInstruction = devVal.valid && devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review." : devVal.valid && devStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
       const devAiCredits = dashDev?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashDev.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
-      const out = buildEnrichedPostToolOutput(
-        input,
-        devAiCredits,
-        "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification."
-      );
+      const out = buildEnrichedPostToolOutput(input, devAiCredits, devInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
+      const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : qaDetails.verdict || "PASS";
+      const qaSummary = qaVal.valid ? qaVerdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : qaVerdict === "FAIL" ? `Independent QA verification detected failures (${qaVal.data.failureClassification?.map((f) => f.failure).join("; ") || qaVal.data.blockingFindings?.join("; ") || "Test failure"})` : "QA verification blocked: unable to complete test suite" : qaDetails.testNotes || "Independent QA verification complete";
       const dashQA = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -2267,21 +2549,19 @@ ${stateObj.issue.body.trim()}`);
         issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
         sessionId: input.sessionId || state2.sessionId,
         phase: "qa",
-        status: "PASS",
-        summary: "Independent QA verification passed all acceptance criteria",
-        details: qaDetails
+        status: qaVerdict,
+        summary: qaSummary,
+        details: { ...qaDetails, verdict: qaVerdict }
       });
+      const qaInstruction = qaVal.valid && qaVerdict === "FAIL" ? "[INSTRUCTION FOR CONTROLLER]: QA verification failed. Route back to Developer for rework attempt (consume retry budget)." : qaVal.valid && qaVerdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
       const qaAiCredits = dashQA?.telemetry?.actualAiCredits !== void 0 ? `> \u26A1 Live Telemetry: **${dashQA.telemetry.actualAiCredits.toFixed(2)} AIU** consumed across active phases.` : "";
-      const out = buildEnrichedPostToolOutput(
-        input,
-        qaAiCredits,
-        "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit."
-      );
+      const out = buildEnrichedPostToolOutput(input, qaAiCredits, qaInstruction);
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
+      const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revDetails.verdict || "CONCERNS";
+      const verdict = revVal.valid ? revVal.data.assessment : revDetails.assessment || revDetails.verdict || "CONCERNS";
       syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",

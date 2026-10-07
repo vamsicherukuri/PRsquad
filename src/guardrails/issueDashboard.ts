@@ -940,27 +940,43 @@ export function extractDeveloperDetails(promptOrText: string, repoRoot?: string)
 }
 
 export function extractQADetails(promptOrText: string): Record<string, any> {
-  const details: Record<string, any> = {
-    verdict: "PASS",
-    scopeCompliance: "PASS",
-  };
+  const details: Record<string, any> = {};
 
   if (!promptOrText) return details;
 
-  // Extract verdict from prompt
-  const verdictMatch = promptOrText.match(/QA RESULT\s*(?:\(verdict:\s*([A-Z]+)\))?:\s*([^\n\r]+)/i);
-  if (verdictMatch) {
-    if (verdictMatch[1]) details.verdict = verdictMatch[1].toUpperCase();
-    details.testNotes = verdictMatch[2].trim();
+  // 1. Try parsing JSON handoff
+  const rawText = typeof promptOrText === "string"
+    ? promptOrText
+    : (promptOrText as any).textResultForLlm || (promptOrText as any).content || JSON.stringify(promptOrText);
+
+  const start = rawText.indexOf("{");
+  const end = rawText.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    try {
+      const parsed = JSON.parse(rawText.slice(start, end + 1));
+      if (parsed.verdict) details.verdict = String(parsed.verdict).toUpperCase();
+      if (parsed.scopeCompliance) details.scopeCompliance = String(parsed.scopeCompliance).toUpperCase();
+      if (Array.isArray(parsed.failureClassification)) details.failureClassification = parsed.failureClassification;
+      if (Array.isArray(parsed.blockingFindings)) details.blockingFindings = parsed.blockingFindings;
+      if (Array.isArray(parsed.testResults)) details.testResults = parsed.testResults;
+      if (Array.isArray(parsed.acceptanceCriteriaResults)) details.acceptanceCriteriaResults = parsed.acceptanceCriteriaResults;
+    } catch {}
   }
 
-  const passCriteriaMatch = promptOrText.match(/(\d+\/\d+\s*acceptance criteria PASS[^\n.]*)/i);
-  if (passCriteriaMatch) {
+  // 2. Extract verdict from prompt/text regex fallback
+  const verdictMatch = rawText.match(/QA RESULT\s*(?:\(verdict:\s*([A-Z]+)\))?:\s*([^\n\r]+)/i);
+  if (verdictMatch) {
+    if (verdictMatch[1] && !details.verdict) details.verdict = verdictMatch[1].toUpperCase();
+    if (!details.testNotes) details.testNotes = verdictMatch[2].trim();
+  }
+
+  const passCriteriaMatch = rawText.match(/(\d+\/\d+\s*acceptance criteria PASS[^\n.]*)/i);
+  if (passCriteriaMatch && !details.criteriaSummary) {
     details.criteriaSummary = passCriteriaMatch[1];
   }
 
-  const testRunMatch = promptOrText.match(/Test run:\s*([^\n.]+)/i);
-  if (testRunMatch) {
+  const testRunMatch = rawText.match(/Test run:\s*([^\n.]+)/i);
+  if (testRunMatch && !details.suiteResults) {
     details.suiteResults = testRunMatch[1];
   }
 
@@ -968,11 +984,7 @@ export function extractQADetails(promptOrText: string): Record<string, any> {
 }
 
 export function extractReviewerDetails(toolResultOrText: any): Record<string, any> {
-  const details: Record<string, any> = {
-    verdict: "APPROVED",
-    assessment: "APPROVED",
-    scopeCompliance: "PASS",
-  };
+  const details: Record<string, any> = {};
 
   if (!toolResultOrText) return details;
 
