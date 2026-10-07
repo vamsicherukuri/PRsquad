@@ -228,6 +228,9 @@ export function runSymbolSweep(
     const lines = content.split("\n");
 
     for (const sym of exportedSymbols) {
+      // Exclude language keyword 'default' from cross-file text sweeping to avoid false positives on switch statements or export clauses
+      if (sym === "default") continue;
+
       const symRegex = new RegExp(`\\b${sym}\\b`);
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

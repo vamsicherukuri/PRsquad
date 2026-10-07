@@ -443,6 +443,13 @@ console.log("\nSuite 5: Guardrail 4 — Deterministic Symbol & Reference Sweep")
   writeFileSync(anonClassFile, "export default class { compute() { return 1; } }\n");
   const anonClassSymbols = extractExportedSymbols("anon-class.ts", TEST_ISOLATED_DIR);
   assert(anonClassSymbols.includes("default"), "Captures anonymous default class as 'default'");
+
+  // Verify external sweep ignores keyword 'default' in external switch statements
+  const externalSwitchFile = join(TEST_ISOLATED_DIR, "switch-consumer.ts");
+  writeFileSync(externalSwitchFile, "function handle(k: string) { switch(k) { default: return null; } }\n");
+  const defaultSweepReport = runSymbolSweep(["anon-arrow.ts"], "src/", TEST_ISOLATED_DIR);
+  const foundDefaultRef = defaultSweepReport.externalReferencesFound.some(r => r.symbol === "default");
+  assert(!foundDefaultRef, "External sweep excludes keyword 'default' from matching external switch statements");
 }
 
 console.log("\n=======================================================");

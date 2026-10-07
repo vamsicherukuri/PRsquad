@@ -1250,6 +1250,7 @@ function runSymbolSweep(changedFiles, approvedScopePrefix, rootDir = process.cwd
     const content = readFileSync3(full, "utf-8");
     const lines = content.split("\n");
     for (const sym of exportedSymbols) {
+      if (sym === "default") continue;
       const symRegex = new RegExp(`\\b${sym}\\b`);
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
