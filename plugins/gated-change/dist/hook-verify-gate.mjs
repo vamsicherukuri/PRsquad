@@ -1092,103 +1092,120 @@ function extractReviewerDetails(toolResultOrText) {
 }
 
 // src/guardrails/symbolSweep.ts
-import ts from "typescript";
+import { createRequire as createRequire2 } from "node:module";
 import { existsSync as existsSync3, readFileSync as readFileSync3, readdirSync, statSync } from "node:fs";
 import { join as join3 } from "node:path";
+var _cachedTs = void 0;
+function getTsCompiler() {
+  if (_cachedTs !== void 0) return _cachedTs;
+  try {
+    const req = createRequire2(import.meta.url);
+    _cachedTs = req("typescript");
+  } catch {
+    _cachedTs = null;
+  }
+  return _cachedTs;
+}
 function extractExportedSymbols(filePath, rootDir = process.cwd()) {
   const full = join3(rootDir, filePath);
   if (!existsSync3(full)) return [];
   const content = readFileSync3(full, "utf-8");
   const symbols = /* @__PURE__ */ new Set();
-  try {
-    let visit2 = function(node) {
-      const modifiers = (ts.canHaveModifiers && ts.canHaveModifiers(node) ? ts.getModifiers(node) : node.modifiers) || [];
-      const isExported = modifiers.some(
-        (m) => m.kind === ts.SyntaxKind.ExportKeyword
-      );
-      const isDefault = modifiers.some(
-        (m) => m.kind === ts.SyntaxKind.DefaultKeyword
-      );
-      if (isDefault) {
-        symbols.add("default");
-      }
-      if (ts.isFunctionDeclaration(node)) {
-        if (isExported) {
-          if (node.name?.text) {
-            symbols.add(node.name.text);
-          } else if (isDefault) {
-            symbols.add("default");
-          }
+  const ts = getTsCompiler();
+  if (ts) {
+    try {
+      let visit2 = function(node) {
+        const modifiers = (ts.canHaveModifiers && ts.canHaveModifiers(node) ? ts.getModifiers(node) : node.modifiers) || [];
+        const isExported = modifiers.some(
+          (m) => m.kind === ts.SyntaxKind.ExportKeyword
+        );
+        const isDefault = modifiers.some(
+          (m) => m.kind === ts.SyntaxKind.DefaultKeyword
+        );
+        if (isDefault) {
+          symbols.add("default");
         }
-      } else if (ts.isClassDeclaration(node)) {
-        if (isExported) {
-          if (node.name?.text) {
-            symbols.add(node.name.text);
-          } else if (isDefault) {
-            symbols.add("default");
+        if (ts.isFunctionDeclaration(node)) {
+          if (isExported) {
+            if (node.name?.text) {
+              symbols.add(node.name.text);
+            } else if (isDefault) {
+              symbols.add("default");
+            }
           }
-        }
-      } else if (ts.isVariableStatement(node)) {
-        if (isExported) {
-          for (const decl of node.declarationList.declarations) {
-            if (ts.isIdentifier(decl.name)) {
-              symbols.add(decl.name.text);
-            } else if (ts.isObjectBindingPattern(decl.name) || ts.isArrayBindingPattern(decl.name)) {
-              for (const elem of decl.name.elements) {
-                if (ts.isBindingElement(elem) && ts.isIdentifier(elem.name)) {
-                  symbols.add(elem.name.text);
+        } else if (ts.isClassDeclaration(node)) {
+          if (isExported) {
+            if (node.name?.text) {
+              symbols.add(node.name.text);
+            } else if (isDefault) {
+              symbols.add("default");
+            }
+          }
+        } else if (ts.isVariableStatement(node)) {
+          if (isExported) {
+            for (const decl of node.declarationList.declarations) {
+              if (ts.isIdentifier(decl.name)) {
+                symbols.add(decl.name.text);
+              } else if (ts.isObjectBindingPattern(decl.name) || ts.isArrayBindingPattern(decl.name)) {
+                for (const elem of decl.name.elements) {
+                  if (ts.isBindingElement(elem) && ts.isIdentifier(elem.name)) {
+                    symbols.add(elem.name.text);
+                  }
                 }
               }
             }
           }
-        }
-      } else if (ts.isInterfaceDeclaration(node)) {
-        if (isExported && node.name?.text) {
-          symbols.add(node.name.text);
-        }
-      } else if (ts.isTypeAliasDeclaration(node)) {
-        if (isExported && node.name?.text) {
-          symbols.add(node.name.text);
-        }
-      } else if (ts.isEnumDeclaration(node)) {
-        if (isExported && node.name?.text) {
-          symbols.add(node.name.text);
-        }
-      } else if (ts.isExportDeclaration(node)) {
-        if (node.exportClause && ts.isNamedExports(node.exportClause)) {
-          for (const elem of node.exportClause.elements) {
-            const name = elem.name?.text;
-            if (name) {
-              symbols.add(name);
+        } else if (ts.isInterfaceDeclaration(node)) {
+          if (isExported && node.name?.text) {
+            symbols.add(node.name.text);
+          }
+        } else if (ts.isTypeAliasDeclaration(node)) {
+          if (isExported && node.name?.text) {
+            symbols.add(node.name.text);
+          }
+        } else if (ts.isEnumDeclaration(node)) {
+          if (isExported && node.name?.text) {
+            symbols.add(node.name.text);
+          }
+        } else if (ts.isExportDeclaration(node)) {
+          if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+            for (const elem of node.exportClause.elements) {
+              const name = elem.name?.text;
+              if (name) {
+                symbols.add(name);
+              }
             }
           }
+        } else if (ts.isExportAssignment(node)) {
+          if (!node.isExportEquals) {
+            symbols.add("default");
+          } else if (ts.isIdentifier(node.expression)) {
+            symbols.add(node.expression.text);
+          }
         }
-      } else if (ts.isExportAssignment(node)) {
-        if (!node.isExportEquals) {
-          symbols.add("default");
-        } else if (ts.isIdentifier(node.expression)) {
-          symbols.add(node.expression.text);
-        }
+        ts.forEachChild(node, visit2);
+      };
+      var visit = visit2;
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true
+      );
+      visit2(sourceFile);
+      if (symbols.size > 0) {
+        return [...symbols];
       }
-      ts.forEachChild(node, visit2);
-    };
-    var visit = visit2;
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      content,
-      ts.ScriptTarget.Latest,
-      true
-    );
-    visit2(sourceFile);
-  } catch {
-    const exportRegex = /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
-    let match;
-    while ((match = exportRegex.exec(content)) !== null) {
-      if (match[1]) symbols.add(match[1]);
+    } catch {
     }
-    if (/export\s+default\b/.test(content)) {
-      symbols.add("default");
-    }
+  }
+  const exportRegex = /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
+  let match;
+  while ((match = exportRegex.exec(content)) !== null) {
+    if (match[1]) symbols.add(match[1]);
+  }
+  if (/export\s+default\b/.test(content)) {
+    symbols.add("default");
   }
   return [...symbols];
 }
@@ -2496,15 +2513,16 @@ ${prompt2}`;
     } else if (extractedPlan) {
       canonicalPlan = extractedPlan;
     }
-    const specBody = state2.issue?.body || dashDev?.phases?.intake?.details?.problem || "";
+    const planText = typeof canonicalPlan === "string" ? canonicalPlan.trim() : JSON.stringify(canonicalPlan, null, 2);
     const planSection = canonicalPlan ? `
 
 ### \u{1F4D0} Canonical Approved Architecture Plan (Injected by Scope Gate Hook)
-${canonicalPlan.trim()}` : "";
-    const specSection = specBody ? `
+${planText}` : "";
+    const specText = typeof specBody === "string" ? specBody.trim() : "";
+    const specSection = specText ? `
 
 ### \u{1F4CB} Verified Issue Specification & Acceptance Criteria
-${specBody.trim()}` : "";
+${specText}` : "";
     let reworkSection = "";
     const prevQA = dashDev?.phases?.qa;
     if (lock2.currentAttempt > 1 && prevQA?.status === "FAIL") {
@@ -2723,12 +2741,14 @@ ${details.testsAddedOrChanged.map((t) => `- ${t}`).join("\n")}`);
 ${details.testSummary}`);
     }
     if (archPlan) {
+      const planStr = typeof archPlan === "string" ? archPlan.trim() : JSON.stringify(archPlan, null, 2);
       mdParts.push(`#### \u{1F4D0} Approved Architecture Plan
-${archPlan.trim()}`);
+${planStr}`);
     }
-    if (stateObj?.issue?.body) {
+    const issueBody = typeof stateObj?.issue?.body === "string" ? stateObj.issue.body.trim() : "";
+    if (issueBody) {
       mdParts.push(`#### \u{1F4CB} Verified Issue Acceptance Criteria & Specification
-${stateObj.issue.body.trim()}`);
+${issueBody}`);
     }
     return {
       details,

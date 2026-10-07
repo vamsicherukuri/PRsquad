@@ -542,14 +542,14 @@ async function main() {
       canonicalPlan = extractedPlan;
     }
 
-    const specBody = state.issue?.body || dashDev?.phases?.intake?.details?.problem || "";
-
+    const planText = typeof canonicalPlan === "string" ? canonicalPlan.trim() : JSON.stringify(canonicalPlan, null, 2);
     const planSection = canonicalPlan
-      ? `\n\n### 📐 Canonical Approved Architecture Plan (Injected by Scope Gate Hook)\n${canonicalPlan.trim()}`
+      ? `\n\n### 📐 Canonical Approved Architecture Plan (Injected by Scope Gate Hook)\n${planText}`
       : "";
 
-    const specSection = specBody
-      ? `\n\n### 📋 Verified Issue Specification & Acceptance Criteria\n${specBody.trim()}`
+    const specText = typeof specBody === "string" ? specBody.trim() : "";
+    const specSection = specText
+      ? `\n\n### 📋 Verified Issue Specification & Acceptance Criteria\n${specText}`
       : "";
 
     // Deterministic QA Rework Diagnostics (Attempt 2+ following a failed QA verification)
@@ -771,10 +771,12 @@ async function main() {
       mdParts.push(`#### 🔍 Developer Test Summary\n${details.testSummary}`);
     }
     if (archPlan) {
-      mdParts.push(`#### 📐 Approved Architecture Plan\n${archPlan.trim()}`);
+      const planStr = typeof archPlan === "string" ? archPlan.trim() : JSON.stringify(archPlan, null, 2);
+      mdParts.push(`#### 📐 Approved Architecture Plan\n${planStr}`);
     }
-    if (stateObj?.issue?.body) {
-      mdParts.push(`#### 📋 Verified Issue Acceptance Criteria & Specification\n${stateObj.issue.body.trim()}`);
+    const issueBody = typeof stateObj?.issue?.body === "string" ? stateObj.issue.body.trim() : "";
+    if (issueBody) {
+      mdParts.push(`#### 📋 Verified Issue Acceptance Criteria & Specification\n${issueBody}`);
     }
 
     return {

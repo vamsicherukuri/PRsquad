@@ -1,8 +1,22 @@
-import ts from "typescript";
+import type ts from "typescript";
+import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { toPosixRelative } from "./stateStore.js";
+
+// Optional dynamic TypeScript loader for zero-dependency bundled runtime
+let _cachedTs: any = undefined;
+function getTsCompiler(): any {
+  if (_cachedTs !== undefined) return _cachedTs;
+  try {
+    const req = createRequire(import.meta.url);
+    _cachedTs = req("typescript");
+  } catch {
+    _cachedTs = null;
+  }
+  return _cachedTs;
+}
 
 export interface ExternalReference {
   symbol: string;
@@ -33,15 +47,17 @@ export function extractExportedSymbols(filePath: string, rootDir: string = proce
   const content = readFileSync(full, "utf-8");
   const symbols = new Set<string>();
 
-  try {
-    const sourceFile = ts.createSourceFile(
-      filePath,
-      content,
-      ts.ScriptTarget.Latest,
-      true
-    );
+  const ts = getTsCompiler();
+  if (ts) {
+    try {
+      const sourceFile = ts.createSourceFile(
+        filePath,
+        content,
+        ts.ScriptTarget.Latest,
+        true
+      );
 
-    function visit(node: ts.Node) {
+    function visit(node: any) {
       const modifiers = (ts.canHaveModifiers && ts.canHaveModifiers(node)
         ? ts.getModifiers(node)
         : (node as any).modifiers) || [];
@@ -121,18 +137,24 @@ export function extractExportedSymbols(filePath: string, rootDir: string = proce
       ts.forEachChild(node, visit);
     }
 
-    visit(sourceFile);
-  } catch {
-    // Graceful fallback to regex scanning if AST parsing fails
-    const exportRegex =
-      /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
-    let match: RegExpExecArray | null;
-    while ((match = exportRegex.exec(content)) !== null) {
-      if (match[1]) symbols.add(match[1]);
+      visit(sourceFile);
+      if (symbols.size > 0) {
+        return [...symbols];
+      }
+    } catch {
+      // Fall through to regex scanning
     }
-    if (/export\s+default\b/.test(content)) {
-      symbols.add("default");
-    }
+  }
+
+  // Graceful fallback to regex scanning if TypeScript is not available or AST threw
+  const exportRegex =
+    /export\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = exportRegex.exec(content)) !== null) {
+    if (match[1]) symbols.add(match[1]);
+  }
+  if (/export\s+default\b/.test(content)) {
+    symbols.add("default");
   }
 
   return [...symbols];
