@@ -26,6 +26,10 @@ import {
 } from "../src/guardrails/stateStore.js";
 
 const REPO_ROOT = getRepoRoot();
+let initialBranch = "";
+try {
+  initialBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+} catch {}
 const TEST_ISOLATED_DIR = mkdtempSync(join(tmpdir(), "gated-guardrails-test-"));
 try {
   execSync("git init", { cwd: TEST_ISOLATED_DIR, stdio: "ignore" });
@@ -381,6 +385,13 @@ console.log("=======================================================\n");
 try {
   rmSync(TEST_ISOLATED_DIR, { recursive: true, force: true });
 } catch {}
+
+if (initialBranch && initialBranch !== "HEAD") {
+  try {
+    execSync(`git checkout ${initialBranch}`, { cwd: REPO_ROOT, stdio: "ignore" });
+    execSync(`git branch -D fix/issue-999 fix/issue-gated-change`, { cwd: REPO_ROOT, stdio: "ignore" });
+  } catch {}
+}
 
 if (passedCount < totalCount) {
   process.exit(1);
