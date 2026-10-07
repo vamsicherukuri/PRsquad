@@ -47,9 +47,9 @@ The specialists do **not** directly delegate work to one another. Every speciali
 
 
 
-## Why PR Squad (Goverened Agentic workflow)?
+## What is PR Squad?
 
-PRSquad is a supervised agentic development workflow for GitHub Copilot that takes a GitHub issue through planning, implementation, independent QA, review, and pull-request creation using specialized AI agents.
+PR Squad is a supervised agentic development workflow for GitHub Copilot that takes a GitHub issue through planning, implementation, independent QA, review, and pull-request creation using specialized AI agents.
 
 ### The Challenge
 
@@ -86,7 +86,7 @@ PRSquad also makes agentic execution observable by tracking **AI credit consumpt
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
-In our Copilot App configuration (`hooks.json` and agent definitions), the 6 hooks are deployed across the agents as follows:
+4 Deterministic Hook Engines enforcing 6 Specialized Guardrails across the lifecycle.
 
 | # | Hook Interception | Hook Script File | Deployed At Which Agent? | Trigger Event |
 |:---:|---|---|---|---|
