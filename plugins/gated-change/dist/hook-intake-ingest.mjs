@@ -461,7 +461,7 @@ function renderDashboardMarkdown(data) {
 `;
   md += `| **2. Architecture Plan** | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Root cause identified & surgical scope proposed"} | ${renderCredits(p.architect?.credits)} |
 `;
-  md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval signed in chat"} | **0.00 AIU** *(Deterministic)* |
+  md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval recorded via /approve"} | **0.00 AIU** *(Deterministic)* |
 `;
   md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |
 `;
@@ -586,7 +586,7 @@ ${revDetails.mergeGateSummary}
     md += `> **Risk Tier:** \`${riskTier}\`  
 `;
     if (p.scopeGate?.details?.approvedBy) {
-      md += `> **Human Approval:** Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`  
+      md += `> **Human Approval:** Authorized by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`  
 
 `;
     }

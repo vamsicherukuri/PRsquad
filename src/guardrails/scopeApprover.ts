@@ -2,8 +2,8 @@
  * Deterministic Scope Gate Approver (Layer B Deterministic Guardrail)
  * 
  * Executes when human authorizes implementation at the Human Scope Gate.
- * Implements Approval Integrity Binding: binds approval.lock cryptographically
- * to the exact canonical Architect plan (planHash) and base commit (baseRef).
+ * Implements Approval Integrity Binding: binds approval.lock via cryptographic
+ * SHA-256 digest to the exact canonical Architect plan (planHash) and base commit (baseRef).
  * 
  * Enforces the core invariant: "The model cannot approve itself."
  */
@@ -118,7 +118,7 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
     }
   }
 
-  // 4. Create cryptographic approval lock with Approval Integrity Binding
+  // 4. Create deterministic approval lock with Approval Integrity Binding
   const lock: ApprovalLock = {
     issueNumber,
     approvedScope: String(targetScope).replace(/\\/g, "/"),

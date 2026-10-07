@@ -809,11 +809,11 @@
         <span class="badge-pill badge-green">⚡ Zero-Bypass Mechanical Guardrails</span>
       </div>
       <p class="hero-subhead" style="font-size:13.5px; font-weight:500; color:#e6edf3; margin-bottom:4px;">
-        <em>"Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates."</em>
+        <em>"Supervised multi-agent autonomy with deterministic policy enforcement and deterministically gated human approval."</em>
       </p>
       <p class="hero-subhead">
         Unconstrained AI agents cause runaway token loops, hallucinated dependencies, and broken main branches. 
-        <strong>PRsquad</strong> coordinates 5 specialist subagents under a strict supervisor orchestrator (<code>@prsquad</code>), enforcing physical PreToolUse hooks, cryptographic human scope locks (<code>approval.lock</code>), isolated sandbox worktrees, and bounded repair loops.
+        <strong>PRsquad</strong> coordinates 5 specialist subagents under a strict supervisor orchestrator (<code>@prsquad</code>), enforcing physical PreToolUse hooks, deterministic human scope locks (<code>approval.lock</code>) with approval integrity binding, isolated sandbox worktrees, and bounded repair loops.
       </p>
       <div class="stat-row">
         <div class="stat-card">
@@ -1034,7 +1034,7 @@
           <tr>
             <td><strong>Human Authorization</strong></td>
             <td>Informal prompt suggestion</td>
-            <td><span style="color:var(--green);">✓ Cryptographic approval.lock Barrier (Halts Dev Spawn)</span></td>
+            <td><span style="color:var(--green);">✓ Deterministic approval.lock Barrier (Halts Dev Spawn)</span></td>
           </tr>
           <tr>
             <td><strong>Repair Loops</strong></td>
@@ -1142,7 +1142,7 @@
             <li>Install <code>gated-change</code> (PRsquad).</li>
             <li>Open a real GitHub Issue in the App and start a <strong>Plan</strong> session.</li>
             <li>Invoke <code>@prsquad</code> in chat: <em>"Resolve issue #22 using governed pipeline"</em>.</li>
-            <li>Review the Architect plan, then type <code>/approve</code> in chat to cryptographically sign the Scope Gate lock.</li>
+            <li>Review the Architect plan, then type <code>/approve</code> in chat to authorize the Scope Gate lock with plan integrity binding.</li>
             <li>Watch Developer, QA, and Reviewer execute under active hook containment, delivering a pristine Pull Request.</li>
           </ol>
         </div>
@@ -1225,12 +1225,12 @@
         title: "Scope Approval Gate · Human Authorization Barrier",
         badge: "APPROVED",
         badgeClass: "badge-green",
-        desc: "Cryptographic human-in-the-loop barrier. Physical approval.lock must be present on disk before developer agent process can spawn.",
+        desc: "Deterministic human-in-the-loop barrier. Physical approval.lock must be present on disk before developer agent process can spawn.",
         intelText: "Physical Gate Lock Barrier\n• Requires maintainer /approve in chat. Prevents autonomous subagent dispatch.",
         checkpoints: [
           {
             allow: true,
-            title: "Cryptographic Lock Signed: approval.lock",
+            title: "Deterministic Approval Lock Active: approval.lock",
             hook: "hook-verify-gate",
             desc: "Verified maintainer in-chat approval for: src/guardrails/prCreator.ts, scripts/test-guardrails.ts",
             code: "approval.lock: { issueNumber: 22, approvedBy: 'human-in-chat', maxAttempts: 3 }"

@@ -426,7 +426,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
   }
   md += `| **1. Issue Triage** | ${getStatusBadge(p.intake?.status)} | ${p.intake?.summary || "Verified issue requirements & reproduction"} | ${renderCredits(p.intake?.credits)} |\n`;
   md += `| **2. Architecture Plan** | ${getStatusBadge(p.architect?.status)} | ${p.architect?.summary || "Root cause identified & surgical scope proposed"} | ${renderCredits(p.architect?.credits)} |\n`;
-  md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval signed in chat"} | **0.00 AIU** *(Deterministic)* |\n`;
+  md += `| **3. Scope Approval Gate** | ${getStatusBadge(p.scopeGate?.status)} | ${p.scopeGate?.summary || "Human approval recorded via /approve"} | **0.00 AIU** *(Deterministic)* |\n`;
   md += `| **4. Implementation** | ${getStatusBadge(devStatus)} | ${devSummary} | ${renderCredits(p.developer?.credits)} |\n`;
   md += `| **5. QA Verification** | ${getStatusBadge(p.qa?.status)} | ${p.qa?.summary || "Automated regression test suite passed"} | ${renderCredits(p.qa?.credits)} |\n`;
   md += `| **6. Security & Code Review** | ${getStatusBadge(p.reviewer?.status)} | ${p.reviewer?.summary || "Zero security flags · In-scope diff confirmed"} | ${renderCredits(p.reviewer?.credits)} |\n`;
@@ -508,7 +508,7 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     md += `> **Approved Scope:** \`${approvedScope}\`  \n`;
     md += `> **Risk Tier:** \`${riskTier}\`  \n`;
     if (p.scopeGate?.details?.approvedBy) {
-      md += `> **Human Approval:** Signed by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`  \n\n`;
+      md += `> **Human Approval:** Authorized by \`${p.scopeGate.details.approvedBy}\` at \`${p.scopeGate.details.approvedAt || updatedIso}\`  \n\n`;
     }
 
     if (archPlan) {

@@ -955,7 +955,7 @@
           </div>
           <div class="checkpoint-desc">Physical lock check prevents subagent process dispatch until maintainer explicitly types /approve.</div>
           <div class="checkpoint-detail-row" id="orch-row-2">
-            ↳ Policy: Cryptographic approval.lock required on disk before developer agent process can spawn.
+            ↳ Policy: Deterministic approval.lock required on disk before developer agent process can spawn.
           </div>
         </div>
       `;
@@ -989,7 +989,7 @@
         title = "Scope Approval Gate · Human Authorization Barrier";
         badge = p.scopeGate?.status || "AWAITING";
         badgeStyle = "background:var(--amber-bg); color:var(--amber-text); border:1px solid var(--amber-border);";
-        summary = p.scopeGate?.summary || "Cryptographic human-in-the-loop barrier. Developer execution remains blocked until maintainer confirms plan via /approve.";
+        summary = p.scopeGate?.summary || "Deterministic human-in-the-loop barrier. Developer execution remains blocked until maintainer confirms plan via /approve.";
       } else if (stageIndex === 3) {
         title = "@prsquad-dev · Developer Implementation";
         badge = p.developer?.status || "QUEUED";
@@ -1120,7 +1120,7 @@
           const fallbacks = [
             { title: "Fast-Fail & Acceptance Intake Verified", hook: "hook-intake-ingest", desc: "Issue requirements extracted and validated with 0 LLM tokens wasted.", detail: "Deterministic API intake active · Acceptance criteria confirmed" },
             { title: "Architecture Diagnostic Plan Verified", hook: "hook-enforce-scope", desc: "Root cause diagnosed; modification bounds strictly limited to surgical scope.", detail: "Target files bounded · Zero uncontrolled edits permitted" },
-            { title: "Human Scope Lock Barrier Enforced", hook: "hook-verify-gate", desc: "Cryptographic gate barrier active; Developer execution prevented without approval.lock.", detail: "Requires maintainer /approve in chat before dispatching developer agent" },
+            { title: "Human Scope Lock Barrier Enforced", hook: "hook-verify-gate", desc: "Deterministic gate barrier active; Developer execution prevented without approval.lock.", detail: "Requires maintainer /approve in chat before dispatching developer agent" },
             { title: "Developer Write Barrier Containment", hook: "hook-enforce-scope", desc: "All edits restricted strictly to approved scope prefix; protected files locked.", detail: "Write barrier actively intercepting file system modifications" },
             { title: "QA Sandbox Verification Verified", hook: "hook-sandbox-bash", desc: "Automated regression test suites executed inside an isolated worktree sandbox.", detail: "Sandbox prevents non-validation mutations; tests verified 100% pass" },
             { title: "Security Audit & AST Contract Sweep", hook: "hook-ast-audit", desc: "Read-only inspection verified AST contract stability and OWASP compliance.", detail: "AST public symbols verified · Zero secrets or credentials leaked" },
@@ -1179,7 +1179,7 @@
           desc = `Enforced sandbox security policy.`;
           detail = `POLICY_DENIAL: ${e.details?.reason || 'Forbidden mutating command'}`;
         } else if (e.action === 'human_scope_gate_auto_signed_from_chat' || e.action === 'human_scope_gate_approved') {
-          title = `Cryptographic Lock Signed: approval.lock`;
+          title = `Deterministic Approval Lock Active: approval.lock`;
           desc = `Verified maintainer in-chat approval for: ${e.details?.approvedScope || 'Declared scope'}`;
           detail = `Approved By: ${e.details?.approvedBy || 'human-in-chat'} · Issue #${e.details?.issueNumber || ''}`;
         } else if (e.action === 'human_scope_gate_rejected') {
@@ -1188,7 +1188,7 @@
           detail = `Revision Count: ${e.details?.revisionCount || 1}`;
         } else if (e.action === 'developer_invocation_authorized') {
           title = `Developer Process Spawning Authorized`;
-          desc = `Verified cryptographic lock on disk for attempt ${e.details?.attempt || 1}.`;
+          desc = `Verified deterministic lock on disk for attempt ${e.details?.attempt || 1}.`;
           detail = `Approved Scope: ${e.details?.approvedScope || ''} · Branch: ${e.details?.activeBranch || 'default'}`;
         } else if (e.action === 'developer_invocation_blocked_no_lock') {
           title = `Developer Spawning Denied (No Lock)`;

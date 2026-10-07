@@ -16,7 +16,7 @@
  *   Edge Case 10: Reviewer Risk Flags (CONCERNS -> Merge Gate without token burn)
  *   Edge Case 11: Base Branch & Branch Deletion Guardrail Protections
  *   Edge Case 12: Dynamic Hook Portability, Dispatch Resilience & Payload Passthrough
- *   Edge Case 13: Pull Request Provenance, Cryptographic Lock Fidelity & Badge Fallbacks
+ *   Edge Case 13: Pull Request Provenance, Deterministic Lock Fidelity & Badge Fallbacks
  *   Edge Case 14: Deterministic Specialist Handoff Validation & Schema Guardrails
  */
 
@@ -540,9 +540,9 @@ async function runEdgeCases() {
   }
 
   // -------------------------------------------------------------------------
-  // EDGE CASE 13: PR Provenance, Cryptographic Lock Fidelity & Badge Fallbacks
+  // EDGE CASE 13: PR Provenance, Deterministic Lock Fidelity & Badge Fallbacks
   // -------------------------------------------------------------------------
-  logCase(13, "PR Provenance, Cryptographic Scope Lock Fidelity & Badge Fallbacks");
+  logCase(13, "PR Provenance, Deterministic Scope Lock Fidelity & Badge Fallbacks");
   {
     // 1. Missing Lock Fallback: Gracefully renders default provenance without null reference error
     revokeApprovalLock("REVOKED", REPO_ROOT);
@@ -557,12 +557,12 @@ async function runEdgeCases() {
 
     assert(bodyWithoutLock.includes("PRsquad-Supervised%20Workflow-8250df"), "PR body embeds Supervised Workflow shield badge");
     assert(bodyWithoutLock.includes("Deterministic%20Policy-Enforced%20(55%2F55)-2ea043"), "PR body embeds Deterministic Policy (55/55) badge");
-    assert(bodyWithoutLock.includes("Scope%20Gate-Cryptographically%20Signed-0969da"), "PR body embeds Cryptographic Scope Gate badge");
+    assert(bodyWithoutLock.includes("Scope%20Gate-Deterministically%20Locked-0969da"), "PR body embeds Deterministic Scope Gate badge");
     assert(bodyWithoutLock.includes("Closes #42"), "PR body references target issue #42");
     assert(bodyWithoutLock.includes("Approval Lock Status**: `ACTIVE`"), "Missing lock safely falls back to status ACTIVE");
     assert(bodyWithoutLock.includes("Authorized By**: `Human Maintainer`"), "Missing lock safely falls back to default Human Maintainer");
 
-    // 2. Active Custom Cryptographic Lock: Accurately reflects custom maintainer identity and approved scope
+    // 2. Active Custom Deterministic Lock: Accurately reflects custom maintainer identity and approved scope
     const preState = loadState(REPO_ROOT);
     preState.issue = {
       owner: "vamsicherukuri",
@@ -592,8 +592,8 @@ async function runEdgeCases() {
     });
 
     assert(bodyWithLock.includes("security-auditor@enterprise.internal"), "PR body renders authenticated maintainer identity");
-    assert(bodyWithLock.includes("2026-10-06T20:00:00.000Z"), "PR body renders exact signed timestamp");
-    assert(bodyWithLock.includes("src/auth/token.ts, src/auth/verifier.ts"), "PR body reflects exact cryptographic approved scope");
+    assert(bodyWithLock.includes("2026-10-06T20:00:00.000Z"), "PR body renders exact approval timestamp");
+    assert(bodyWithLock.includes("src/auth/token.ts, src/auth/verifier.ts"), "PR body reflects exact approved scope boundary");
 
     // Clean up test lock
     revokeApprovalLock("REVOKED", REPO_ROOT);

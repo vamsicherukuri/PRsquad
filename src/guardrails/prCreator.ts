@@ -20,7 +20,7 @@ export interface PRResult {
 }
 
 /**
- * Builds the structured Pull Request body with verification badges and cryptographic provenance.
+ * Builds the structured Pull Request body with verification badges and deterministic provenance.
  */
 export function buildPullRequestBody(params: {
   rootDir?: string;
@@ -47,7 +47,7 @@ export function buildPullRequestBody(params: {
 <p align="left">
   <a href="https://github.com/vamsicherukuri/prsquad"><img alt="Supervised Agentic Workflow" src="https://img.shields.io/badge/PRsquad-Supervised%20Workflow-8250df?style=flat-square&logo=github"></a>
   <a href="#"><img alt="Deterministic Policy" src="https://img.shields.io/badge/Deterministic%20Policy-Enforced%20(55%2F55)-2ea043?style=flat-square"></a>
-  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Cryptographically%20Signed-0969da?style=flat-square"></a>
+  <a href="#"><img alt="Human Scope Gate" src="https://img.shields.io/badge/Scope%20Gate-Deterministically%20Locked-0969da?style=flat-square"></a>
 </p>
 
 Closes #${params.issueNum}
@@ -55,7 +55,7 @@ Closes #${params.issueNum}
 ### 📋 Overview
 ${params.issueTitle}
 
-### 🔏 Cryptographic Provenance & Scope Lock
+### 🔒 Deterministic Provenance & Scope Lock
 - **Approval Lock Status**: \`${lock?.status || "ACTIVE"}\`
 - **Authorized By**: \`${lock?.approvedBy || "Human Maintainer"}\` (${lock?.approvedAt || "Verified via in-chat /approve"})
 - **Approved Scope**: \`${lock?.approvedScope || state.approvedScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts"}\`
@@ -220,7 +220,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       }
     } catch {}
 
-    // 5. Build rich structured PR body with verification badges and cryptographic provenance
+    // 5. Build rich structured PR body with verification badges and deterministic provenance
     const prTitle = options.customTitle || `fix: support multi-path approved scope (fixes #${issueNum})`;
     const prBody = buildPullRequestBody({
       rootDir,

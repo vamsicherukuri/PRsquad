@@ -2,7 +2,7 @@
 /**
  * CLI Tool: Deterministic Human Scope Gate Approver
  * Executed when human maintains authorize implementation via /approve.
- * Creates the cryptographically verifiable approval.lock file on disk.
+ * Creates the deterministically verified approval.lock file on disk with approval integrity binding.
  * 
  * Enforces the core invariant: "The model cannot approve itself."
  */
@@ -50,7 +50,7 @@ async function main() {
     console.log(`   Issue: #${result.lock.issueNumber}`);
     console.log(`   Approved Scope: ${result.lock.approvedScope}`);
     console.log(`   Authorized By: ${result.lock.approvedBy}`);
-    console.log(`   Signed At: ${result.lock.approvedAt}`);
+    console.log(`   Approved At: ${result.lock.approvedAt}`);
     console.log(`   Lock file: .gated-change/approval.lock`);
     console.log(`\nDeveloper agent is now authorized to implement changes strictly within this boundary.`);
     process.exit(0);

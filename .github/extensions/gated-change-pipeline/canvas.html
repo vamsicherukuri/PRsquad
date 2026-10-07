@@ -788,7 +788,7 @@
       </div>
 
       <!-- Hook 2 -->
-      <div class="hook-card done" id="hook-card-2" onclick="selectStage(2)" title="hook-verify-gate: Cryptographic approval.lock verification">
+      <div class="hook-card done" id="hook-card-2" onclick="selectStage(2)" title="hook-verify-gate: Deterministic approval.lock verification">
         <div class="hook-name">verify-gate</div>
         <div class="hook-desc">SHA256 Lock</div>
       </div>
@@ -935,11 +935,11 @@
         content: "Human-in-the-loop review barrier. Developer execution remains blocked until PM confirms proposed boundaries in chat.",
         gov: {
           hookName: "hook-verify-gate.mjs",
-          hookDesc: "Cryptographic lock verifier enforcing physical human consent before developer invocation.",
+          hookDesc: "Deterministic lock verifier enforcing physical human consent before developer invocation.",
           triggerName: "preAgent: developer",
           triggerDesc: "Intercepts agent lifecycle before Developer agent process is spawned.",
-          policyName: "Cryptographic Scope Verification",
-          policyDesc: "Hard-stops execution until maintainer signs approval.lock in chat.",
+          policyName: "Deterministic Scope Gate Verification",
+          policyDesc: "Hard-stops execution until maintainer authorizes approval.lock in chat.",
           cost: "0.00 AIU · Zero Token Overhead"
         }
       },

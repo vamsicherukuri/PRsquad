@@ -4,13 +4,13 @@
     "name": "Vamsi Cherukuri"
   },
   "metadata": {
-    "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates.",
+    "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and deterministically gated human approval.",
     "version": "0.1.49"
   },
   "plugins": [
     {
       "name": "prsquad",
-      "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates.",
+      "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot. Supervised multi-agent autonomy with deterministic policy enforcement and deterministically gated human approval.",
       "version": "0.1.49",
       "source": "./plugins/gated-change"
     }

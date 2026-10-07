@@ -1,6 +1,6 @@
 # PRsquad · Supervised Agentic Workflow for GitHub Copilot
 
-> **"Supervised multi-agent autonomy with deterministic policy enforcement and cryptographically verified human approval gates."**
+> **"Supervised multi-agent autonomy with deterministic policy enforcement and deterministically gated human approval."**
 
 <p align="center">
   <a href="https://vamsicherukuri.github.io/prsquad/"><b>🎮 Live Interactive Simulator</b></a> ·
@@ -68,7 +68,7 @@ PRsquad guides the issue through its governed 7-stage pipeline:
 `Triage` → `Architecture` → `Scope Approval` → `Development` → `QA` → `Code Review` → `PR Approval`
 
 * `@prsquad-architect` analyzes the issue and drafts a scoped fix plan (read-only symbol jail).
-* Maintainer reviews the plan and types `/approve` in chat to cryptographically sign `approval.lock`.
+* Maintainer reviews the plan and types `/approve` in chat to mint the deterministic `approval.lock` with approval integrity binding.
 * `@prsquad-dev`, `@prsquad-qa`, and `@prsquad-review` execute under mechanical PreToolUse containment.
 * PRsquad opens the Pull Request on GitHub and halts. Merge remains a human-maintainer decision.
 
@@ -135,7 +135,7 @@ The following figures represent **measured production telemetry** from resolving
 |---|---|---|---|---|
 | **00 · Intake Triage** | `@prsquad-triage` | GitHub issue validation, acceptance criteria check | **1.33 AIU** *(0 if cached)* | **Fast-fails in <2s**; capped at 2 clarification rounds |
 | **01 · Blast-Radius Plan** | `@prsquad-architect` | Read-only AST search, caller/importer graph | **9.85 AIU** *(6 turns)* | Read-only jail; single pass without self-loops; feeds Scope Gate |
-| **02 · Scope Gate** | **Human Maintainer** | Plain-language plan review; issues `/approve` | **0.00 AIU** *(zero tokens)* | **Cryptographic lock** (`approval.lock`); blocks Dev process |
+| **02 · Scope Gate** | **Human Maintainer** | Plain-language plan review; issues `/approve` | **0.00 AIU** *(zero tokens)* | **Deterministic lock** (`approval.lock`); blocks Dev process |
 | **03 · Contained Fix** | `@prsquad-dev` | Code generation & tests on `fix/issue-N` | **25.28 AIU** *(16 turns)* | **Write barrier** (`hook-enforce-scope.mjs`); branch push locks |
 | **04 · Verification** | `@prsquad-qa` | Test runner execution (`npm test`, 55/55 passed) | **13.60 AIU** *(13 turns)* | Isolated worktree; **0 git mutations**; capped at 3 retries |
 | **05 · Contract Sweep** | `@prsquad-review` | AST symbol contract sweep, OWASP audit | **5.27 AIU** *(2 turns)* | **0-token TS Compiler AST engine**; flags only |
@@ -195,7 +195,7 @@ What actually happens when a stage doesn't go cleanly:
 | **Intake Triage** | Issue has clear criteria & scope | Proceeds to Architect planning | 0 retries consumed |
 | **Intake Triage** | Issue is vague / missing criteria | Emits targeted clarification prompt (max 2 rounds) | Consumes 1 clarification round |
 | **Intake Triage** | Closed / duplicate issue | Deterministic fast-fail in `<2s` | **0 LLM tokens spent** |
-| **Scope Gate** | Maintainer types `/approve` | Auto-signs `approval.lock`; unblocks Developer process | Zero retry cost; human gate |
+| **Scope Gate** | Maintainer types `/approve` | Mints `approval.lock` with plan integrity binding; unblocks Developer | Zero retry cost; human gate |
 | **Scope Gate** | Maintainer requests revision | Architect re-plans with updated boundaries (1 pass) | Consumes 1 revision round |
 | **Scope Gate** | Maintainer types `/reject` | Revokes lock; workflow terminates cleanly | Zero retry cost; clean halt |
 | **Write Barrier** | Mutation within approved scope | PreToolUse permits file edit | Normal execution |
@@ -214,7 +214,7 @@ What actually happens when a stage doesn't go cleanly:
 | Dimension | Raw Autonomous Agents | PRsquad Supervised Workflow |
 |---|---|---|
 | **Execution Boundary** | Unconstrained file system & shell execution | **Physical PreToolUse Hooks** (`hook-enforce-scope`, `hook-sandbox-bash`) |
-| **Human Oversight** | Prompt suggestions (easily bypassed by models) | **Cryptographic Barrier** (`approval.lock` physically halts developer spawn) |
+| **Human Oversight** | Prompt suggestions (easily bypassed by models) | **Deterministic Barrier** (`approval.lock` physically halts developer spawn) |
 | **Failure Recovery** | Open-ended loops ($\$\$$ runaway token burn) | **Hard Ceilings** (max 2 intake rounds, max 3 Dev/QA repair attempts) |
 | **Context Hygiene** | Monolithic prompt dumps (high latency & cost) | **Semantic Slicing & Proximity Skills** (60–80% prompt token reduction) |
 | **Branch Safety** | Directly mutates working tree / base branch | **Isolated Feature Branches** (`fix/issue-N`) with base branch push locks |
@@ -227,8 +227,8 @@ What actually happens when a stage doesn't go cleanly:
 ### 1. Bounded Retry Ceilings (No Runaway Loops)
 The Developer ↔ QA repair loop can hand back at most `3` times. A 4th failure does not spend a 4th round of tokens — it escalates to the maintainer and the pipeline pauses. This is the single biggest lever on runaway cost, since unbounded fix↔test loops are where multi-agent workflows bleed tokens.
 
-### 2. Cryptographic Scope Lock (`approval.lock`)
-Unlike prompt-based suggestions that models routinely ignore, the Scope Gate is enforced by a physical PreToolUse hook (`hook-verify-gate.mjs`). The Developer agent process is physically aborted at the operating system level unless a verified `approval.lock` signed by a human maintainer exists on disk.
+### 2. Deterministic Scope Lock (`approval.lock`) & Approval Integrity Binding
+Unlike prompt-based suggestions that models routinely ignore, the Scope Gate is enforced by a physical PreToolUse hook (`hook-verify-gate.mjs`). The Developer agent process is physically aborted at the operating system level unless a verified `approval.lock` authorized by a human maintainer exists on disk, cryptographically bound to the canonical Architect plan hash (`planHash`).
 
 ### 3. Surgical Write-Barrier & Smart Nudges
 The `hook-enforce-scope.mjs` hook intercepts all file-writing tools (`edit`, `edit_file`, `write_to_file`, `create_file`). Edits outside approved scope (e.g. `package.json`, `.github/workflows/`) are blocked. Instead of failing the entire agent session, the hook injects a structured `SCOPE_AMENDMENT_REQUIRED` smart nudge into the model's context, guiding it back into approved boundaries.
