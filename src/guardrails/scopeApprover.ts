@@ -74,6 +74,20 @@ export function computePlanHash(planOrHandoff: unknown): string {
   return createHash("sha256").update(normalized).digest("hex");
 }
 
+/**
+ * Computes a deterministic canonical SHA-256 hash for the full approval envelope:
+ * (issueNumber + approvedScope + baseRef + plan).
+ */
+export function computeApprovalEnvelopeHash(envelope: {
+  issueNumber: number;
+  approvedScope: string;
+  baseRef: string;
+  plan: any;
+}): string {
+  const canonical = canonicalJsonStringify(envelope);
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
 export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeApprovalResult {
   const repoRoot = getRepoRoot(options.preferredDir || process.cwd());
   const state = loadState(repoRoot);
@@ -148,7 +162,7 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
     };
   }
 
-  let baseRef = options.baseRef || state.baseRef;
+  let baseRef = options.baseRef;
   if (!baseRef) {
     try {
       baseRef = execSync("git rev-parse HEAD", {
@@ -157,15 +171,24 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
         stdio: ["ignore", "pipe", "ignore"],
       }).trim();
     } catch {
-      baseRef = "HEAD";
+      baseRef = state.baseRef || "HEAD";
     }
   }
 
   // 4. Create deterministic approval lock with Approval Integrity Binding
+  const approvedScopeStr = String(targetScope).replace(/\\/g, "/");
+  const approvalEnvelopeHash = computeApprovalEnvelopeHash({
+    issueNumber,
+    approvedScope: approvedScopeStr,
+    baseRef,
+    plan: rawPlan,
+  });
+
   const lock: ApprovalLock = {
     issueNumber,
-    approvedScope: String(targetScope).replace(/\\/g, "/"),
+    approvedScope: approvedScopeStr,
     planHash,
+    approvalEnvelopeHash,
     baseRef,
     maxAttempts: 3,
     currentAttempt: 1,

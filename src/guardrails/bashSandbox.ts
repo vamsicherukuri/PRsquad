@@ -43,12 +43,21 @@ export function validateCommandForAgent(
 ): BashValidationResult {
   const trimmed = command.trim();
 
-  // Global Safety: Autonomous agents cannot execute scope-approve to self-mint locks
-  const AGENT_SELF_APPROVE_REGEX = /\bscope-approve(?:\.ts|\.js)?\b/i;
+  // Global Safety: Autonomous agents cannot execute scope-approve, gate-approve, or pr-create to self-mint locks or open PRs
+  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|pr-create|gate-approve)(?:\.ts|\.js)?\b/i;
   if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
     return {
       allowed: false,
-      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve'. Scope authorization is exclusively reserved for the human maintainer.",
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve', 'gate-approve', or 'pr-create'. Scope authorization and PR creation are exclusively reserved for human maintainers.",
+    };
+  }
+
+  // Explicit package manager mutation & publishing deny-list across all agents
+  const PACKAGE_MUTATION_REGEX = /\b(?:npm\s+(?:install|i|add|publish|pack|link|uninstall|update|login)|pnpm\s+(?:install|i|add|publish|link|update)|yarn\s+(?:add|publish|install)|pip(?:3)?\s+install|cargo\s+publish|mvn\s+deploy|dotnet\s+nuget\s+push)\b/i;
+  if (PACKAGE_MUTATION_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL (PACKAGE_MUTATION_NOT_PERMITTED): Package management mutations and publishing ('${trimmed}') are strictly prohibited for pipeline agents.`,
     };
   }
 
@@ -175,15 +184,65 @@ export function validateCommandForAgent(
     };
   }
 
-  // 6. Developer Agent: Block git push to remotes (supports qualified names)
+  // 6. Developer Agent: Strict Execution Allowlist (Closes alternate write-bypass surface)
   if (isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "gated-change-developer")) {
+    // A. Disallow shell file redirection
+    if (trimmed.includes(">") || trimmed.includes(">>")) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (MUTATION_SURFACE_RESTRICTION): Developer agent cannot use shell redirection ('>' or '>>'). File mutations must occur exclusively through monitored edit tools.",
+      };
+    }
+
+    // B. Disallow shell composition and chaining operators (;, &&, ||, |, newline)
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): Developer agent cannot use shell composition or chaining operators (';', '&&', '||', '|').",
+      };
+    }
+
+    // C. Disallow script evaluation & command-line file manipulation bypasses
+    const SCRIPT_WRITE_BYPASS_REGEX = /\b(?:node\s+(?:-e|--eval)|python(?:3)?\s+-c|perl|ruby|Set-Content|Out-File|Add-Content|Export-Csv|New-Item|Copy-Item|Move-Item|Remove-Item|cp\s|mv\s|rm\s|sed\s|awk\s)\b/i;
+    if (SCRIPT_WRITE_BYPASS_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (MUTATION_SURFACE_RESTRICTION): Developer agent cannot execute arbitrary script evaluations or file manipulation utilities via the shell. All file edits must be performed through verified edit tools.",
+      };
+    }
+
+    // D. Disallow git push to remote
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {
         allowed: false,
         reason: "POLICY_DENIAL: Developer agent cannot push directly to remote git repositories.",
       };
     }
-    return { allowed: true };
+
+    // E. Allow approved Git inspection, branch, and commit operations
+    const DEV_GIT_ALLOWLIST_REGEX = /^git\s+(?:status|diff|add|commit|checkout|branch|log|show|rev-parse|ls-files|symbolic-ref|clean)\b/i;
+    if (DEV_GIT_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+
+    // F. Allow configured tooling (tests, build, lint)
+    try {
+      const config = detectRepoStack(rootDir || getRepoRoot());
+      if (config && isCommandAllowedByTooling(trimmed, config)) {
+        return { allowed: true };
+      }
+    } catch {}
+
+    // G. Allow native/standard test runners
+    if (TEST_RUNNER_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+
+    // H. Deny all other arbitrary shell commands
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL (DEVELOPER_SHELL_ALLOWLIST): Developer shell execution is restricted to Git operations and configured test/build commands. Command '${trimmed}' is blocked. File mutations must occur exclusively through monitored edit tools.`,
+    };
   }
 
   return { allowed: true };

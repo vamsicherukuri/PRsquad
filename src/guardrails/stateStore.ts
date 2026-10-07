@@ -91,38 +91,20 @@ export function toPosixRelative(filePath: string, rootDir: string = getRepoRoot(
   const full = resolve(rootDir, filePath);
   let rel = relative(rootDir, full);
 
-  // If relative path escaped rootDir with '..' but filePath is an absolute path,
-  // attempt to locate the true worktree root ONLY IF the target belongs to the same git repository
-  if (rel.startsWith("..") && isAbsolute(filePath)) {
-    try {
-      const currentGitCommon = execSync("git rev-parse --git-common-dir", {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-      const targetGitCommon = execSync("git rev-parse --git-common-dir", {
-        cwd: dirname(filePath),
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
+  // Canonical worktree containment boundary
+  try {
+    const canonicalRoot = existsSync(rootDir) ? realpathSync.native(rootDir) : resolve(rootDir);
+    const targetAbs = isAbsolute(filePath) ? filePath : resolve(rootDir, filePath);
+    const canonicalTarget = existsSync(targetAbs) ? realpathSync.native(targetAbs) : resolve(targetAbs);
+    const canonicalRel = relative(canonicalRoot, canonicalTarget).replace(/\\/g, "/");
 
-      const currentCommonAbs = resolve(rootDir, currentGitCommon).replace(/\\/g, "/").toLowerCase();
-      const targetCommonAbs = resolve(dirname(filePath), targetGitCommon).replace(/\\/g, "/").toLowerCase();
+    // Strictly enforce active worktree containment: only relativize if target is inside active worktree root
+    if (!canonicalRel.startsWith("..") && !isAbsolute(canonicalRel)) {
+      return canonicalRel.replace(/^\.\//, "");
+    }
+  } catch {}
 
-      // Enforce repository boundary: only relativize if git common directory matches exactly
-      if (currentCommonAbs === targetCommonAbs) {
-        const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
-          cwd: dirname(filePath),
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim().replace(/\\/g, "/");
-        if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
-          return cleanFilePath.slice(fileWorktreeRoot.length + 1);
-        }
-      }
-    } catch {}
-  }
-
+  // Outside active worktree root: retain relative escape (../) so scope checkers reject cross-worktree mutation
   return rel.split("\\").join("/").replace(/^\.\//, "");
 }
 

@@ -248,6 +248,51 @@ export function createPullRequest(options: PROptions = {}): PRResult {
           error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR or APPROVED).`,
         };
       }
+
+      // 4d. Anti-Stale Evidence Binding: Tested/Reviewed commits must match current HEAD
+      let currentHead = "";
+      try {
+        currentHead = execSync("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      } catch {}
+
+      if (currentHead && currentHead !== "HEAD") {
+        const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
+        if (qaCommit && qaCommit !== "HEAD" && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
+          return {
+            success: false,
+            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`,
+          };
+        }
+
+        const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
+        if (revCommit && revCommit !== "HEAD" && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
+          return {
+            success: false,
+            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`,
+          };
+        }
+      }
+
+      // 4e. Human PR Authorization Token Inspection
+      const searchDir = findGatedChangeDir(rootDir);
+      const prAuthPath = join(searchDir, "pr-authorization.json");
+      if (existsSync(prAuthPath)) {
+        try {
+          const authData = JSON.parse(readFileSync(prAuthPath, "utf-8"));
+          if (authData.status === "REVOKED") {
+            return {
+              success: false,
+              error: `PR_GATE_BLOCKED: PR authorization token has been revoked by maintainer.`,
+            };
+          }
+          if (authData.issueNumber && authData.issueNumber !== issueNum) {
+            return {
+              success: false,
+              error: `PR_GATE_BLOCKED: PR authorization token is bound to issue #${authData.issueNumber}, not current issue #${issueNum}.`,
+            };
+          }
+        } catch {}
+      }
     }
 
     const remoteInfo = getRepoOwnerAndName(rootDir);

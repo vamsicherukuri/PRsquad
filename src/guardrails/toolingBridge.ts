@@ -164,6 +164,19 @@ export function detectRepoStack(rootDir: string = getRepoRoot()): ToolingConfig 
   };
 }
 
+export const PACKAGE_MUTATION_REGEX = /\b(?:npm\s+(?:install|i|add|publish|pack|link|uninstall|update|login)|pnpm\s+(?:install|i|add|publish|link|update)|yarn\s+(?:add|publish|install)|pip(?:3)?\s+install|cargo\s+publish|mvn\s+deploy|dotnet\s+nuget\s+push)\b/i;
+
+export function matchesConfiguredCommand(actual: string, configured?: string): boolean {
+  if (!configured) return false;
+  const trimmedActual = actual.trim();
+  const trimmedConfig = configured.trim();
+  if (trimmedActual === trimmedConfig) return true;
+  if (trimmedActual.startsWith(trimmedConfig + " ") || trimmedActual.startsWith(trimmedConfig + "=")) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Checks whether a command is a permitted test command for QA based on the repository's stack.
  * Strictly verifies test runner subcommands and rejects arbitrary package commands (e.g. npm publish, npm install).
@@ -172,21 +185,15 @@ export function isCommandAllowedByTooling(command: string, config: ToolingConfig
   const trimmed = command.trim();
   const tokens = trimmed.split(/\s+/);
 
-  // 1. Exact match with configured test command
-  if (trimmed === config.testCommand) return true;
-
-  // 2. Allow configured test command with arguments (e.g. "npm test -- tests/auth.test.ts")
-  if (trimmed.startsWith(config.testCommand + " ") || trimmed.startsWith(config.testCommand + "=")) {
-    return true;
+  // 0. Explicit deny-list: Package mutations and publishing are strictly prohibited
+  if (PACKAGE_MUTATION_REGEX.test(trimmed)) {
+    return false;
   }
 
-  // 3. Allow configured build or lint command
-  if (config.buildCommand && (trimmed === config.buildCommand || trimmed.startsWith(config.buildCommand + " "))) {
-    return true;
-  }
-  if (config.lintCommand && (trimmed === config.lintCommand || trimmed.startsWith(config.lintCommand + " "))) {
-    return true;
-  }
+  // 1. Configured test, build, or lint command matching
+  if (matchesConfiguredCommand(trimmed, config.testCommand)) return true;
+  if (matchesConfiguredCommand(trimmed, config.buildCommand)) return true;
+  if (matchesConfiguredCommand(trimmed, config.lintCommand)) return true;
 
   // 3. Allow recognized test runner patterns for the stack
   if (config.stack === "npm" || config.stack === "typescript" || config.stack === "node") {

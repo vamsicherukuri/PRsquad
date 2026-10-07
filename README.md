@@ -76,7 +76,9 @@ PRsquad guides the issue through its governed 7-stage pipeline:
 
 > **Want to test without installing?**  
 > Explore the 7-stage workflow in your browser via the **[Live Interactive Simulator](https://vamsicherukuri.github.io/prsquad/)**, or validate locally with:  
-> `npm run check:plugin && npm run test:guardrails`
+> `npm run check:plugin && npm run test:guardrails`  
+>  
+> For comprehensive prompt-by-prompt manual verification of all 20 hardened security controls in GitHub Copilot App and VS Code, see the **[Copilot App Manual Testing Guide](docs/COPILOT_APP_MANUAL_TESTING_GUIDE.md)**.
 
 ---
 

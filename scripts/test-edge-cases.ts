@@ -51,6 +51,7 @@ import {
   approveScopeGate,
   computePlanHash,
   canonicalJsonStringify,
+  computeApprovalEnvelopeHash,
 } from "../src/guardrails/scopeApprover.js";
 import { isCommandAllowedByTooling, detectRepoStack } from "../src/guardrails/toolingBridge.js";
 import { fetchIssueDeterministic } from "../src/guardrails/ingestIssue.js";
@@ -1295,6 +1296,183 @@ async function runEdgeCases() {
     assert(["LOW", "MEDIUM", "HIGH"].includes(sweepComma.riskAssessment) && sweepComma.totalSymbolsAnalyzed > 0, "Symbol sweep handles comma-separated scopes");
     const sweepSemi = runSymbolSweep(["src/guardrails/scopeEnforcer.ts"], "src/guardrails; src/actions", REPO_ROOT);
     assert(["LOW", "MEDIUM", "HIGH"].includes(sweepSemi.riskAssessment) && sweepSemi.totalSymbolsAnalyzed > 0, "Symbol sweep handles semicolon-separated scopes");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 24: Developer Shell Script Write-Bypass & Redirection Lockdown
+  // -------------------------------------------------------------------------
+  logCase(24, "Developer Shell Script Write-Bypass & Shell File Redirection Lockdown");
+  {
+    const devNodeWrite = validateCommandForAgent("node -e \"fs.writeFileSync('evil.ts', 'hack')\"", "gated-change-developer");
+    assert(!devNodeWrite.allowed, "Developer blocked from node -e script execution");
+    assert(devNodeWrite.reason?.includes("MUTATION_SURFACE_RESTRICTION"), "Denial reason cites MUTATION_SURFACE_RESTRICTION");
+
+    const devPwshWrite = validateCommandForAgent("powershell -Command Set-Content evil.ts 'hack'", "gated-change-developer");
+    assert(!devPwshWrite.allowed, "Developer blocked from PowerShell Set-Content");
+
+    const devRedirect = validateCommandForAgent("echo evil > bad.ts", "gated-change-developer");
+    assert(!devRedirect.allowed, "Developer blocked from shell file redirection ('>')");
+
+    const devPythonWrite = validateCommandForAgent("python -c \"open('hack.py', 'w').write('x')\"", "gated-change-developer");
+    assert(!devPythonWrite.allowed, "Developer blocked from python -c script execution");
+
+    const devGitDiff = validateCommandForAgent("git diff", "gated-change-developer");
+    assert(devGitDiff.allowed, "Developer permitted legitimate git diff");
+
+    const devGitCommit = validateCommandForAgent("git commit -m 'fix bug'", "gated-change-developer");
+    assert(devGitCommit.allowed, "Developer permitted legitimate git commit");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 25: Canonical Worktree Containment & Cross-Worktree Path Isolation
+  // -------------------------------------------------------------------------
+  logCase(25, "Canonical Worktree Containment & Cross-Worktree Path Isolation");
+  {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "prsquad-edge25-worktree-"));
+    try {
+      const foreignFilePath = path.join(tempDir, "src", "payments.ts");
+      fs.mkdirSync(path.dirname(foreignFilePath), { recursive: true });
+      fs.writeFileSync(foreignFilePath, "// external sensitive file", "utf-8");
+
+      const relPath = toPosixRelative(foreignFilePath, REPO_ROOT);
+      const isExternal = relPath.startsWith("../") || path.isAbsolute(relPath);
+      assert(isExternal, "toPosixRelative preserves ../ traversal for foreign paths outside active worktree");
+
+      const editCheck = isEditAllowed(foreignFilePath, "src/payments.ts", REPO_ROOT);
+      assert(!editCheck.allowed, "isEditAllowed strictly blocks modifications to external worktree paths");
+      assert(
+        editCheck.reason?.includes("outside the approved scope") || editCheck.reason?.includes("SCOPE_VIOLATION"),
+        "Denial reason classifies external path as outside approved scope"
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 26: Stale Evidence Rejection at PR Gate (Head Commit Mismatch)
+  // -------------------------------------------------------------------------
+  logCase(26, "Stale Evidence Rejection at PR Gate (Head Commit Mismatch)");
+  {
+    const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
+    let savedDash: string | null = null;
+    if (fs.existsSync(dashFile)) savedDash = fs.readFileSync(dashFile, "utf-8");
+
+    const preState = loadState(REPO_ROOT);
+    const savedActiveBranch = preState.activeBranch;
+    preState.activeBranch = "fix/issue-42";
+    preState.issue = { owner: "test", repo: "test", number: 42, title: "Test issue" };
+    saveState(preState, REPO_ROOT);
+
+    saveApprovalLock({
+      issueNumber: 42,
+      approvedScope: "src/guardrails/stateStore.ts",
+      approvedBy: "Maintainer",
+      approvedAt: new Date().toISOString(),
+      status: "ACTIVE",
+    }, REPO_ROOT);
+
+    // Record QA PASS and Reviewer CLEAR on an obsolete/stale commit SHA
+    const staleCommitSha = "1111111111111111111111111111111111111111";
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "qa",
+      status: "PASS",
+      details: { verdict: "PASS", commitSha: staleCommitSha },
+    });
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "reviewer",
+      status: "PASS",
+      details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: staleCommitSha },
+    });
+
+    const prResult = createPullRequest({ preferredDir: REPO_ROOT });
+    assert(!prResult.success, "createPullRequest() rejects stale evidence when testedSha !== currentHead");
+    assert(prResult.error?.includes("STALE_EVIDENCE"), "Rejection explicitly cites STALE_EVIDENCE");
+
+    // Restore state and dashboard
+    preState.activeBranch = savedActiveBranch;
+    saveState(preState, REPO_ROOT);
+    revokeApprovalLock("REVOKED", REPO_ROOT);
+    if (savedDash) fs.writeFileSync(dashFile, savedDash, "utf-8");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 27: Stage Isolation & Anti-Manufacturing Gate
+  // -------------------------------------------------------------------------
+  logCase(27, "Stage Isolation & Anti-Manufacturing Gate");
+  {
+    const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
+    let savedDash: string | null = null;
+    if (fs.existsSync(dashFile)) savedDash = fs.readFileSync(dashFile, "utf-8");
+
+    // Developer is BLOCKED
+    syncWorkflowDashboard(REPO_ROOT, {
+      issueNumber: 42,
+      phase: "developer",
+      status: "BLOCKED",
+      details: { blockedReason: "Scope amendment needed" },
+    });
+
+    let exitCode = 0;
+    let denyReason = "";
+    try {
+      const input = JSON.stringify({
+        tool: "agent",
+        toolArgs: { name: "gated-change-qa", prompt: "Verify fix for issue 42" },
+      });
+      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+        cwd: REPO_ROOT,
+        input,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (err: any) {
+      exitCode = err.status;
+      try {
+        const parsed = JSON.parse(err.stdout || err.output?.[1] || "{}");
+        denyReason = parsed.reason || "";
+      } catch {}
+    }
+
+    assert(exitCode === 1, "QA PreToolUse exits with code 1 when Developer status is not IMPLEMENTED");
+    assert(denyReason.includes("IMPLEMENTED"), "Denial reason explicitly cites missing Developer IMPLEMENTED status");
+
+    if (savedDash) fs.writeFileSync(dashFile, savedDash, "utf-8");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 28: Approval Envelope Hashing & Baseline Drift Binding
+  // -------------------------------------------------------------------------
+  logCase(28, "Approval Envelope Hashing & Baseline Drift Binding");
+  {
+    const envA = {
+      issueNumber: 42,
+      approvedScope: "src/services/billing/",
+      baseRef: "1111111111111111111111111111111111111111",
+      plan: { rootCause: "rounding bug", changes: ["fix float round"] },
+    };
+    const envB = {
+      ...envA,
+      baseRef: "2222222222222222222222222222222222222222",
+    };
+
+    const hashA = computeApprovalEnvelopeHash(envA);
+    const hashB = computeApprovalEnvelopeHash(envB);
+
+    assert(hashA.length === 64, "computeApprovalEnvelopeHash produces 64-char SHA-256 digest");
+    assert(hashA !== hashB, "Envelope hashes differ when baseline baseRef changes");
+
+    // Order agnosticism in plan object
+    const envA_reordered = {
+      issueNumber: 42,
+      approvedScope: "src/services/billing/",
+      baseRef: "1111111111111111111111111111111111111111",
+      plan: { changes: ["fix float round"], rootCause: "rounding bug" },
+    };
+    const hashA_reordered = computeApprovalEnvelopeHash(envA_reordered);
+    assert(hashA === hashA_reordered, "computeApprovalEnvelopeHash is canonical and invariant to key ordering");
   }
 
   // -------------------------------------------------------------------------

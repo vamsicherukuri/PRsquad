@@ -321,9 +321,9 @@ async function main() {
     const resolvedIssue = resolveIssueNumber(input, toolArgs, state, lock);
     const branchName = `fix/issue-${resolvedIssue}`;
     let branchStatus = "unknown";
+    let currentBranch = "main";
 
     try {
-      let currentBranch = "main";
       try {
         currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
           cwd: repoRoot,
@@ -391,6 +391,27 @@ async function main() {
       } else {
         branchStatus = `retained_${currentBranch}`;
       }
+
+      // Independent physical checkout verification: verify git HEAD is genuinely on branchName if base switch occurred, and strictly enforce base branch lockdown
+      try {
+        const verifiedBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        if (verifiedBranch === "main" || verifiedBranch === "master") {
+          const output: HookOutput = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (BASE_BRANCH_LOCKDOWN): Developer agent cannot execute on base branch '${verifiedBranch}'. Halting fail-closed to protect base branch.`,
+          };
+          process.stdout.write(JSON.stringify(output) + "\n");
+          process.exit(1);
+        }
+        if (isBaseBranch && verifiedBranch !== branchName && verifiedBranch !== "HEAD") {
+          const output: HookOutput = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (CHECKOUT_VERIFICATION_FAILED): Expected active branch '${branchName}', but git rev-parse reported '${verifiedBranch}'. Halting fail-closed.`,
+          };
+          process.stdout.write(JSON.stringify(output) + "\n");
+          process.exit(1);
+        }
+      } catch {}
     } catch (branchErr: any) {
       appendAuditLog({
         sessionId: state.sessionId,
@@ -413,13 +434,29 @@ async function main() {
     state.humanApproval = true;
     state.approvedScope = lock.approvedScope;
     state.implementationAttempt = lock.currentAttempt;
-    state.activeBranch = branchName;
+    state.activeBranch = branchStatus.startsWith("retained_") ? currentBranch : branchName;
     if (!state.issue) {
       state.issue = { owner: "vamsicherukuri", repo: "prsquad", number: resolvedIssue };
     } else {
       state.issue.number = resolvedIssue;
     }
     saveState(state, repoRoot);
+
+    // Baseline Drift Verification on Attempt 1: Approved baseRef must match current repository baseline
+    if (lock.currentAttempt === 1 && lock.baseRef && lock.baseRef !== "HEAD") {
+      let currentHead = "";
+      try {
+        currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      } catch {}
+      if (currentHead && !currentHead.startsWith(lock.baseRef) && !lock.baseRef.startsWith(currentHead)) {
+        const output: HookOutput = {
+          decision: "deny",
+          reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`,
+        };
+        process.stdout.write(JSON.stringify(output) + "\n");
+        process.exit(1);
+      }
+    }
 
     const prompt = toolArgs.prompt || toolArgs.content || "";
     const extractedPlan = extractPlanMarkdown(prompt);
@@ -799,7 +836,7 @@ async function main() {
 
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const triageVal = validateTriage(input.toolResult);
-      const triageStatus = triageVal.valid ? triageVal.data.status : "NOT_READY";
+      const triageStatus = triageVal.valid ? triageVal.data.status : "HANDOFF_INVALID";
       const triageSummary = triageVal.valid
         ? (triageStatus === "READY"
             ? "Issue requirements extracted and acceptance criteria validated"
@@ -821,7 +858,7 @@ async function main() {
       });
 
       const triageInstruction = !triageVal.valid
-        ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Ask the maintainer clarifying questions or halt.`
+        ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.`
         : triageStatus === "NOT_READY"
           ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
           : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
@@ -834,7 +871,7 @@ async function main() {
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const archVal = validateArchitect(input.toolResult);
-      const archStatus = archVal.valid ? archVal.data.status : "BLOCKED";
+      const archStatus = archVal.valid ? archVal.data.status : "HANDOFF_INVALID";
       const rawText = typeof input.toolResult === "string"
         ? input.toolResult
         : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
@@ -885,7 +922,7 @@ async function main() {
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
       const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "SCHEMA_INVALID";
+      const devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
 
       // Deterministic auto-commit: strictly require VALID IMPLEMENTED handoff
       if (devVal.valid && devStatus === "IMPLEMENTED") {
@@ -939,7 +976,7 @@ async function main() {
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
-      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "SCHEMA_INVALID";
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "HANDOFF_INVALID";
 
       // Deterministic implementation retry tracking & exhaustion guardrail
       let retryExhausted = false;
@@ -996,7 +1033,7 @@ async function main() {
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revVal.valid ? revVal.data.assessment : "SCHEMA_INVALID";
+      const verdict = revVal.valid ? revVal.data.assessment : "HANDOFF_INVALID";
 
       syncWorkflowDashboard(repoRoot, {
         owner: state.issue?.owner || "vamsicherukuri",
@@ -1153,17 +1190,24 @@ async function main() {
 
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
 
-    syncWorkflowDashboard(repoRoot, {
-      owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "prsquad",
-      issueNumber: resolvedIssue,
-      issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-      sessionId: input.sessionId || state.sessionId,
-      phase: "developer",
-      status: "IMPLEMENTED",
-      summary: devHandoff.details.commitSha ? `Fix committed in ${devHandoff.details.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
-      details: devHandoff.details,
-    });
+    // Stage Isolation Invariant: QA requires prior Developer IMPLEMENTED evidence; never manufacture it
+    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
+    let devPhaseStatus = "";
+    if (existsSync(dashFile)) {
+      try {
+        const d = JSON.parse(readFileSync(dashFile, "utf-8"));
+        devPhaseStatus = d?.phases?.developer?.status || "";
+      } catch {}
+    }
+
+    if (devPhaseStatus !== "IMPLEMENTED") {
+      const output: HookOutput = {
+        decision: "deny",
+        reason: `BLOCKED BY POLICY: QA agent cannot be invoked before Developer implementation has completed with status 'IMPLEMENTED' (current: '${devPhaseStatus || "NOT RECORDED"}'). Stage transitions require verified prior evidence; downstream stages may never manufacture upstream success.`,
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
+    }
 
     const dashQA = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,

@@ -268,13 +268,26 @@ function detectRepoStack(rootDir = getRepoRoot()) {
     isExplicitConfig: false
   };
 }
+var PACKAGE_MUTATION_REGEX = /\b(?:npm\s+(?:install|i|add|publish|pack|link|uninstall|update|login)|pnpm\s+(?:install|i|add|publish|link|update)|yarn\s+(?:add|publish|install)|pip(?:3)?\s+install|cargo\s+publish|mvn\s+deploy|dotnet\s+nuget\s+push)\b/i;
+function matchesConfiguredCommand(actual, configured) {
+  if (!configured) return false;
+  const trimmedActual = actual.trim();
+  const trimmedConfig = configured.trim();
+  if (trimmedActual === trimmedConfig) return true;
+  if (trimmedActual.startsWith(trimmedConfig + " ") || trimmedActual.startsWith(trimmedConfig + "=")) {
+    return true;
+  }
+  return false;
+}
 function isCommandAllowedByTooling(command, config) {
   const trimmed = command.trim();
   const tokens = trimmed.split(/\s+/);
-  if (trimmed === config.testCommand) return true;
-  if (trimmed.startsWith(config.testCommand + " ") || trimmed.startsWith(config.testCommand + "=")) {
-    return true;
+  if (PACKAGE_MUTATION_REGEX.test(trimmed)) {
+    return false;
   }
+  if (matchesConfiguredCommand(trimmed, config.testCommand)) return true;
+  if (matchesConfiguredCommand(trimmed, config.buildCommand)) return true;
+  if (matchesConfiguredCommand(trimmed, config.lintCommand)) return true;
   if (config.stack === "npm" || config.stack === "typescript" || config.stack === "node") {
     if (tokens[0] === "npm" && (tokens[1] === "test" || tokens[1] === "t" || tokens[1] === "run" && tokens[2]?.startsWith("test"))) {
       return true;
@@ -318,11 +331,18 @@ var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wg
 var DESTRUCTIVE_GIT_CLEAN_REGEX = /\bgit\s+clean\b.*?(?:-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)/i;
 function validateCommandForAgent(command, agent = "unknown", rootDir) {
   const trimmed = command.trim();
-  const AGENT_SELF_APPROVE_REGEX = /\bscope-approve(?:\.ts|\.js)?\b/i;
+  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|pr-create|gate-approve)(?:\.ts|\.js)?\b/i;
   if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
     return {
       allowed: false,
-      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve'. Scope authorization is exclusively reserved for the human maintainer."
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve', 'gate-approve', or 'pr-create'. Scope authorization and PR creation are exclusively reserved for human maintainers."
+    };
+  }
+  const PACKAGE_MUTATION_REGEX2 = /\b(?:npm\s+(?:install|i|add|publish|pack|link|uninstall|update|login)|pnpm\s+(?:install|i|add|publish|link|update)|yarn\s+(?:add|publish|install)|pip(?:3)?\s+install|cargo\s+publish|mvn\s+deploy|dotnet\s+nuget\s+push)\b/i;
+  if (PACKAGE_MUTATION_REGEX2.test(trimmed)) {
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL (PACKAGE_MUTATION_NOT_PERMITTED): Package management mutations and publishing ('${trimmed}') are strictly prohibited for pipeline agents.`
     };
   }
   const SHELL_CHAINING_REGEX = /[;&|\n]/;
@@ -417,13 +437,49 @@ function validateCommandForAgent(command, agent = "unknown", rootDir) {
     };
   }
   if (isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "gated-change-developer")) {
+    if (trimmed.includes(">") || trimmed.includes(">>")) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (MUTATION_SURFACE_RESTRICTION): Developer agent cannot use shell redirection ('>' or '>>'). File mutations must occur exclusively through monitored edit tools."
+      };
+    }
+    if (SHELL_CHAINING_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (SHELL_COMPOSITION_NOT_PERMITTED): Developer agent cannot use shell composition or chaining operators (';', '&&', '||', '|')."
+      };
+    }
+    const SCRIPT_WRITE_BYPASS_REGEX = /\b(?:node\s+(?:-e|--eval)|python(?:3)?\s+-c|perl|ruby|Set-Content|Out-File|Add-Content|Export-Csv|New-Item|Copy-Item|Move-Item|Remove-Item|cp\s|mv\s|rm\s|sed\s|awk\s)\b/i;
+    if (SCRIPT_WRITE_BYPASS_REGEX.test(trimmed)) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (MUTATION_SURFACE_RESTRICTION): Developer agent cannot execute arbitrary script evaluations or file manipulation utilities via the shell. All file edits must be performed through verified edit tools."
+      };
+    }
     if (/\bgit\s+push\b/i.test(trimmed)) {
       return {
         allowed: false,
         reason: "POLICY_DENIAL: Developer agent cannot push directly to remote git repositories."
       };
     }
-    return { allowed: true };
+    const DEV_GIT_ALLOWLIST_REGEX = /^git\s+(?:status|diff|add|commit|checkout|branch|log|show|rev-parse|ls-files|symbolic-ref|clean)\b/i;
+    if (DEV_GIT_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+    try {
+      const config = detectRepoStack(rootDir || getRepoRoot());
+      if (config && isCommandAllowedByTooling(trimmed, config)) {
+        return { allowed: true };
+      }
+    } catch {
+    }
+    if (TEST_RUNNER_ALLOWLIST_REGEX.test(trimmed)) {
+      return { allowed: true };
+    }
+    return {
+      allowed: false,
+      reason: `POLICY_DENIAL (DEVELOPER_SHELL_ALLOWLIST): Developer shell execution is restricted to Git operations and configured test/build commands. Command '${trimmed}' is blocked. File mutations must occur exclusively through monitored edit tools.`
+    };
   }
   return { allowed: true };
 }

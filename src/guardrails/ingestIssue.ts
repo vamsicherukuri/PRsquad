@@ -13,6 +13,32 @@ export function fetchIssueDeterministic(
   issueNumber: number,
   rootDir: string = process.cwd()
 ): FetchedIssueData {
+  // 0. Check local issue cache in .gated-change/issue-cache.json
+  const cacheFile = join(rootDir, ".gated-change", "issue-cache.json");
+  if (existsSync(cacheFile)) {
+    try {
+      const rawCache = readFileSync(cacheFile, "utf-8");
+      const parsed = JSON.parse(rawCache);
+      if (parsed.number === issueNumber || parsed.id === issueNumber) {
+        return {
+          owner: parsed.owner || owner,
+          repo: parsed.repo || repo,
+          number: parsed.number ?? parsed.id ?? issueNumber,
+          title: parsed.title ?? "",
+          body: parsed.body ?? "",
+          author: parsed.author ?? "cached-author",
+          labels: parsed.labels ?? [],
+          comments: (parsed.comments ?? []).map((c: any) => ({
+            author: c.author ?? "commenter",
+            body: typeof c === "string" ? c : c.body ?? "",
+            createdAt: c.createdAt ?? new Date().toISOString(),
+          })),
+          state: (parsed.state ?? "OPEN").toUpperCase(),
+        };
+      }
+    } catch {}
+  }
+
   // 1. Try native GitHub CLI
   try {
     const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;

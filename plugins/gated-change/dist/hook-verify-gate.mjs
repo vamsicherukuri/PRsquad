@@ -64,32 +64,15 @@ function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   }
   const full = resolve(rootDir, filePath);
   let rel = relative(rootDir, full);
-  if (rel.startsWith("..") && isAbsolute(filePath)) {
-    try {
-      const currentGitCommon = execSync("git rev-parse --git-common-dir", {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-      const targetGitCommon = execSync("git rev-parse --git-common-dir", {
-        cwd: dirname(filePath),
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"]
-      }).trim();
-      const currentCommonAbs = resolve(rootDir, currentGitCommon).replace(/\\/g, "/").toLowerCase();
-      const targetCommonAbs = resolve(dirname(filePath), targetGitCommon).replace(/\\/g, "/").toLowerCase();
-      if (currentCommonAbs === targetCommonAbs) {
-        const fileWorktreeRoot = execSync("git rev-parse --show-toplevel", {
-          cwd: dirname(filePath),
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"]
-        }).trim().replace(/\\/g, "/");
-        if (fileWorktreeRoot && cleanFilePath.toLowerCase().startsWith(fileWorktreeRoot.toLowerCase() + "/")) {
-          return cleanFilePath.slice(fileWorktreeRoot.length + 1);
-        }
-      }
-    } catch {
+  try {
+    const canonicalRoot = existsSync(rootDir) ? realpathSync.native(rootDir) : resolve(rootDir);
+    const targetAbs = isAbsolute(filePath) ? filePath : resolve(rootDir, filePath);
+    const canonicalTarget = existsSync(targetAbs) ? realpathSync.native(targetAbs) : resolve(targetAbs);
+    const canonicalRel = relative(canonicalRoot, canonicalTarget).replace(/\\/g, "/");
+    if (!canonicalRel.startsWith("..") && !isAbsolute(canonicalRel)) {
+      return canonicalRel.replace(/^\.\//, "");
     }
+  } catch {
   }
   return rel.split("\\").join("/").replace(/^\.\//, "");
 }
@@ -1738,20 +1721,24 @@ function detectRepoStack(rootDir = getRepoRoot()) {
 }
 
 // src/guardrails/handoffValidator.ts
+function failValidation(errors, rawJson) {
+  return { valid: false, controlState: "HANDOFF_INVALID", errors, rawJson };
+}
+function extractAgentPayload(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw;
+    if (typeof obj.textResultForLlm === "string") return obj.textResultForLlm;
+    if (typeof obj.content === "string") return obj.content;
+    if (typeof obj.value === "string") return obj.value;
+  }
+  return raw;
+}
 function extractJsonFromOutput(raw) {
   if (!raw) return null;
-  let target = raw;
+  const target = extractAgentPayload(raw);
   if (typeof target === "object" && target !== null) {
-    const obj = target;
-    if (typeof obj.textResultForLlm === "string") {
-      target = obj.textResultForLlm;
-    } else if (typeof obj.content === "string") {
-      target = obj.content;
-    } else if (typeof obj.value === "string") {
-      target = obj.value;
-    } else if (obj.status || obj.verdict || obj.assessment) {
-      return obj;
-    }
+    return target;
   }
   const text = String(target).trim();
   const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
@@ -1778,7 +1765,7 @@ function extractJsonFromOutput(raw) {
 function validateTriage(output) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Triage output contains no valid JSON object"] };
+    return failValidation(["Triage output contains no valid JSON object"]);
   }
   const errors = [];
   const validStatuses = ["READY", "NOT_READY", "EMPTY", "FETCH_FAILED"];
@@ -1803,7 +1790,7 @@ function validateTriage(output) {
     }
   }
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -1824,7 +1811,7 @@ function validateTriage(output) {
 function validateArchitect(output) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Architect output contains no valid JSON object"] };
+    return failValidation(["Architect output contains no valid JSON object"]);
   }
   const errors = [];
   const validStatuses = [
@@ -1861,7 +1848,7 @@ function validateArchitect(output) {
     }
   }
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -1883,7 +1870,7 @@ function validateArchitect(output) {
 function validateDeveloper(output) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Developer output contains no valid JSON object"] };
+    return failValidation(["Developer output contains no valid JSON object"]);
   }
   const errors = [];
   const validStatuses = ["IMPLEMENTED", "BLOCKED", "SCOPE_AMENDMENT_REQUIRED"];
@@ -1898,8 +1885,8 @@ function validateDeveloper(output) {
     if (!json.diffReference || typeof json.diffReference !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
     } else {
-      const hasBase = Boolean(json.diffReference.baseRef || json.baseRef);
-      const hasHead = Boolean(json.diffReference.headRef || json.headRef || json.commitSha);
+      const hasBase = Boolean(json.diffReference.baseRef);
+      const hasHead = Boolean(json.diffReference.headRef || json.commitSha);
       if (!hasBase) {
         errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
       }
@@ -1917,7 +1904,7 @@ function validateDeveloper(output) {
     }
   }
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -1940,7 +1927,7 @@ function validateDeveloper(output) {
 function validateQA(output) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["QA output contains no valid JSON object"] };
+    return failValidation(["QA output contains no valid JSON object"]);
   }
   const errors = [];
   const validVerdicts = ["PASS", "FAIL", "BLOCKED"];
@@ -1964,12 +1951,14 @@ function validateQA(output) {
     if (scopeCompliance !== "PASS") {
       errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
     }
-    if (Array.isArray(json.acceptanceCriteriaResults)) {
-      const hasFailingCriteria = json.acceptanceCriteriaResults.some(
-        (c) => c.result === "FAIL" || c.passed === false || c.result === false
+    if (!Array.isArray(json.acceptanceCriteriaResults) || json.acceptanceCriteriaResults.length === 0) {
+      errors.push("QA verdict 'PASS' requires non-empty 'acceptanceCriteriaResults' proving verification");
+    } else {
+      const hasNonPassing = json.acceptanceCriteriaResults.some(
+        (c) => c.result !== "PASS" && c.passed !== true
       );
-      if (hasFailingCriteria) {
-        errors.push("QA verdict 'PASS' is internally contradictory: one or more acceptance criteria reported 'FAIL'");
+      if (hasNonPassing) {
+        errors.push("QA verdict 'PASS' requires all acceptance criteria to report 'PASS' (found unverified or failing criteria)");
       }
     }
     if (Array.isArray(json.failureClassification)) {
@@ -1977,10 +1966,21 @@ function validateQA(output) {
       if (hasGenuineFixFailures) {
         errors.push("QA verdict 'PASS' is internally contradictory: failureClassification contains 'GENUINE_FIX_CAUSED'");
       }
+      const hasUnresolvedInfra = json.failureClassification.some((f) => f.classification === "INFRASTRUCTURE" && !f.resolved);
+      if (hasUnresolvedInfra) {
+        errors.push("QA verdict 'PASS' has unresolved INFRASTRUCTURE failures");
+      }
+      const hasUnknown = json.failureClassification.some((f) => f.classification === "UNKNOWN");
+      if (hasUnknown) {
+        errors.push("QA verdict 'PASS' cannot have UNKNOWN failure classifications");
+      }
+    }
+    if (Array.isArray(json.blockingFindings) && json.blockingFindings.length > 0) {
+      errors.push("QA verdict 'PASS' cannot have unresolved blockingFindings");
     }
   }
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -1999,7 +1999,7 @@ function validateQA(output) {
 function validateReview(output) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Reviewer output contains no valid JSON object"] };
+    return failValidation(["Reviewer output contains no valid JSON object"]);
   }
   const errors = [];
   const validAssessments = ["CLEAR", "CONCERNS"];
@@ -2018,7 +2018,7 @@ function validateReview(output) {
     }
   }
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -2302,8 +2302,8 @@ async function main() {
     const resolvedIssue2 = resolveIssueNumber(input, toolArgs, state2, lock2);
     const branchName = `fix/issue-${resolvedIssue2}`;
     let branchStatus = "unknown";
+    let currentBranch = "main";
     try {
-      let currentBranch = "main";
       try {
         currentBranch = execSync3("git rev-parse --abbrev-ref HEAD", {
           cwd: repoRoot2,
@@ -2364,6 +2364,26 @@ async function main() {
       } else {
         branchStatus = `retained_${currentBranch}`;
       }
+      try {
+        const verifiedBranch = execSync3("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        if (verifiedBranch === "main" || verifiedBranch === "master") {
+          const output2 = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (BASE_BRANCH_LOCKDOWN): Developer agent cannot execute on base branch '${verifiedBranch}'. Halting fail-closed to protect base branch.`
+          };
+          process.stdout.write(JSON.stringify(output2) + "\n");
+          process.exit(1);
+        }
+        if (isBaseBranch && verifiedBranch !== branchName && verifiedBranch !== "HEAD") {
+          const output2 = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (CHECKOUT_VERIFICATION_FAILED): Expected active branch '${branchName}', but git rev-parse reported '${verifiedBranch}'. Halting fail-closed.`
+          };
+          process.stdout.write(JSON.stringify(output2) + "\n");
+          process.exit(1);
+        }
+      } catch {
+      }
     } catch (branchErr) {
       appendAuditLog({
         sessionId: state2.sessionId,
@@ -2384,13 +2404,28 @@ async function main() {
     state2.humanApproval = true;
     state2.approvedScope = lock2.approvedScope;
     state2.implementationAttempt = lock2.currentAttempt;
-    state2.activeBranch = branchName;
+    state2.activeBranch = branchStatus.startsWith("retained_") ? currentBranch : branchName;
     if (!state2.issue) {
       state2.issue = { owner: "vamsicherukuri", repo: "prsquad", number: resolvedIssue2 };
     } else {
       state2.issue.number = resolvedIssue2;
     }
     saveState(state2, repoRoot2);
+    if (lock2.currentAttempt === 1 && lock2.baseRef && lock2.baseRef !== "HEAD") {
+      let currentHead = "";
+      try {
+        currentHead = execSync3("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      } catch {
+      }
+      if (currentHead && !currentHead.startsWith(lock2.baseRef) && !lock2.baseRef.startsWith(currentHead)) {
+        const output2 = {
+          decision: "deny",
+          reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock2.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`
+        };
+        process.stdout.write(JSON.stringify(output2) + "\n");
+        process.exit(1);
+      }
+    }
     const prompt2 = toolArgs.prompt || toolArgs.content || "";
     const extractedPlan = extractPlanMarkdown(prompt2);
     if (input.sessionId) {
@@ -2742,7 +2777,7 @@ ${stateObj.issue.body.trim()}`);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
       const triageVal = validateTriage(input.toolResult);
-      const triageStatus = triageVal.valid ? triageVal.data.status : "NOT_READY";
+      const triageStatus = triageVal.valid ? triageVal.data.status : "HANDOFF_INVALID";
       const triageSummary = triageVal.valid ? triageStatus === "READY" ? "Issue requirements extracted and acceptance criteria validated" : triageStatus === "NOT_READY" ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})` : `Triage reported ${triageStatus}` : `Triage handoff validation failed: ${triageVal.errors.join("; ")}`;
       const dashIntake = syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
@@ -2755,14 +2790,14 @@ ${stateObj.issue.body.trim()}`);
         summary: triageSummary,
         details: triageVal.valid ? triageVal.data : { errors: triageVal.errors }
       });
-      const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Ask the maintainer clarifying questions or halt.` : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
+      const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.` : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-architect")) {
       const archVal = validateArchitect(input.toolResult);
-      const archStatus = archVal.valid ? archVal.data.status : "BLOCKED";
+      const archStatus = archVal.valid ? archVal.data.status : "HANDOFF_INVALID";
       const rawText = typeof input.toolResult === "string" ? input.toolResult : input.toolResult.textResultForLlm || input.toolResult.content || JSON.stringify(input.toolResult);
       const planMarkdown = extractPlanMarkdown(rawText);
       const proposedScope = archVal.valid && archVal.data.proposedScope ? archVal.data.proposedScope : state2.approvedScope || "NOT RECORDED";
@@ -2791,7 +2826,7 @@ ${stateObj.issue.body.trim()}`);
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
       const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "SCHEMA_INVALID";
+      const devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
       if (devVal.valid && devStatus === "IMPLEMENTED") {
         try {
           const statusOut = execSync3("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
@@ -2824,7 +2859,7 @@ ${stateObj.issue.body.trim()}`);
     } else if (isAgentMatch(targetAgent, "gated-change-qa")) {
       const qaVal = validateQA(input.toolResult);
       const qaDetails = extractQADetails(input.toolResult);
-      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "SCHEMA_INVALID";
+      const qaVerdict = qaVal.valid ? qaVal.data.verdict : "HANDOFF_INVALID";
       let retryExhausted = false;
       if (qaVerdict === "FAIL" && lock2) {
         lock2.currentAttempt++;
@@ -2857,7 +2892,7 @@ ${stateObj.issue.body.trim()}`);
     } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
       const revVal = validateReview(input.toolResult);
       const revDetails = extractReviewerDetails(input.toolResult);
-      const verdict = revVal.valid ? revVal.data.assessment : "SCHEMA_INVALID";
+      const verdict = revVal.valid ? revVal.data.assessment : "HANDOFF_INVALID";
       syncWorkflowDashboard(repoRoot2, {
         owner: state2.issue?.owner || "vamsicherukuri",
         repo: state2.issue?.repo || "prsquad",
@@ -3002,17 +3037,23 @@ ${displayFailures.join("\n")}
 \`\`\``;
     }
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
-    syncWorkflowDashboard(repoRoot, {
-      owner: state.issue?.owner || "vamsicherukuri",
-      repo: state.issue?.repo || "prsquad",
-      issueNumber: resolvedIssue,
-      issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-      sessionId: input.sessionId || state.sessionId,
-      phase: "developer",
-      status: "IMPLEMENTED",
-      summary: devHandoff.details.commitSha ? `Fix committed in ${devHandoff.details.commitSha.slice(0, 8)}` : "Changes implemented and verified locally",
-      details: devHandoff.details
-    });
+    const dashFile = join6(repoRoot, ".gated-change", "dashboard.json");
+    let devPhaseStatus = "";
+    if (existsSync6(dashFile)) {
+      try {
+        const d = JSON.parse(readFileSync6(dashFile, "utf-8"));
+        devPhaseStatus = d?.phases?.developer?.status || "";
+      } catch {
+      }
+    }
+    if (devPhaseStatus !== "IMPLEMENTED") {
+      const output = {
+        decision: "deny",
+        reason: `BLOCKED BY POLICY: QA agent cannot be invoked before Developer implementation has completed with status 'IMPLEMENTED' (current: '${devPhaseStatus || "NOT RECORDED"}'). Stage transitions require verified prior evidence; downstream stages may never manufacture upstream success.`
+      };
+      process.stdout.write(JSON.stringify(output) + "\n");
+      process.exit(1);
+    }
     const dashQA = syncWorkflowDashboard(repoRoot, {
       sessionId: input.sessionId || state.sessionId,
       phase: "qa",

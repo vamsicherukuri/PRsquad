@@ -15,11 +15,30 @@ export interface ValidationSuccess<T> {
 
 export interface ValidationFailure {
   valid: false;
+  controlState: "HANDOFF_INVALID";
   errors: string[];
   rawJson?: any;
 }
 
 export type HandoffValidation<T> = ValidationSuccess<T> | ValidationFailure;
+
+export function failValidation(errors: string[], rawJson?: any): ValidationFailure {
+  return { valid: false, controlState: "HANDOFF_INVALID", errors, rawJson };
+}
+
+/**
+ * Normalizes transport layer output from agent tool execution or Copilot wrapper into raw payload text/object.
+ */
+export function extractAgentPayload(raw: unknown): unknown {
+  if (!raw) return null;
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as Record<string, any>;
+    if (typeof obj.textResultForLlm === "string") return obj.textResultForLlm;
+    if (typeof obj.content === "string") return obj.content;
+    if (typeof obj.value === "string") return obj.value;
+  }
+  return raw;
+}
 
 /**
  * Extracts a JSON object from raw input (string, object, or markdown-wrapped JSON).
@@ -27,18 +46,9 @@ export type HandoffValidation<T> = ValidationSuccess<T> | ValidationFailure;
 export function extractJsonFromOutput(raw: unknown): any | null {
   if (!raw) return null;
 
-  let target = raw;
+  const target = extractAgentPayload(raw);
   if (typeof target === "object" && target !== null) {
-    const obj = target as Record<string, any>;
-    if (typeof obj.textResultForLlm === "string") {
-      target = obj.textResultForLlm;
-    } else if (typeof obj.content === "string") {
-      target = obj.content;
-    } else if (typeof obj.value === "string") {
-      target = obj.value;
-    } else if (obj.status || obj.verdict || obj.assessment) {
-      return obj;
-    }
+    return target;
   }
 
   const text = String(target).trim();
@@ -93,7 +103,7 @@ export interface TriageHandoff {
 export function validateTriage(output: unknown): HandoffValidation<TriageHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Triage output contains no valid JSON object"] };
+    return failValidation(["Triage output contains no valid JSON object"]);
   }
 
   const errors: string[] = [];
@@ -122,7 +132,7 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
 
   return {
@@ -170,7 +180,7 @@ export interface ArchitectHandoff {
 export function validateArchitect(output: unknown): HandoffValidation<ArchitectHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Architect output contains no valid JSON object"] };
+    return failValidation(["Architect output contains no valid JSON object"]);
   }
 
   const errors: string[] = [];
@@ -211,7 +221,7 @@ export function validateArchitect(output: unknown): HandoffValidation<ArchitectH
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
 
   return {
@@ -265,7 +275,7 @@ export interface DeveloperHandoff {
 export function validateDeveloper(output: unknown): HandoffValidation<DeveloperHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Developer output contains no valid JSON object"] };
+    return failValidation(["Developer output contains no valid JSON object"]);
   }
 
   const errors: string[] = [];
@@ -283,8 +293,8 @@ export function validateDeveloper(output: unknown): HandoffValidation<DeveloperH
     if (!json.diffReference || typeof json.diffReference !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
     } else {
-      const hasBase = Boolean(json.diffReference.baseRef || json.baseRef);
-      const hasHead = Boolean(json.diffReference.headRef || json.headRef || json.commitSha);
+      const hasBase = Boolean(json.diffReference.baseRef);
+      const hasHead = Boolean(json.diffReference.headRef || json.commitSha);
       if (!hasBase) {
         errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
       }
@@ -307,7 +317,7 @@ export function validateDeveloper(output: unknown): HandoffValidation<DeveloperH
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
 
   return {
@@ -355,7 +365,7 @@ export interface QAHandoff {
 export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["QA output contains no valid JSON object"] };
+    return failValidation(["QA output contains no valid JSON object"]);
   }
 
   const errors: string[] = [];
@@ -383,12 +393,14 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
     if (scopeCompliance !== "PASS") {
       errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
     }
-    if (Array.isArray(json.acceptanceCriteriaResults)) {
-      const hasFailingCriteria = json.acceptanceCriteriaResults.some(
-        (c: any) => c.result === "FAIL" || c.passed === false || c.result === false
+    if (!Array.isArray(json.acceptanceCriteriaResults) || json.acceptanceCriteriaResults.length === 0) {
+      errors.push("QA verdict 'PASS' requires non-empty 'acceptanceCriteriaResults' proving verification");
+    } else {
+      const hasNonPassing = json.acceptanceCriteriaResults.some(
+        (c: any) => c.result !== "PASS" && c.passed !== true
       );
-      if (hasFailingCriteria) {
-        errors.push("QA verdict 'PASS' is internally contradictory: one or more acceptance criteria reported 'FAIL'");
+      if (hasNonPassing) {
+        errors.push("QA verdict 'PASS' requires all acceptance criteria to report 'PASS' (found unverified or failing criteria)");
       }
     }
     if (Array.isArray(json.failureClassification)) {
@@ -396,11 +408,22 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
       if (hasGenuineFixFailures) {
         errors.push("QA verdict 'PASS' is internally contradictory: failureClassification contains 'GENUINE_FIX_CAUSED'");
       }
+      const hasUnresolvedInfra = json.failureClassification.some((f: any) => f.classification === "INFRASTRUCTURE" && !f.resolved);
+      if (hasUnresolvedInfra) {
+        errors.push("QA verdict 'PASS' has unresolved INFRASTRUCTURE failures");
+      }
+      const hasUnknown = json.failureClassification.some((f: any) => f.classification === "UNKNOWN");
+      if (hasUnknown) {
+        errors.push("QA verdict 'PASS' cannot have UNKNOWN failure classifications");
+      }
+    }
+    if (Array.isArray(json.blockingFindings) && json.blockingFindings.length > 0) {
+      errors.push("QA verdict 'PASS' cannot have unresolved blockingFindings");
     }
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
 
   return {
@@ -439,7 +462,7 @@ export interface ReviewHandoff {
 export function validateReview(output: unknown): HandoffValidation<ReviewHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
-    return { valid: false, errors: ["Reviewer output contains no valid JSON object"] };
+    return failValidation(["Reviewer output contains no valid JSON object"]);
   }
 
   const errors: string[] = [];
@@ -463,7 +486,7 @@ export function validateReview(output: unknown): HandoffValidation<ReviewHandoff
   }
 
   if (errors.length > 0) {
-    return { valid: false, errors, rawJson: json };
+    return failValidation(errors, json);
   }
 
   return {

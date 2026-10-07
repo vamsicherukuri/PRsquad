@@ -45,11 +45,17 @@ export function ensureIsolatedBranch(
 
   const targetBranch = `fix/issue-${issueNumber || "gated-change"}`;
   try {
-    execSync(`git checkout -B ${targetBranch}`, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    let branchExists = false;
+    try {
+      execSync(`git rev-parse --verify refs/heads/${targetBranch}`, { cwd: rootDir, stdio: "ignore" });
+      branchExists = true;
+    } catch {}
+
+    if (branchExists) {
+      execSync(`git checkout ${targetBranch}`, { cwd: rootDir, stdio: "ignore" });
+    } else {
+      execSync(`git checkout -b ${targetBranch}`, { cwd: rootDir, stdio: "ignore" });
+    }
     return { ok: true, branch: targetBranch };
   } catch {
     return {

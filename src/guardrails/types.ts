@@ -22,6 +22,7 @@ export interface WorkflowState {
     number: number;
     title?: string;
     body?: string;
+    declaredScope?: string;
   };
   phase: WorkflowPhase;
   intakeRound: number;
@@ -34,6 +35,8 @@ export interface WorkflowState {
   humanApproval: boolean;
   baseRef: string | null;
   activeBranch?: string;
+  currentPhase?: string;
+  approvedPlan?: any;
   updatedAt: string;
 }
 
@@ -41,12 +44,23 @@ export interface ApprovalLock {
   issueNumber: number;
   approvedScope: string;
   planHash?: string;
+  approvalEnvelopeHash?: string;
   baseRef?: string;
   maxAttempts: number;
   currentAttempt: number;
   approvedAt: string;
   approvedBy: string;
   status: "ACTIVE" | "EXHAUSTED" | "REVOKED";
+}
+
+export interface PRAuthorization {
+  issueNumber: number;
+  activeBranch: string;
+  headCommitSha: string;
+  reviewVerdict: string;
+  authorizedBy: string;
+  authorizedAt: string;
+  status: "ACTIVE" | "USED" | "REVOKED";
 }
 
 export interface AuditLogEntry {

@@ -8,6 +8,31 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd()) {
+  const cacheFile = join(rootDir, ".gated-change", "issue-cache.json");
+  if (existsSync(cacheFile)) {
+    try {
+      const rawCache = readFileSync(cacheFile, "utf-8");
+      const parsed = JSON.parse(rawCache);
+      if (parsed.number === issueNumber || parsed.id === issueNumber) {
+        return {
+          owner: parsed.owner || owner,
+          repo: parsed.repo || repo,
+          number: parsed.number ?? parsed.id ?? issueNumber,
+          title: parsed.title ?? "",
+          body: parsed.body ?? "",
+          author: parsed.author ?? "cached-author",
+          labels: parsed.labels ?? [],
+          comments: (parsed.comments ?? []).map((c) => ({
+            author: c.author ?? "commenter",
+            body: typeof c === "string" ? c : c.body ?? "",
+            createdAt: c.createdAt ?? (/* @__PURE__ */ new Date()).toISOString()
+          })),
+          state: (parsed.state ?? "OPEN").toUpperCase()
+        };
+      }
+    } catch {
+    }
+  }
   try {
     const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
     const stdout = execSync(cmd, {
