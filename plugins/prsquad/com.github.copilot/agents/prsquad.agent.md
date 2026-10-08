@@ -2,7 +2,7 @@
 name: prsquad
 description: Coordinates the PRSquad issue-to-PR workflow using specialist agents and explicit human gates.
 target: github-copilot
-tools: ["agent"]
+tools: ["agent", "powershell", "bash"]
 agents: ["prsquad-triage", "prsquad-architect", "prsquad-dev", "prsquad-qa", "prsquad-review"]
 disable-model-invocation: true
 user-invocable: true
@@ -123,8 +123,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Present the final, comprehensive `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)` table provided in your turn context by the guardrail hook, giving the maintainer full visibility into total Copilot AI Units (AIU), prompt cache savings, and per-specialist token breakdown. (Do not execute a separate powershell turn.)
    - Prepare a `PR_READY` package (title, body, base branch, head branch, approved scope, QA evidence, Code Review findings, and residual risks).
    - Present the package to the human at the **PR Approval Gate** and ask:
-     "Would you like me to open the official Pull Request on GitHub for this change? (Reply 'Open PR' to proceed, or execute `node .gated-change/bin/pr-create.mjs` in terminal)."
-   - Once the human explicitly authorizes PR creation, proceed with deterministic PR creation.
+     "Would you like me to open the official Pull Request on GitHub for this change? (Reply 'Open PR' to proceed)."
+   - Once the human explicitly confirms in chat (e.g. "Open PR", "Proceed", or `/create-pr`), execute the deterministic PR creation script directly using your shell tool (`powershell` on Windows, `bash` on macOS/Linux):
+     `node .gated-change/bin/pr-create.mjs`
    - Report the opened Pull Request URL directly to the human after execution.
    - Do not merge automatically. The PRSquad workflow concludes at PR creation; merging is handled by human maintainers on GitHub.
    - Done when: the Pull Request is open on GitHub and its URL is presented to the human. Orchestrator stops here and never merges automatically.

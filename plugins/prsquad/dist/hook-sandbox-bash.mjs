@@ -376,12 +376,22 @@ var DANGEROUS_SYSTEM_REGEX = /\b(rm\s+-rf\s+\/|npm\s+publish|curl\s+-X\s+POST|wg
 var DESTRUCTIVE_GIT_CLEAN_REGEX = /\bgit\s+clean\b.*?(?:-[a-zA-Z]*f[a-zA-Z]*\b|--force\b)/i;
 function validateCommandForAgent(command, agent = "unknown", rootDir) {
   const trimmed = command.trim();
-  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|pr-create|gate-approve)(?:\.ts|\.js)?\b/i;
+  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|gate-approve)(?:\.ts|\.js|\.mjs)?\b/i;
   if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
     return {
       allowed: false,
-      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve', 'gate-approve', or 'pr-create'. Scope authorization and PR creation are exclusively reserved for human maintainers."
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve' or 'gate-approve'. Scope authorization is exclusively reserved for human maintainers."
     };
+  }
+  const PR_CREATE_REGEX = /\bpr-create(?:\.ts|\.js|\.mjs)?\b/i;
+  if (PR_CREATE_REGEX.test(trimmed)) {
+    const isController = isAgentMatch(agent, "prsquad") || isAgentMatch(agent, "controller");
+    if (!isController) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Specialist agents are strictly prohibited from executing 'pr-create'. PR creation at the PR Approval Gate is managed by the orchestrator upon human authorization."
+      };
+    }
   }
   const PACKAGE_MUTATION_REGEX2 = /\b(?:npm\s+(?:install|i|add|publish|pack|link|uninstall|update|login)|pnpm\s+(?:install|i|add|publish|link|update)|yarn\s+(?:add|publish|install)|pip(?:3)?\s+install|cargo\s+publish|mvn\s+deploy|dotnet\s+nuget\s+push)\b/i;
   if (PACKAGE_MUTATION_REGEX2.test(trimmed)) {

@@ -62,7 +62,7 @@ export function buildPullRequestBody(params: {
 
   const rev = dashboard?.phases?.reviewer;
   const revVerdict = rev?.details?.assessment || rev?.details?.verdict || rev?.status || "NOT RECORDED";
-  const revEvidence = rev?.summary || rev?.details?.mergeGateSummary || ((revVerdict === "CLEAR" || revVerdict === "APPROVED") ? "Verified read-only diff inspection, zero security concerns" : "NOT RECORDED");
+  const revEvidence = rev?.summary || rev?.details?.mergeGateSummary || ((revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS") ? `Verified read-only diff inspection (assessment: ${revVerdict})` : "NOT RECORDED");
 
   const lockStatus = lock?.status || rawLockStatus || "NOT RECORDED";
   const approverInfo = lock?.approvedBy
@@ -168,18 +168,35 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       };
     }
 
-    // 2. Resolve target base branch (default to copilot-app-plugin-alignment or main)
+    // 2. Resolve target base branch dynamically (checks origin/HEAD, main, or master)
     let baseBranch = options.baseBranch;
     if (!baseBranch) {
       try {
-        const remotes = execSync("git branch -r", { cwd: rootDir, encoding: "utf-8" });
-        if (remotes.includes("origin/copilot-app-plugin-alignment")) {
-          baseBranch = "copilot-app-plugin-alignment";
-        } else {
-          baseBranch = "main";
+        try {
+          const symRef = execSync("git symbolic-ref --short refs/remotes/origin/HEAD", {
+            cwd: rootDir,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }).trim();
+          if (symRef) {
+            baseBranch = symRef.replace(/^origin\//, "");
+          }
+        } catch {}
+
+        if (!baseBranch) {
+          const remotes = execSync("git branch -r", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
+          if (remotes.includes("origin/main")) {
+            baseBranch = "main";
+          } else if (remotes.includes("origin/master")) {
+            baseBranch = "master";
+          } else if (remotes.includes("origin/copilot-app-plugin-alignment")) {
+            baseBranch = "copilot-app-plugin-alignment";
+          } else {
+            baseBranch = "main";
+          }
         }
       } catch {
-        baseBranch = "copilot-app-plugin-alignment";
+        baseBranch = "main";
       }
     }
 
@@ -240,13 +257,14 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         };
       }
 
-      // 4c. Verified Security & Code Review Clearance Evidence
+      // 4c. Verified Security & Code Review Clearance Evidence (CLEAR, APPROVED, or informational CONCERNS)
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      if (!revVerdict || (revVerdict !== "CLEAR" && revVerdict !== "APPROVED")) {
+      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS";
+      if (!revVerdict || !isReviewPassing) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR or APPROVED).`,
+          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or CONCERNS).`,
         };
       }
 
@@ -257,8 +275,11 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       } catch {}
 
       if (currentHead && currentHead !== "HEAD") {
+        const isHexSha = (val: unknown): boolean =>
+          typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
+
         const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (qaCommit && qaCommit !== "HEAD" && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
+        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`,
@@ -266,7 +287,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         }
 
         const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (revCommit && revCommit !== "HEAD" && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
+        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`,

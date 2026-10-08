@@ -297,21 +297,28 @@ export function validateDeveloper(output: unknown): HandoffValidation<DeveloperH
 
   const errors: string[] = [];
   const validStatuses: DeveloperStatus[] = ["IMPLEMENTED", "BLOCKED", "SCOPE_AMENDMENT_REQUIRED"];
-  const status = String(json.status || "").toUpperCase() as DeveloperStatus;
+  let rawStatus = String(json.status || "").toUpperCase();
+  if (rawStatus === "DONE" || rawStatus === "COMPLETED" || rawStatus === "SUCCESS" || rawStatus === "COMPLETE") {
+    rawStatus = "IMPLEMENTED";
+  }
+  const status = rawStatus as DeveloperStatus;
 
   if (!validStatuses.includes(status)) {
     errors.push(`Invalid developer status '${json.status}'. Expected one of: ${validStatuses.join(", ")}`);
   }
 
+  const filesChanged = json.filesChanged || json.changedFiles;
+  const diffRef = json.diffReference || (json.baseRef || json.headRef || json.commitSha ? { baseRef: json.baseRef || "HEAD~1", headRef: json.headRef || json.commitSha || "HEAD" } : undefined);
+
   if (status === "IMPLEMENTED") {
-    if (!Array.isArray(json.filesChanged) || json.filesChanged.length === 0) {
+    if (!Array.isArray(filesChanged) || filesChanged.length === 0) {
       errors.push("IMPLEMENTED developer handoff requires non-empty 'filesChanged' list");
     }
-    if (!json.diffReference || typeof json.diffReference !== "object") {
+    if (!diffRef || typeof diffRef !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
     } else {
-      const hasBase = Boolean(json.diffReference.baseRef);
-      const hasHead = Boolean(json.diffReference.headRef || json.commitSha);
+      const hasBase = Boolean(diffRef.baseRef);
+      const hasHead = Boolean(diffRef.headRef || json.commitSha);
       if (!hasBase) {
         errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
       }
@@ -387,22 +394,29 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
 
   const errors: string[] = [];
   const validVerdicts: QAVerdict[] = ["PASS", "FAIL", "BLOCKED"];
-  const verdict = String(json.verdict || "").toUpperCase() as QAVerdict;
+  let rawVerdict = String(json.verdict || "").toUpperCase();
+  if (rawVerdict === "PASSED" || rawVerdict === "SUCCESS") rawVerdict = "PASS";
+  if (rawVerdict === "FAILED") rawVerdict = "FAIL";
+  const verdict = rawVerdict as QAVerdict;
 
   if (!validVerdicts.includes(verdict)) {
     errors.push(`Invalid QA verdict '${json.verdict}'. Expected one of: ${validVerdicts.join(", ")}`);
   }
 
   const validScope = ["PASS", "FAIL"];
-  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase() as "PASS" | "FAIL";
+  let rawScope = String(json.scopeCompliance || "").toUpperCase();
+  if (rawScope === "PASSED" || rawScope === "TRUE") rawScope = "PASS";
+  const scopeCompliance = rawScope as "PASS" | "FAIL";
   if (!validScope.includes(scopeCompliance)) {
     errors.push(`Invalid QA scopeCompliance '${json.scopeCompliance}'. Expected: PASS or FAIL`);
   }
 
+  const criteriaList = json.acceptanceCriteriaResults || json.criteriaResults || json.criteria;
+
   if (verdict === "FAIL") {
     const hasFailClassification = Array.isArray(json.failureClassification) && json.failureClassification.length > 0;
     const hasFindings = Array.isArray(json.blockingFindings) && json.blockingFindings.length > 0;
-    const hasFailCriteria = Array.isArray(json.acceptanceCriteriaResults) && json.acceptanceCriteriaResults.some((c: any) => c.result === "FAIL");
+    const hasFailCriteria = Array.isArray(criteriaList) && criteriaList.some((c: any) => c.result === "FAIL" || c.status === "FAIL");
     if (!hasFailClassification && !hasFindings && !hasFailCriteria && scopeCompliance !== "FAIL") {
       errors.push("QA verdict 'FAIL' requires failureClassification, blockingFindings, or failing acceptance criteria");
     }
@@ -410,12 +424,15 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
     if (scopeCompliance !== "PASS") {
       errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
     }
-    if (!Array.isArray(json.acceptanceCriteriaResults) || json.acceptanceCriteriaResults.length === 0) {
+    if (!Array.isArray(criteriaList) || criteriaList.length === 0) {
       errors.push("QA verdict 'PASS' requires non-empty 'acceptanceCriteriaResults' proving verification");
     } else {
-      const hasNonPassing = json.acceptanceCriteriaResults.some(
-        (c: any) => c.result !== "PASS" && c.passed !== true
-      );
+      const isItemPassing = (c: any) =>
+        c.result === "PASS" ||
+        c.status === "PASS" ||
+        c.passed === true ||
+        c.verified === true;
+      const hasNonPassing = criteriaList.some((c: any) => !isItemPassing(c));
       if (hasNonPassing) {
         errors.push("QA verdict 'PASS' requires all acceptance criteria to report 'PASS' (found unverified or failing criteria)");
       }
@@ -484,14 +501,20 @@ export function validateReview(output: unknown): HandoffValidation<ReviewHandoff
 
   const errors: string[] = [];
   const validAssessments: ReviewAssessment[] = ["CLEAR", "CONCERNS"];
-  const assessment = String(json.assessment || "").toUpperCase() as ReviewAssessment;
+  let rawAssessment = String(json.assessment || json.verdict || json.status || "").toUpperCase();
+  if (rawAssessment === "APPROVED" || rawAssessment === "PASSED" || rawAssessment === "CLEARED") {
+    rawAssessment = "CLEAR";
+  }
+  const assessment = rawAssessment as ReviewAssessment;
 
   if (!validAssessments.includes(assessment)) {
     errors.push(`Invalid Reviewer assessment '${json.assessment}'. Expected: CLEAR or CONCERNS`);
   }
 
   const validScope = ["PASS", "CONCERN"];
-  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase() as "PASS" | "CONCERN";
+  let rawScope = String(json.scopeCompliance || "").toUpperCase();
+  if (rawScope === "PASSED" || rawScope === "TRUE") rawScope = "PASS";
+  const scopeCompliance = rawScope as "PASS" | "CONCERN";
   if (!validScope.includes(scopeCompliance)) {
     errors.push(`Invalid Reviewer scopeCompliance '${json.scopeCompliance}'. Expected: PASS or CONCERN`);
   }

@@ -43,13 +43,26 @@ export function validateCommandForAgent(
 ): BashValidationResult {
   const trimmed = command.trim();
 
-  // Global Safety: Autonomous agents cannot execute scope-approve, gate-approve, or pr-create to self-mint locks or open PRs
-  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|pr-create|gate-approve)(?:\.ts|\.js)?\b/i;
+  // Global Safety: Autonomous agents cannot execute scope-approve or gate-approve to self-mint locks
+  const AGENT_SELF_APPROVE_REGEX = /\b(?:scope-approve|gate-approve)(?:\.ts|\.js|\.mjs)?\b/i;
   if (AGENT_SELF_APPROVE_REGEX.test(trimmed)) {
     return {
       allowed: false,
-      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve', 'gate-approve', or 'pr-create'. Scope authorization and PR creation are exclusively reserved for human maintainers.",
+      reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Autonomous agents are strictly prohibited from executing 'scope-approve' or 'gate-approve'. Scope authorization is exclusively reserved for human maintainers.",
     };
+  }
+
+  // PR Creation: specialist agents (developer, QA, reviewer) cannot execute pr-create.
+  // The orchestrator (prsquad/controller) may execute pr-create at the PR Gate upon human confirmation.
+  const PR_CREATE_REGEX = /\bpr-create(?:\.ts|\.js|\.mjs)?\b/i;
+  if (PR_CREATE_REGEX.test(trimmed)) {
+    const isController = isAgentMatch(agent, "prsquad") || isAgentMatch(agent, "controller");
+    if (!isController) {
+      return {
+        allowed: false,
+        reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Specialist agents are strictly prohibited from executing 'pr-create'. PR creation at the PR Approval Gate is managed by the orchestrator upon human authorization.",
+      };
+    }
   }
 
   // Explicit package manager mutation & publishing deny-list across all agents

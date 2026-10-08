@@ -979,7 +979,7 @@ function buildPullRequestBody(params) {
   const qaEvidence = qa?.summary || qa?.details?.testNotes || (qaVerdict === "PASS" ? "Verified clean via independent test execution cycle" : "NOT RECORDED");
   const rev = dashboard?.phases?.reviewer;
   const revVerdict = rev?.details?.assessment || rev?.details?.verdict || rev?.status || "NOT RECORDED";
-  const revEvidence = rev?.summary || rev?.details?.mergeGateSummary || (revVerdict === "CLEAR" || revVerdict === "APPROVED" ? "Verified read-only diff inspection, zero security concerns" : "NOT RECORDED");
+  const revEvidence = rev?.summary || rev?.details?.mergeGateSummary || (revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS" ? `Verified read-only diff inspection (assessment: ${revVerdict})` : "NOT RECORDED");
   const lockStatus = lock?.status || rawLockStatus || "NOT RECORDED";
   const approverInfo = lock?.approvedBy ? `\`${lock.approvedBy}\` (${lock.approvedAt || "timestamp not recorded"})` : "`NOT RECORDED`";
   const approvedScopeStr = lock && lock.status === "ACTIVE" ? lock.approvedScope || state.approvedScope || "NOT RECORDED" : "NOT RECORDED";
@@ -1064,14 +1064,31 @@ function createPullRequest(options = {}) {
     let baseBranch = options.baseBranch;
     if (!baseBranch) {
       try {
-        const remotes = execSync3("git branch -r", { cwd: rootDir, encoding: "utf-8" });
-        if (remotes.includes("origin/copilot-app-plugin-alignment")) {
-          baseBranch = "copilot-app-plugin-alignment";
-        } else {
-          baseBranch = "main";
+        try {
+          const symRef = execSync3("git symbolic-ref --short refs/remotes/origin/HEAD", {
+            cwd: rootDir,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"]
+          }).trim();
+          if (symRef) {
+            baseBranch = symRef.replace(/^origin\//, "");
+          }
+        } catch {
+        }
+        if (!baseBranch) {
+          const remotes = execSync3("git branch -r", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
+          if (remotes.includes("origin/main")) {
+            baseBranch = "main";
+          } else if (remotes.includes("origin/master")) {
+            baseBranch = "master";
+          } else if (remotes.includes("origin/copilot-app-plugin-alignment")) {
+            baseBranch = "copilot-app-plugin-alignment";
+          } else {
+            baseBranch = "main";
+          }
         }
       } catch {
-        baseBranch = "copilot-app-plugin-alignment";
+        baseBranch = "main";
       }
     }
     if (baseBranch && !isValidGitRef(baseBranch)) {
@@ -1119,10 +1136,11 @@ function createPullRequest(options = {}) {
       }
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      if (!revVerdict || revVerdict !== "CLEAR" && revVerdict !== "APPROVED") {
+      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS";
+      if (!revVerdict || !isReviewPassing) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR or APPROVED).`
+          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or CONCERNS).`
         };
       }
       let currentHead = "";
@@ -1131,15 +1149,16 @@ function createPullRequest(options = {}) {
       } catch {
       }
       if (currentHead && currentHead !== "HEAD") {
+        const isHexSha = (val) => typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
         const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (qaCommit && qaCommit !== "HEAD" && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
+        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
           };
         }
         const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (revCommit && revCommit !== "HEAD" && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
+        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`

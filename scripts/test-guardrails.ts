@@ -431,7 +431,7 @@ console.log("\nSuite 5: Guardrail 4 — Deterministic Symbol & Reference Sweep")
 
   const report = runSymbolSweep(["src/scopeTool.ts"], "src/services/fake/");
   assert(report.totalSymbolsAnalyzed >= 2, "Analyzed exported symbols count >= 2");
-  assert(report.externalReferencesFound.length > 0, "Detects external references in src/actions/architect.ts");
+  assert(report.externalReferencesFound.length > 0, "Detects external references to scopeTool");
 
   // Issue #21: TypeScript AST anonymous default export and arrow function tests
   const anonArrowFile = join(TEST_ISOLATED_DIR, "anon-arrow.ts");

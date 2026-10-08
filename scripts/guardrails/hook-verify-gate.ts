@@ -79,7 +79,7 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
   const numFromCwd = (input.cwd || "").match(/issue-?(\d+)/i);
   if (numFromCwd) return parseInt(numFromCwd[1], 10);
 
-  // 1. Explicit prompt mention (e.g. "Resolve issue #11" or "[HUMAN_SCOPE_GATE_APPROVED...]")
+  // 1. Explicit prompt mention (e.g. "Resolve issue #47" or "[HUMAN_SCOPE_GATE_APPROVED...]")
   const numFromPrompt = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
   if (numFromPrompt) return parseInt(numFromPrompt[1], 10);
 
@@ -98,7 +98,32 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
     return state.issue.number;
   }
 
-  return 11; // Target issue for active challenge
+  // 5. Active git branch in worktree
+  try {
+    const effectiveCwd = input.cwd || process.cwd();
+    const gitBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd: effectiveCwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const numFromGit = gitBranch.match(/(?:issue-?|#)(\d+)/i);
+    if (numFromGit) return parseInt(numFromGit[1], 10);
+  } catch {}
+
+  // 6. Local issue cache file
+  try {
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const cacheFile = join(repoRoot, ".gated-change", "issue-cache.json");
+    if (existsSync(cacheFile)) {
+      const parsed = JSON.parse(readFileSync(cacheFile, "utf-8"));
+      if (parsed?.number && Number(parsed.number) > 0) {
+        return Number(parsed.number);
+      }
+    }
+  } catch {}
+
+  return Number(process.env.TARGET_ISSUE) || 0;
 }
 
 async function main() {
@@ -514,21 +539,23 @@ async function main() {
       saveState(state, repoRoot);
     }
 
+    const effectiveBranch = branchStatus.startsWith("retained_") ? currentBranch : (state.activeBranch || branchName);
+
     syncWorkflowDashboard(repoRoot, {
       owner: state.issue?.owner || "vamsicherukuri",
       repo: state.issue?.repo || "prsquad",
       issueNumber: resolvedIssue,
       issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-      activeBranch: branchName,
+      activeBranch: effectiveBranch,
       sessionId: input.sessionId || state.sessionId,
       phase: "scopeGate",
       status: "APPROVED",
-      summary: `Scope Approval Gate approved by ${lock.approvedBy} on branch '${branchName}'`,
+      summary: `Scope Approval Gate approved by ${lock.approvedBy} on branch '${effectiveBranch}'`,
       details: {
         approvedScope: lock.approvedScope,
         approvedBy: lock.approvedBy,
         approvedAt: lock.approvedAt,
-        activeBranch: branchName,
+        activeBranch: effectiveBranch,
         ...(extractedPlan ? { plan: extractedPlan } : {}),
       },
     });
@@ -537,7 +564,7 @@ async function main() {
       sessionId: input.sessionId || state.sessionId,
       phase: "developer",
       status: "IN_PROGRESS",
-      summary: `Implementing changes bounded to '${lock.approvedScope}' on branch '${branchName}'`,
+      summary: `Implementing changes bounded to '${lock.approvedScope}' on branch '${effectiveBranch}'`,
     });
 
     const chatMeter = formatChatCreditMeter(dashDev);
@@ -552,18 +579,18 @@ async function main() {
         attempt: lock.currentAttempt,
         approvedScope: lock.approvedScope,
         approvedBy: lock.approvedBy,
-        activeBranch: branchName,
+        activeBranch: effectiveBranch,
         branchStatus,
       },
     });
 
     const branchInstructions =
       `[BRANCH ISOLATION GUARDRAIL]\n` +
-      `Active Feature Branch: '${branchName}' (automatically created/checked out by Scope Gate hook).\n` +
-      `All edits and commits MUST remain on '${branchName}'.\n` +
+      `Active Feature Branch: '${effectiveBranch}' (designated feature branch for this session).\n` +
+      `All edits and commits MUST remain on '${effectiveBranch}'.\n` +
       `Direct checkout or commits to 'main'/'master' and remote 'git push' are strictly blocked by security hooks.\n` +
       `Before reporting IMPLEMENTED, stage and commit your changes: git commit -m "fix: <summary> (fixes #${resolvedIssue})".\n` +
-      `Report headRef as your commit SHA or '${branchName}'.`;
+      `Report headRef as your commit SHA or '${effectiveBranch}'.`;
 
     const enrichedPrompt = prompt.includes("[BRANCH ISOLATION GUARDRAIL]")
       ? prompt
@@ -572,7 +599,7 @@ async function main() {
     const modifiedArgs = {
       ...toolArgs,
       prompt: enrichedPrompt,
-      activeBranch: branchName,
+      activeBranch: effectiveBranch,
     };
 
     const repoIntel = formatRepoIntelligenceForPrompt(repoRoot, targetAgent, lock.approvedScope);
@@ -625,7 +652,7 @@ async function main() {
     const addCtx =
       `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock.currentAttempt}/${lock.maxAttempts} authorized by ${lock.approvedBy}.\n` +
       `APPROVED_SCOPE_PREFIX: "${lock.approvedScope}"\n` +
-      `ACTIVE_FEATURE_BRANCH: "${branchName}"\n` +
+      `ACTIVE_FEATURE_BRANCH: "${effectiveBranch}"\n` +
       "Developer write actions are strictly bounded to this prefix and branch." +
       planSection +
       specSection +

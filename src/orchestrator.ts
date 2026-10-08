@@ -1,21 +1,51 @@
 import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
 import { CopilotClient } from "@github/copilot-sdk";
 import { loadAgent, type AgentDefinition } from "./loadAgent.js";
 import { makeScopedReadTool } from "./scopeTool.js";
 import { makeMockGithubTools } from "./mockGithubTools.js";
-import { askScopeGate } from "./scopeGate.js";
 import { runAgentJSON } from "./copilotAgent.js";
+import { getRepoOwnerAndName } from "./guardrails/stateStore.js";
 import {
   INTAKE_TRIAGE_MAX_ROUNDS,
   SCOPE_GATE_MAX_ROUNDS,
   type Issue,
   type PluginPlan,
   type PluginTriageResult,
+  type Plan,
+  type ScopeGateDecision,
 } from "./types.js";
 
 const ROOT = process.cwd();
-const REPO_OWNER = "local";
-const REPO_NAME = "sample-repo";
+const repoInfo = getRepoOwnerAndName(ROOT);
+const REPO_OWNER = repoInfo.owner || "local";
+const REPO_NAME = repoInfo.repo || "sample-repo";
+
+async function askScopeGate(plan: Plan): Promise<ScopeGateDecision> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    console.log("\n--- SCOPE GATE (PM approval required) ---");
+    console.log(`Risk: ${plan.blastRadius.risk}`);
+    if (plan.blastRadius.affectedOutsideScope.length > 0) {
+      console.log(`Also touches outside declared scope: ${plan.blastRadius.affectedOutsideScope.join(", ")}`);
+    }
+    console.log(`\n${plan.plainLanguageSummary}\n`);
+
+    const answer = (
+      await rl.question('Approve, "revise: <feedback>", or "send back"? ')
+    ).trim();
+
+    if (/^approve$/i.test(answer)) return { kind: "approve" };
+    if (/^send back$/i.test(answer)) return { kind: "send_back" };
+    const revise = answer.match(/^revise:\s*(.+)$/i);
+    if (revise) return { kind: "revise", feedback: revise[1] };
+
+    console.log('Not understood - treating as "send back" for safety.');
+    return { kind: "send_back" };
+  } finally {
+    rl.close();
+  }
+}
 
 /** Step 01.5 - Intake Triage, capped at INTAKE_TRIAGE_MAX_ROUNDS per implementation-plan.md §4. */
 async function runIntakeTriage(

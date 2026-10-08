@@ -1976,19 +1976,25 @@ function validateDeveloper(output) {
   }
   const errors = [];
   const validStatuses = ["IMPLEMENTED", "BLOCKED", "SCOPE_AMENDMENT_REQUIRED"];
-  const status = String(json.status || "").toUpperCase();
+  let rawStatus = String(json.status || "").toUpperCase();
+  if (rawStatus === "DONE" || rawStatus === "COMPLETED" || rawStatus === "SUCCESS" || rawStatus === "COMPLETE") {
+    rawStatus = "IMPLEMENTED";
+  }
+  const status = rawStatus;
   if (!validStatuses.includes(status)) {
     errors.push(`Invalid developer status '${json.status}'. Expected one of: ${validStatuses.join(", ")}`);
   }
+  const filesChanged = json.filesChanged || json.changedFiles;
+  const diffRef = json.diffReference || (json.baseRef || json.headRef || json.commitSha ? { baseRef: json.baseRef || "HEAD~1", headRef: json.headRef || json.commitSha || "HEAD" } : void 0);
   if (status === "IMPLEMENTED") {
-    if (!Array.isArray(json.filesChanged) || json.filesChanged.length === 0) {
+    if (!Array.isArray(filesChanged) || filesChanged.length === 0) {
       errors.push("IMPLEMENTED developer handoff requires non-empty 'filesChanged' list");
     }
-    if (!json.diffReference || typeof json.diffReference !== "object") {
+    if (!diffRef || typeof diffRef !== "object") {
       errors.push("IMPLEMENTED developer handoff requires 'diffReference' with baseRef and headRef");
     } else {
-      const hasBase = Boolean(json.diffReference.baseRef);
-      const hasHead = Boolean(json.diffReference.headRef || json.commitSha);
+      const hasBase = Boolean(diffRef.baseRef);
+      const hasHead = Boolean(diffRef.headRef || json.commitSha);
       if (!hasBase) {
         errors.push("IMPLEMENTED developer handoff requires 'diffReference.baseRef'");
       }
@@ -2033,19 +2039,25 @@ function validateQA(output) {
   }
   const errors = [];
   const validVerdicts = ["PASS", "FAIL", "BLOCKED"];
-  const verdict = String(json.verdict || "").toUpperCase();
+  let rawVerdict = String(json.verdict || "").toUpperCase();
+  if (rawVerdict === "PASSED" || rawVerdict === "SUCCESS") rawVerdict = "PASS";
+  if (rawVerdict === "FAILED") rawVerdict = "FAIL";
+  const verdict = rawVerdict;
   if (!validVerdicts.includes(verdict)) {
     errors.push(`Invalid QA verdict '${json.verdict}'. Expected one of: ${validVerdicts.join(", ")}`);
   }
   const validScope = ["PASS", "FAIL"];
-  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase();
+  let rawScope = String(json.scopeCompliance || "").toUpperCase();
+  if (rawScope === "PASSED" || rawScope === "TRUE") rawScope = "PASS";
+  const scopeCompliance = rawScope;
   if (!validScope.includes(scopeCompliance)) {
     errors.push(`Invalid QA scopeCompliance '${json.scopeCompliance}'. Expected: PASS or FAIL`);
   }
+  const criteriaList = json.acceptanceCriteriaResults || json.criteriaResults || json.criteria;
   if (verdict === "FAIL") {
     const hasFailClassification = Array.isArray(json.failureClassification) && json.failureClassification.length > 0;
     const hasFindings = Array.isArray(json.blockingFindings) && json.blockingFindings.length > 0;
-    const hasFailCriteria = Array.isArray(json.acceptanceCriteriaResults) && json.acceptanceCriteriaResults.some((c) => c.result === "FAIL");
+    const hasFailCriteria = Array.isArray(criteriaList) && criteriaList.some((c) => c.result === "FAIL" || c.status === "FAIL");
     if (!hasFailClassification && !hasFindings && !hasFailCriteria && scopeCompliance !== "FAIL") {
       errors.push("QA verdict 'FAIL' requires failureClassification, blockingFindings, or failing acceptance criteria");
     }
@@ -2053,12 +2065,11 @@ function validateQA(output) {
     if (scopeCompliance !== "PASS") {
       errors.push("QA verdict 'PASS' requires scopeCompliance to be 'PASS'");
     }
-    if (!Array.isArray(json.acceptanceCriteriaResults) || json.acceptanceCriteriaResults.length === 0) {
+    if (!Array.isArray(criteriaList) || criteriaList.length === 0) {
       errors.push("QA verdict 'PASS' requires non-empty 'acceptanceCriteriaResults' proving verification");
     } else {
-      const hasNonPassing = json.acceptanceCriteriaResults.some(
-        (c) => c.result !== "PASS" && c.passed !== true
-      );
+      const isItemPassing = (c) => c.result === "PASS" || c.status === "PASS" || c.passed === true || c.verified === true;
+      const hasNonPassing = criteriaList.some((c) => !isItemPassing(c));
       if (hasNonPassing) {
         errors.push("QA verdict 'PASS' requires all acceptance criteria to report 'PASS' (found unverified or failing criteria)");
       }
@@ -2105,12 +2116,18 @@ function validateReview(output) {
   }
   const errors = [];
   const validAssessments = ["CLEAR", "CONCERNS"];
-  const assessment = String(json.assessment || "").toUpperCase();
+  let rawAssessment = String(json.assessment || json.verdict || json.status || "").toUpperCase();
+  if (rawAssessment === "APPROVED" || rawAssessment === "PASSED" || rawAssessment === "CLEARED") {
+    rawAssessment = "CLEAR";
+  }
+  const assessment = rawAssessment;
   if (!validAssessments.includes(assessment)) {
     errors.push(`Invalid Reviewer assessment '${json.assessment}'. Expected: CLEAR or CONCERNS`);
   }
   const validScope = ["PASS", "CONCERN"];
-  const scopeCompliance = String(json.scopeCompliance || "").toUpperCase();
+  let rawScope = String(json.scopeCompliance || "").toUpperCase();
+  if (rawScope === "PASSED" || rawScope === "TRUE") rawScope = "PASS";
+  const scopeCompliance = rawScope;
   if (!validScope.includes(scopeCompliance)) {
     errors.push(`Invalid Reviewer scopeCompliance '${json.scopeCompliance}'. Expected: PASS or CONCERN`);
   }
@@ -2348,7 +2365,30 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   if (state?.issue?.number && state.issue.number > 0) {
     return state.issue.number;
   }
-  return 11;
+  try {
+    const effectiveCwd = input.cwd || process.cwd();
+    const gitBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
+      cwd: effectiveCwd,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const numFromGit = gitBranch.match(/(?:issue-?|#)(\d+)/i);
+    if (numFromGit) return parseInt(numFromGit[1], 10);
+  } catch {
+  }
+  try {
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
+    const cacheFile = join7(repoRoot, ".gated-change", "issue-cache.json");
+    if (existsSync7(cacheFile)) {
+      const parsed = JSON.parse(readFileSync7(cacheFile, "utf-8"));
+      if (parsed?.number && Number(parsed.number) > 0) {
+        return Number(parsed.number);
+      }
+    }
+  } catch {
+  }
+  return Number(process.env.TARGET_ISSUE) || 0;
 }
 async function main() {
   if (process.argv.includes("--meter")) {
@@ -2705,21 +2745,22 @@ async function main() {
       state2.sessionId = input.sessionId;
       saveState(state2, repoRoot2);
     }
+    const effectiveBranch = branchStatus.startsWith("retained_") ? currentBranch : state2.activeBranch || branchName;
     syncWorkflowDashboard(repoRoot2, {
       owner: state2.issue?.owner || "vamsicherukuri",
       repo: state2.issue?.repo || "prsquad",
       issueNumber: resolvedIssue2,
       issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
-      activeBranch: branchName,
+      activeBranch: effectiveBranch,
       sessionId: input.sessionId || state2.sessionId,
       phase: "scopeGate",
       status: "APPROVED",
-      summary: `Scope Approval Gate approved by ${lock2.approvedBy} on branch '${branchName}'`,
+      summary: `Scope Approval Gate approved by ${lock2.approvedBy} on branch '${effectiveBranch}'`,
       details: {
         approvedScope: lock2.approvedScope,
         approvedBy: lock2.approvedBy,
         approvedAt: lock2.approvedAt,
-        activeBranch: branchName,
+        activeBranch: effectiveBranch,
         ...extractedPlan ? { plan: extractedPlan } : {}
       }
     });
@@ -2727,7 +2768,7 @@ async function main() {
       sessionId: input.sessionId || state2.sessionId,
       phase: "developer",
       status: "IN_PROGRESS",
-      summary: `Implementing changes bounded to '${lock2.approvedScope}' on branch '${branchName}'`
+      summary: `Implementing changes bounded to '${lock2.approvedScope}' on branch '${effectiveBranch}'`
     });
     const chatMeter = formatChatCreditMeter(dashDev);
     appendAuditLog({
@@ -2740,23 +2781,23 @@ async function main() {
         attempt: lock2.currentAttempt,
         approvedScope: lock2.approvedScope,
         approvedBy: lock2.approvedBy,
-        activeBranch: branchName,
+        activeBranch: effectiveBranch,
         branchStatus
       }
     });
     const branchInstructions = `[BRANCH ISOLATION GUARDRAIL]
-Active Feature Branch: '${branchName}' (automatically created/checked out by Scope Gate hook).
-All edits and commits MUST remain on '${branchName}'.
+Active Feature Branch: '${effectiveBranch}' (designated feature branch for this session).
+All edits and commits MUST remain on '${effectiveBranch}'.
 Direct checkout or commits to 'main'/'master' and remote 'git push' are strictly blocked by security hooks.
 Before reporting IMPLEMENTED, stage and commit your changes: git commit -m "fix: <summary> (fixes #${resolvedIssue2})".
-Report headRef as your commit SHA or '${branchName}'.`;
+Report headRef as your commit SHA or '${effectiveBranch}'.`;
     const enrichedPrompt = prompt2.includes("[BRANCH ISOLATION GUARDRAIL]") ? prompt2 : `${branchInstructions}
 
 ${prompt2}`;
     const modifiedArgs = {
       ...toolArgs,
       prompt: enrichedPrompt,
-      activeBranch: branchName
+      activeBranch: effectiveBranch
     };
     const repoIntel = formatRepoIntelligenceForPrompt(repoRoot2, targetAgent, lock2.approvedScope);
     let canonicalPlan = "";
@@ -2799,7 +2840,7 @@ ${specText}` : "";
     }
     const addCtx = `SCOPE_GATE_VERIFIED: Implementation Attempt ${lock2.currentAttempt}/${lock2.maxAttempts} authorized by ${lock2.approvedBy}.
 APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
-ACTIVE_FEATURE_BRANCH: "${branchName}"
+ACTIVE_FEATURE_BRANCH: "${effectiveBranch}"
 Developer write actions are strictly bounded to this prefix and branch.` + planSection + specSection + reworkSection + (chatMeter ? `
 
 ${formatControlPlaneTelemetry(chatMeter, "Include this \u{1F4CA} AI Credit Meter status in your implementation handoff summary.")}` : "") + (repoIntel ? `
