@@ -33,6 +33,7 @@ Responsibilities:
 - Stage and commit your changes on the active feature branch (`git commit -m "fix: ..."`) before reporting `IMPLEMENTED`.
 - Never checkout, switch to, or commit to `main` or `master`. Never run `git push`.
 - Preserve repository conventions and avoid unrelated refactors.
+- Specification accuracy: Distinguish HTTP status codes (such as HTTP 400 Bad Request or 404 Not Found) from business data limits. For example, when a criterion states "Comment length is capped at 1,000 characters; over-limit submissions are rejected with HTTP 400", enforce the 1,000-character cap in code, UI, and tests, NOT 400.
 
 Scope rules:
 - Only modify files inside the human-approved scope and files explicitly approved in the plan.
