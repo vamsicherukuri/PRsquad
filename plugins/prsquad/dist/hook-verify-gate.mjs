@@ -2507,7 +2507,21 @@ async function main() {
       }
       const isExplicitlyRevokedOrExhausted = existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
       if (!isExplicitlyRevokedOrExhausted) {
-        const isHumanApproved = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true;
+        let dashData = null;
+        const dashFile = join7(repoRoot2, ".gated-change", "dashboard.json");
+        if (existsSync7(dashFile)) {
+          try {
+            dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
+          } catch {
+          }
+        }
+        const promptText = String(
+          toolArgs.prompt || toolArgs.content || toolArgs.message || firstTool?.args?.prompt || ""
+        );
+        const hasArchitectPlan = Boolean(
+          dashData?.phases?.architect?.status === "PLAN_READY" || state2.approvedPlan || state2.phase === "PLAN_READY"
+        );
+        const isHumanApproved = toolArgs.humanApprovalConfirmed === true || toolArgs.humanApproval === true || hasArchitectPlan && (/\[HUMAN_SCOPE_GATE_APPROVED/i.test(promptText) || /humanApprovalConfirmed\s*[:=]\s*true/i.test(promptText) || /implement(?:ing)?\s+approved/i.test(promptText) || /approved\s+(?:comments\s+feature|changes|scope|plan)/i.test(promptText));
         if (isHumanApproved) {
           const approvalRes = approveScopeGate({
             preferredDir: repoRoot2,
@@ -3131,6 +3145,12 @@ ${issueBody}`);
           errors: archVal.valid ? void 0 : archVal.errors
         }
       });
+      if (archVal.valid && archStatus === "PLAN_READY") {
+        state2.phase = "PLAN_READY";
+        state2.approvedScope = proposedScope;
+        state2.approvedPlan = planMarkdown || rawText;
+        saveState(state2, repoRoot2);
+      }
       const archInstruction = !archVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${archVal.errors.join("; ")}). Pause pipeline and report blocker to maintainer.` : archStatus === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer." : archStatus === "SCOPE_AMENDMENT_CONFIRMED" ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation." : "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
       const chatMeter = formatChatCreditMeter(dashArch);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, archInstruction) : { decision: "allow" };

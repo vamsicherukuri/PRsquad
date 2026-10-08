@@ -260,9 +260,35 @@ async function main() {
         existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
 
       if (!isExplicitlyRevokedOrExhausted) {
+        let dashData: any = null;
+        const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
+        if (existsSync(dashFile)) {
+          try {
+            dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
+          } catch {}
+        }
+
+        const promptText = String(
+          toolArgs.prompt ||
+          toolArgs.content ||
+          toolArgs.message ||
+          firstTool?.args?.prompt ||
+          ""
+        );
+        const hasArchitectPlan = Boolean(
+          dashData?.phases?.architect?.status === "PLAN_READY" ||
+          state.approvedPlan ||
+          state.phase === "PLAN_READY"
+        );
         const isHumanApproved =
           toolArgs.humanApprovalConfirmed === true ||
-          toolArgs.humanApproval === true;
+          toolArgs.humanApproval === true ||
+          (hasArchitectPlan && (
+            /\[HUMAN_SCOPE_GATE_APPROVED/i.test(promptText) ||
+            /humanApprovalConfirmed\s*[:=]\s*true/i.test(promptText) ||
+            /implement(?:ing)?\s+approved/i.test(promptText) ||
+            /approved\s+(?:comments\s+feature|changes|scope|plan)/i.test(promptText)
+          ));
 
         if (isHumanApproved) {
           const approvalRes = approveScopeGate({
@@ -983,6 +1009,13 @@ async function main() {
           errors: archVal.valid ? undefined : archVal.errors,
         },
       });
+
+      if (archVal.valid && archStatus === "PLAN_READY") {
+        state.phase = "PLAN_READY";
+        state.approvedScope = proposedScope;
+        state.approvedPlan = planMarkdown || rawText;
+        saveState(state, repoRoot);
+      }
 
       const archInstruction = !archVal.valid
         ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${archVal.errors.join("; ")}). Pause pipeline and report blocker to maintainer.`

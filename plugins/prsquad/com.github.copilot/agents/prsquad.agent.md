@@ -74,7 +74,9 @@ If delegation is denied by a deterministic hook policy (e.g. `DETERMINISTIC_POLI
    - Conclude the plan presentation with a clean, conversational approval request:
      "Do you approve this technical plan and scope to proceed with implementation? (Reply 'Approve' to proceed, or let me know what adjustments you would like)."
    - Wait for explicit human approval in chat before invoking `prsquad-dev`. Autonomous agents are strictly prohibited from self-approving without human confirmation.
-   - Once the human explicitly confirms approval in chat (e.g. "Approved", "Yes", "Proceed", or `/approve`), delegate to `prsquad-dev` with header `[HUMAN_SCOPE_GATE_APPROVED: <approvedScope>]` and field `humanApprovalConfirmed: true`.
+   - Once the human explicitly confirms approval in chat (e.g. "Approved", "Yes", "Proceed", or `/approve`), execute the gate approval tool via your shell tool (`powershell` on Windows, `bash` on macOS/Linux):
+     `node .gated-change/bin/gate-approve.mjs`
+     Then delegate to `prsquad-dev` with header `[HUMAN_SCOPE_GATE_APPROVED: <approvedScope>]` and field `humanApprovalConfirmed: true`.
    - The deterministic guardrail hook automatically verifies or mints the cryptographic approval lock on disk upon human confirmation, preventing model self-approval while eliminating terminal friction.
    - Done when: explicit human approval is confirmed and Developer is ready to be invoked.
 
