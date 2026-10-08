@@ -2502,12 +2502,20 @@ async function main() {
       } catch {
       }
       if (currentHead && !currentHead.startsWith(lock2.baseRef) && !lock2.baseRef.startsWith(currentHead)) {
-        const output2 = {
-          decision: "deny",
-          reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock2.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`
-        };
-        process.stdout.write(JSON.stringify(output2) + "\n");
-        process.exit(1);
+        let isAncestor = false;
+        try {
+          execSync3(`git merge-base --is-ancestor ${lock2.baseRef} HEAD`, { cwd: repoRoot2, stdio: "ignore" });
+          isAncestor = true;
+        } catch {
+        }
+        if (!isAncestor) {
+          const output2 = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock2.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`
+          };
+          process.stdout.write(JSON.stringify(output2) + "\n");
+          process.exit(1);
+        }
       }
     }
     const prompt2 = toolArgs.prompt || toolArgs.content || "";

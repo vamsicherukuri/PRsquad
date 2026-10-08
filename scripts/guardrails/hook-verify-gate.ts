@@ -453,19 +453,27 @@ async function main() {
     }
     saveState(state, repoRoot);
 
-    // Baseline Drift Verification on Attempt 1: Approved baseRef must match current repository baseline
+    // Baseline Drift Verification on Attempt 1: Approved baseRef must match current repository baseline or be an ancestor
     if (lock.currentAttempt === 1 && lock.baseRef && lock.baseRef !== "HEAD") {
       let currentHead = "";
       try {
         currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
       } catch {}
       if (currentHead && !currentHead.startsWith(lock.baseRef) && !lock.baseRef.startsWith(currentHead)) {
-        const output: HookOutput = {
-          decision: "deny",
-          reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`,
-        };
-        process.stdout.write(JSON.stringify(output) + "\n");
-        process.exit(1);
+        let isAncestor = false;
+        try {
+          execSync(`git merge-base --is-ancestor ${lock.baseRef} HEAD`, { cwd: repoRoot, stdio: "ignore" });
+          isAncestor = true;
+        } catch {}
+
+        if (!isAncestor) {
+          const output: HookOutput = {
+            decision: "deny",
+            reason: `BLOCKED BY POLICY (BASELINE_DRIFT): Repository baseline changed after Scope Gate approval. Approved baseRef is '${lock.baseRef.slice(0, 8)}', but current HEAD is '${currentHead.slice(0, 8)}'. Maintainer re-approval required.`,
+          };
+          process.stdout.write(JSON.stringify(output) + "\n");
+          process.exit(1);
+        }
       }
     }
 
