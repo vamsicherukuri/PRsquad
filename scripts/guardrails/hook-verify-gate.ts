@@ -29,7 +29,7 @@ import {
   validateQA,
   validateReview,
 } from "../../src/guardrails/handoffValidator.js";
-import { computePlanHash } from "../../src/guardrails/scopeApprover.js";
+import { computePlanHash, computeApprovalEnvelopeHash } from "../../src/guardrails/scopeApprover.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, approvedScope?: string): string {
@@ -236,8 +236,7 @@ async function main() {
         decision: "deny",
         reason:
           "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. " +
-          "The human maintainer must explicitly authorize implementation at the Human Scope Gate by running /approve " +
-          "(or 'npx -y tsx scripts/guardrails/scope-approve.ts'). The model cannot approve itself.",
+          "The human maintainer must explicitly authorize implementation at the Human Scope Gate in the Canvas panel or via 'node .gated-change/bin/gate-approve.mjs'. The model cannot approve itself.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);
