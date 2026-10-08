@@ -29,7 +29,11 @@ import {
   validateQA,
   validateReview,
 } from "../../src/guardrails/handoffValidator.js";
-import { computePlanHash, computeApprovalEnvelopeHash } from "../../src/guardrails/scopeApprover.js";
+import {
+  approveScopeGate,
+  computePlanHash,
+  computeApprovalEnvelopeHash,
+} from "../../src/guardrails/scopeApprover.js";
 import type { HookInput, HookOutput, ApprovalLock } from "../../src/guardrails/types.js";
 
 function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, approvedScope?: string): string {
@@ -213,7 +217,51 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     ensureNodeModulesInWorktree(repoRoot);
     const state = loadState(repoRoot);
-    const lock = loadApprovalLock(repoRoot);
+    let lock = loadApprovalLock(repoRoot);
+
+    // Auto-provision physical approval lock if conversational human approval confirmed
+    // Strictly forbidden if a lock was explicitly REVOKED or EXHAUSTED (prevents self-approval bypass)
+    if (!lock) {
+      const lockFilePath = join(repoRoot, ".gated-change", "approval.lock");
+      let existingLockStatus: string | null = null;
+      if (existsSync(lockFilePath)) {
+        try {
+          const raw = JSON.parse(readFileSync(lockFilePath, "utf-8"));
+          existingLockStatus = raw.status || null;
+        } catch {}
+      }
+
+      const isExplicitlyRevokedOrExhausted =
+        existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
+
+      if (!isExplicitlyRevokedOrExhausted) {
+        const isHumanApproved =
+          toolArgs.humanApprovalConfirmed === true ||
+          toolArgs.humanApproval === true;
+
+        if (isHumanApproved) {
+          const approvalRes = approveScopeGate({
+            preferredDir: repoRoot,
+            approver: "Human Maintainer (Conversational Confirmation)",
+          });
+          if (approvalRes.success && approvalRes.lock) {
+            lock = approvalRes.lock;
+            appendAuditLog({
+              sessionId: state.sessionId,
+              agent: "controller",
+              tool: "agent",
+              action: "scope_gate_approved_conversationally",
+              decision: "allow",
+              details: {
+                targetAgent,
+                issue: lock.issueNumber,
+                approvedScope: lock.approvedScope,
+              },
+            }, repoRoot);
+          }
+        }
+      }
+    }
 
     // 1. Missing or inactive approval lock
     // Enforces the core invariant: "The model cannot approve itself."
