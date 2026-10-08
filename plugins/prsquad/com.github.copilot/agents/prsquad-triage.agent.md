@@ -18,7 +18,7 @@ Evaluate the issue against this Definition of Ready:
 
 1. Reproduction path OR a clear expected-vs-actual behavior statement.
 2. At least one usable acceptance criterion: a concrete definition of done.
-3. A declared scope: package, service, or directory represented as a repository path prefix.
+3. A declared scope: either (a) a repository directory, package, or service path prefix, OR (b) explicit functional boundaries (declared in-scope vs. out-of-scope feature statements).
 
 Return only this structured result. The schema is a format contract, not sample issue content:
 
@@ -45,6 +45,6 @@ Status rules:
 - `FETCH_FAILED`: issue data is missing, incomplete, or fetch failed. Set `fetchError`; leave issue content empty rather than guessing.
 - `EMPTY`: the body is blank/whitespace-only and there are no comments, regardless of title.
 - `NOT_READY`: content exists but one or more Definition-of-Ready items are missing. List only genuinely missing items and ask exactly one question about the most important one.
-- `READY`: all three Definition-of-Ready items are present. Preserve the fetched issue fields and extract only values supported by them.
+- `READY`: all three Definition-of-Ready items are present. If scope is declared as functional boundaries rather than a repository path prefix, populate `declaredScope` with the declared functional boundary for the Architect to map to concrete repository files. Preserve the fetched issue fields and extract only values supported by them.
 
-Do not guess requirements, root cause, implementation details, or scope. Do not infer scope from the title alone. The orchestrator owns user communication and the two-round limit.
+Do not guess requirements, root cause, implementation details, or scope if none is declared. Do not infer scope from the title alone. The orchestrator owns user communication and the two-round limit.
