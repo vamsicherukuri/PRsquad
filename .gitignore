@@ -1,6 +1,6 @@
 node_modules/
 /dist/
-!plugins/gated-change/dist/
+!plugins/prsquad/dist/
 .env
 .env.local
 *.log

@@ -96,7 +96,7 @@ async function runLiveBranchTest() {
 
     const startTime = Date.now();
     const stdout = execSync(
-      "node plugins/gated-change/dist/hook-verify-gate.mjs",
+      "node plugins/prsquad/dist/hook-verify-gate.mjs",
       {
         cwd: REPO_ROOT,
         input: hookInput,

@@ -270,7 +270,7 @@ console.log("\nSuite 3: Guardrail 2 — Write-Scope Barrier & Smart Nudge");
       tool: "edit",
       toolArgs: { path: "package.json", content: "unauthorized" }
     });
-    const stdout = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+    const stdout = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
       cwd: REPO_ROOT,
       input,
       encoding: "utf-8",
@@ -360,7 +360,7 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
     tool: "powershell",
     toolArgs: { command: "git commit -m 'fix: scoped read tool'", agent_type: "gated-change-developer" }
   });
-  const psDevOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+  const psDevOut = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
     cwd: REPO_ROOT,
     input: psDevInput,
     encoding: "utf-8",
@@ -373,7 +373,7 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
     tool: "powershell",
     toolArgs: { command: "npx -y tsx scripts/test-guardrails.ts", agent_type: "gated-change-qa" }
   });
-  const psQaTestOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+  const psQaTestOut = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
     cwd: REPO_ROOT,
     input: psQaTestInput,
     encoding: "utf-8",
@@ -386,7 +386,7 @@ console.log("\nSuite 4: Guardrail 3 — Shell Command Sandboxing");
     tool: "powershell",
     toolArgs: { command: "git push origin main", agent_type: "gated-change-developer" }
   });
-  const psBlockedOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+  const psBlockedOut = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
     cwd: REPO_ROOT,
     input: psBlockedInput,
     encoding: "utf-8",

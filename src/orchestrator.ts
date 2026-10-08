@@ -122,10 +122,10 @@ async function main() {
 
   const issue = JSON.parse(readFileSync(issuePath, "utf-8")) as Issue;
   const intakeAgent = loadAgent(
-    "plugins/gated-change/com.github.copilot/agents/prsquad-triage.agent.md"
+    "plugins/prsquad/com.github.copilot/agents/prsquad-triage.agent.md"
   );
   const architectAgent = loadAgent(
-    "plugins/gated-change/com.github.copilot/agents/prsquad-architect.agent.md"
+    "plugins/prsquad/com.github.copilot/agents/prsquad-architect.agent.md"
   );
 
   const client = new CopilotClient();

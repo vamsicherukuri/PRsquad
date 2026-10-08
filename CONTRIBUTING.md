@@ -51,7 +51,7 @@ PRSquad enforces strict deterministic security invariants. All pull requests mus
 | `npm run test:edge-cases` | Bounded loops, clarification bounds, and error recovery |
 | `npm run test:security-invariants` | Verification of all 7 machine-readable security invariants |
 | `npm run test:portable` | Portability integration test verifying execution in isolated scratch repositories |
-| `npm run bundle:hooks` | Bundles hook entrypoints with esbuild into `plugins/gated-change/dist/` |
+| `npm run bundle:hooks` | Bundles hook entrypoints with esbuild into `plugins/prsquad/dist/` |
 | `npm run ci` | Runs full clean build, lint, bundle, and invariant suites |
 
 To run the complete verification suite locally:

@@ -115,7 +115,7 @@ async function runEdgeCases() {
         tool: "agent",
         toolArgs: { name: "gated-change-intake", prompt: "Target issue #3" },
       });
-      output = execSync("node plugins/gated-change/dist/hook-intake-ingest.mjs", {
+      output = execSync("node plugins/prsquad/dist/hook-intake-ingest.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -214,7 +214,7 @@ async function runEdgeCases() {
         tool: "agent",
         toolArgs: { name: "gated-change-developer" },
       });
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -239,7 +239,7 @@ async function runEdgeCases() {
           prompt: "[HUMAN_SCOPE_GATE_APPROVED: src/services/billing/] Self approved",
         },
       });
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -425,7 +425,7 @@ async function runEdgeCases() {
       tool: "agent",
       toolArgs: { name: "gated-change-developer" },
     });
-    const reworkStdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+    const reworkStdout = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
       cwd: REPO_ROOT,
       input: devReworkInput,
       encoding: "utf-8",
@@ -491,7 +491,7 @@ async function runEdgeCases() {
         failureClassification: [{ failure: "regression test failed", classification: "GENUINE_FIX_CAUSED" }],
       }),
     });
-    const qaPostStdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+    const qaPostStdout = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
       cwd: REPO_ROOT,
       input: qaPostToolInput,
       encoding: "utf-8",
@@ -514,7 +514,7 @@ async function runEdgeCases() {
         tool: "agent",
         toolArgs: { name: "gated-change-developer" },
       });
-      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input: dev4Input,
         encoding: "utf-8",
@@ -621,7 +621,7 @@ async function runEdgeCases() {
     let invalidHookExitCode = 0;
     let invalidHookOutput = "";
     try {
-      execSync("node plugins/gated-change/dist/run-hook.mjs non-existent-hook", {
+      execSync("node plugins/prsquad/dist/run-hook.mjs non-existent-hook", {
         cwd: REPO_ROOT,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
@@ -641,7 +641,7 @@ async function runEdgeCases() {
     const allowedPayload = JSON.stringify({ tool: "bash", toolArgs: { command: "git status" } });
     let nestedOutput = "";
     try {
-      nestedOutput = execSync("node ../../plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash", {
+      nestedOutput = execSync("node ../../plugins/prsquad/dist/run-hook.mjs hook-sandbox-bash", {
         cwd: nestedSubdir,
         input: allowedPayload,
         encoding: "utf-8",
@@ -657,7 +657,7 @@ async function runEdgeCases() {
     const disallowedPayload = JSON.stringify({ tool: "bash", toolArgs: { command: "git push origin main" } });
     let blockedOutput = "";
     try {
-      blockedOutput = execSync("node plugins/gated-change/dist/run-hook.mjs hook-sandbox-bash", {
+      blockedOutput = execSync("node plugins/prsquad/dist/run-hook.mjs hook-sandbox-bash", {
         cwd: REPO_ROOT,
         input: disallowedPayload,
         encoding: "utf-8",
@@ -963,7 +963,7 @@ async function runEdgeCases() {
           prompt: `${planA}\nImplement fix within approved scope`,
         },
       });
-      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -986,7 +986,7 @@ async function runEdgeCases() {
           prompt: `${planB}\nImplement unauthorized modifications`,
         },
       });
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -1012,7 +1012,7 @@ async function runEdgeCases() {
           prompt: "Here is your plan:\n### 📐 Approved Architecture Plan\nSlightly reworded prompt text\n[HUMAN_SCOPE_GATE_APPROVED: src/services/billing/]",
         },
       });
-      const stdout = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -1035,7 +1035,7 @@ async function runEdgeCases() {
     let scopeDenialReceived = false;
     let scopeReason = "";
     try {
-      const stdout = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
         cwd: REPO_ROOT,
         input: malformedPayload,
         encoding: "utf-8",
@@ -1052,7 +1052,7 @@ async function runEdgeCases() {
     let sandboxDenialReceived = false;
     let sandboxReason = "";
     try {
-      const stdout = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
         cwd: REPO_ROOT,
         input: malformedPayload,
         encoding: "utf-8",
@@ -1069,7 +1069,7 @@ async function runEdgeCases() {
     let gateExitCode = 0;
     let gateReason = "";
     try {
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input: malformedPayload,
         encoding: "utf-8",
@@ -1089,7 +1089,7 @@ async function runEdgeCases() {
     let intakeDenialReceived = false;
     let intakeReason = "";
     try {
-      const stdout = execSync("node plugins/gated-change/dist/hook-intake-ingest.mjs", {
+      const stdout = execSync("node plugins/prsquad/dist/hook-intake-ingest.mjs", {
         cwd: REPO_ROOT,
         input: malformedPayload,
         encoding: "utf-8",
@@ -1251,7 +1251,7 @@ async function runEdgeCases() {
         tool: "agent",
         toolArgs: { name: "gated-change-reviewer", prompt: "Perform review" },
       });
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input: inputPayload,
         encoding: "utf-8",
@@ -1432,7 +1432,7 @@ async function runEdgeCases() {
         tool: "agent",
         toolArgs: { name: "gated-change-qa", prompt: "Verify fix for issue 42" },
       });
-      execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",

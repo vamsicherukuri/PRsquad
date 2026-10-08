@@ -142,7 +142,7 @@ The project intentionally removed a separate Impact Auditor agent because a dete
 
 ### App-native implementation
 
-`plugins/gated-change/`
+`plugins/prsquad/`
 
 Contains the GitHub Copilot plugin package and current custom-agent definitions.
 
@@ -180,7 +180,7 @@ Draft PR: #2
 This branch adds:
 
 - `.github/plugin/marketplace.json`
-- `plugins/gated-change/plugin.json`
+- `plugins/prsquad/plugin.json`
 - plugin custom agents
 - Gated Change skill
 - `AGENTS.md`
@@ -318,4 +318,4 @@ When asked to continue implementation:
 
 ## Suggested first prompt for an IDE assistant
 
-> Read `PROJECT_CONTEXT.md`, `implementation-plan.md`, `AGENTS.md`, `CODEX-HANDOFF.md`, and the current `plugins/gated-change` tree. Do not redesign the workflow. First diagnose why the installed plugin's `gated-change-controller` agent is present on disk but is not shown by `/agent` in GitHub Copilot CLI 1.0.86-2. Propose the smallest test that distinguishes a plugin-loading problem from an invalid agent-frontmatter problem. Make no broad architectural changes until that discovery issue is resolved.
+> Read `PROJECT_CONTEXT.md`, `implementation-plan.md`, `AGENTS.md`, `CODEX-HANDOFF.md`, and the current `plugins/prsquad` tree. Do not redesign the workflow. First diagnose why the installed plugin's `prsquad` agent is present on disk but is not shown by `/agent` in GitHub Copilot CLI 1.0.86-2. Propose the smallest test that distinguishes a plugin-loading problem from an invalid agent-frontmatter problem. Make no broad architectural changes until that discovery issue is resolved.

@@ -82,7 +82,7 @@ async function runLayerB() {
           prompt: "Target issue #3 and proceed with intake triage.",
         },
       });
-      hookOutput = execSync("node plugins/gated-change/dist/hook-intake-ingest.mjs", {
+      hookOutput = execSync("node plugins/prsquad/dist/hook-intake-ingest.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -137,7 +137,7 @@ async function runLayerB() {
         },
       });
 
-      hookOutput = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+      hookOutput = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
         cwd: REPO_ROOT,
         input,
         encoding: "utf-8",
@@ -267,7 +267,7 @@ async function runLayerB() {
         agent: "gated-change-developer",
         cwd: tempWorktreeDir,
       });
-      const verifyOut = execSync("node plugins/gated-change/dist/hook-verify-gate.mjs", {
+      const verifyOut = execSync("node plugins/prsquad/dist/hook-verify-gate.mjs", {
         cwd: REPO_ROOT,
         input: verifyInput,
         encoding: "utf-8",
@@ -286,7 +286,7 @@ async function runLayerB() {
         },
         cwd: tempWorktreeDir,
       });
-      const editOut1 = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+      const editOut1 = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
         cwd: REPO_ROOT,
         input: editInScope1,
         encoding: "utf-8",
@@ -304,7 +304,7 @@ async function runLayerB() {
         },
         cwd: tempWorktreeDir,
       });
-      const editOut2 = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+      const editOut2 = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
         cwd: REPO_ROOT,
         input: editInScope2,
         encoding: "utf-8",
@@ -325,7 +325,7 @@ async function runLayerB() {
       let outOfScopeThrown = false;
       let editOutDenied = "";
       try {
-        editOutDenied = execSync("node plugins/gated-change/dist/hook-enforce-scope.mjs", {
+        editOutDenied = execSync("node plugins/prsquad/dist/hook-enforce-scope.mjs", {
           cwd: REPO_ROOT,
           input: editOutOfScope,
           encoding: "utf-8",
@@ -352,7 +352,7 @@ async function runLayerB() {
         },
         cwd: tempWorktreeDir,
       });
-      const psCommitOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+      const psCommitOut = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
         cwd: REPO_ROOT,
         input: psCommitInput,
         encoding: "utf-8",
@@ -373,7 +373,7 @@ async function runLayerB() {
       let psPushThrown = false;
       let psPushOut = "";
       try {
-        psPushOut = execSync("node plugins/gated-change/dist/hook-sandbox-bash.mjs", {
+        psPushOut = execSync("node plugins/prsquad/dist/hook-sandbox-bash.mjs", {
           cwd: REPO_ROOT,
           input: psPushInput,
           encoding: "utf-8",

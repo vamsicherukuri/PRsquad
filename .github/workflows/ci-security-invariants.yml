@@ -36,7 +36,7 @@ jobs:
       - name: 3. Verify Hook Bundles Up-To-Date
         run: |
           npm run bundle:hooks
-          git diff --exit-code plugins/gated-change/dist/
+          git diff --exit-code plugins/prsquad/dist/
 
       - name: 4. Execute Permanent Security Invariants (INV-01 to INV-20)
         run: npm run test:security-invariants

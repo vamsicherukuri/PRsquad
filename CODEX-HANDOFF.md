@@ -11,7 +11,7 @@ The existing SDK/terminal code under `src/` is a prototype/test harness and refe
 1. `AGENTS.md`
 2. `implementation-plan.md`
 3. `README.md`
-4. `plugins/gated-change/`
+4. `plugins/prsquad/`
 5. Existing prototype code under `src/`
 
 Treat `implementation-plan.md` as the authoritative design source.
@@ -20,7 +20,7 @@ Treat `implementation-plan.md` as the authoritative design source.
 
 - Scenario: generic software-delivery bug fix.
 - User experience: GitHub Copilot App.
-- Distribution: Agent Plugin (`plugins/gated-change`).
+- Distribution: Agent Plugin (`plugins/prsquad`).
 - Two hard human gates: Scope Gate and Merge Gate.
 - Keep Intake, Architect, Developer, QA, Reviewer, and Release-helper distinct.
 - Intake must not inspect the repository.
@@ -41,7 +41,7 @@ Treat `implementation-plan.md` as the authoritative design source.
 On branch `copilot-app-plugin-alignment` the repository now contains:
 
 - `.github/plugin/marketplace.json`
-- `plugins/gated-change/plugin.json`
+- `plugins/prsquad/plugin.json`
 - App-native controller agent
 - App-native Intake agent
 - App-native Architect agent

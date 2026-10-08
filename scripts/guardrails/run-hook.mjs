@@ -32,6 +32,7 @@ try {
 
 const candidates = [
   resolve(__dirname, `${action}.mjs`),
+  resolve(process.cwd(), "plugins/prsquad/dist", `${action}.mjs`),
   resolve(process.cwd(), "plugins/gated-change/dist", `${action}.mjs`),
   resolve(process.cwd(), "dist", `${action}.mjs`),
 ];

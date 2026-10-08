@@ -1,5 +1,5 @@
 ---
-name: gated-change
+name: prsquad
 description: Run PRSquad: governed issue-to-PR workflow with specialist agents, bounded retries, explicit human scope approval, independent validation, and human PR review.
 ---
 

@@ -26,7 +26,7 @@ import { tmpdir } from "node:os";
 import assert from "node:assert";
 
 const REPO_ROOT = process.cwd();
-const SOURCE_PLUGIN_DIR = join(REPO_ROOT, "plugins", "gated-change");
+const SOURCE_PLUGIN_DIR = join(REPO_ROOT, "plugins", "prsquad");
 const SOURCE_DIST_DIR = join(SOURCE_PLUGIN_DIR, "dist");
 
 console.log("=======================================================");
@@ -37,7 +37,7 @@ console.log("=======================================================");
 // 0. Static Inspection: Assert zero bare npm package imports across all dist bundles
 console.log("\n0. Static Inspection: Verifying zero external bare package imports across dist bundles...");
 const distFiles = readdirSync(SOURCE_DIST_DIR).filter((f) => f.endsWith(".mjs"));
-assert(distFiles.length > 0, "No .mjs bundles found in plugins/gated-change/dist");
+assert(distFiles.length > 0, "No .mjs bundles found in plugins/prsquad/dist");
 
 const bareImportViolations: { file: string; specifier: string }[] = [];
 const importRegex = /(?:import\s+(?:(?:[^{}\n]+|\{[^}]*\})\s+from\s+)?["']([^"']+)["']|import\(["']([^"']+)["']\)|require\(["']([^"']+)["']\))/g;

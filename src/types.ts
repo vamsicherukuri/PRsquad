@@ -28,8 +28,8 @@ export interface Plan {
 }
 
 /**
- * Matches the real plugin's gated-change-intake schema (plugins/gated-change/com.github.copilot/
- * agents/gated-change-intake.agent.md) - distinct from the older TriageResult above, which
+ * Matches the real plugin's prsquad-triage schema (plugins/prsquad/com.github.copilot/
+ * agents/prsquad-triage.agent.md) - distinct from the older TriageResult above, which
  * src/actions/*.ts still uses against the separate harness/agents/*.agent.md copies.
  */
 export interface PluginTriageResult {
@@ -51,7 +51,7 @@ export interface PluginTriageResult {
   fetchError: string | null;
 }
 
-/** Matches the real plugin's gated-change-architect initial-planning schema. */
+/** Matches the real plugin's prsquad-architect initial-planning schema. */
 export interface PluginPlan {
   status: "PLAN_READY" | "BLOCKED";
   rootCause: string;

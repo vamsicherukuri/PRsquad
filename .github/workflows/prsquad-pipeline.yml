@@ -1,8 +1,8 @@
-name: Gated Fix Pipeline
+name: PRsquad Pipeline
 
 # Legacy SDK-based prototype path (src/actions/*.ts) - kept as reference/test-harness material.
 # Manual-dispatch only so it never fires automatically alongside the GitHub Copilot App plugin
-# (plugins/gated-change) during testing. Provide the issue number to run it intentionally.
+# (plugins/prsquad) during testing. Provide the issue number to run it intentionally.
 on:
   workflow_dispatch:
     inputs:

@@ -571,7 +571,7 @@ async function runReproSuite() {
   // -------------------------------------------------------------------------
   {
     const hooksJson = JSON.parse(
-      fs.readFileSync(path.join(REPO_ROOT, "plugins", "gated-change", "com.github.copilot", "hooks", "hooks.json"), "utf-8")
+      fs.readFileSync(path.join(REPO_ROOT, "plugins", "prsquad", "com.github.copilot", "hooks", "hooks.json"), "utf-8")
     );
     const preHook = hooksJson.hooks?.preToolUse?.find((h: any) =>
       (h.args && h.args.includes("hook-verify-gate")) ||

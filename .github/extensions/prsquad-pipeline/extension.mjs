@@ -120,7 +120,10 @@ function findAuditJsonl() {
 function getHtmlContent() {
 	const candidates = [
 		resolve(__dirname, "canvas.html"),
+		resolve(process.cwd(), ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		resolve(process.cwd(), ".github", "extensions", "gated-change-pipeline", "canvas.html"),
+		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
+		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline", "vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8", ".github", "extensions", "gated-change-pipeline", "canvas.html")
@@ -174,7 +177,7 @@ let session;
 session = await joinSession({
 	canvases: [
 		createCanvas({
-			id: "gated-change-pipeline",
+			id: "prsquad-pipeline",
 			displayName: "PRSquad",
 			description: "Visual 7-stage interactive pipeline for PRSquad workflow.",
 			actions: [

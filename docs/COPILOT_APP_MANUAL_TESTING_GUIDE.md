@@ -6,7 +6,7 @@
 
 ## 1. Overview & Verification Architecture
 
-PRsquad enforces **Supervised Agentic Autonomy** through deterministic PreToolUse and PostToolUse hooks configured in `plugins/gated-change/com.github.copilot/hooks/hooks.json`. Agents reason within their specialist roles, but all file edits, shell executions, handoff payloads, and pipeline stage transitions are intercepted and gated deterministically by native TypeScript hooks:
+PRsquad enforces **Supervised Agentic Autonomy** through deterministic PreToolUse and PostToolUse hooks configured in `plugins/prsquad/com.github.copilot/hooks/hooks.json`. Agents reason within their specialist roles, but all file edits, shell executions, handoff payloads, and pipeline stage transitions are intercepted and gated deterministically by native TypeScript hooks:
 
 ```mermaid
 flowchart TD
@@ -74,7 +74,7 @@ All 20 hardened security and architectural items are mapped below, including the
 | **R16** | Shell Sandbox Human Scope Gate Authority | `src/guardrails/bashSandbox.ts`<br/>`validateCommandForAgent()` | Autonomous agent could execute `scope-approve.ts` via shell to self-approve proposed plans. | `scope-approve.ts`, `gate-approve.ts`, and `pr-create.ts` blocked for all AI agents (`POLICY_DENIAL`). |
 | **R17** | TypeScript Contract Drift & Compilation | `src/guardrails/types.ts`<br/>`WorkflowState.issue` | Missing `declaredScope` property caused `tsc` type-checking errors. | `declaredScope?: string` synchronized across types. `npm run build` (`tsc --noEmit`) passes with 0 errors. |
 | **R18** | Bundled Hook Standalone Runtime Dependency | `package.json`<br/>`dependencies` | `typescript` was listed in `devDependencies`, causing runtime errors in isolated production environments. | `typescript` moved to production `dependencies` in `package.json`. |
-| **R19** | Hook Timeout Reconciliation | `plugins/gated-change/.../hooks.json`<br/>`timeoutSec` | Outer hook timeout was 15s while inner test runner bounded at 35s, causing premature aborts. | Outer `hook-verify-gate` timeout set to `60s` (`timeoutSec: 60`). Inner execution bounded to 35s. |
+| **R19** | Hook Timeout Reconciliation | `plugins/prsquad/.../hooks.json`<br/>`timeoutSec` | Outer hook timeout was 15s while inner test runner bounded at 35s, causing premature aborts. | Outer `hook-verify-gate` timeout set to `60s` (`timeoutSec: 60`). Inner execution bounded to 35s. |
 | **R20** | Multi-Commit Cumulative Diff Range | `scripts/guardrails/hook-verify-gate.ts`<br/>Reviewer diff range | Reviewer diff discovery inspected only `HEAD~1 HEAD`, missing files modified in rework attempts. | Cumulative diff range discovery inspects canonical `${base} HEAD`. |
 
 ---
@@ -104,7 +104,7 @@ npm run check:plugin
 ```bash
 npm run bundle:hooks
 ```
-*Expected Output*: Bundles built cleanly into `plugins/gated-change/dist/run-hook.mjs`.
+*Expected Output*: Bundles built cleanly into `plugins/prsquad/dist/run-hook.mjs`.
 
 ### 3.3. GitHub Copilot App Workspace Setup
 1. Launch **GitHub Copilot App** or open the repository in **VS Code** with the GitHub Copilot Chat extension installed.

@@ -9,9 +9,9 @@ import { join } from "node:path";
 import matter from "gray-matter";
 
 const ROOT = process.cwd();
-const AGENTS_DIR = join(ROOT, "plugins/gated-change/com.github.copilot/agents");
-const SKILL_FILE = join(ROOT, "plugins/gated-change/skills/gated-change/SKILL.md");
-const PLUGIN_JSON = join(ROOT, "plugins/gated-change/plugin.json");
+const AGENTS_DIR = join(ROOT, "plugins/prsquad/com.github.copilot/agents");
+const SKILL_FILE = join(ROOT, "plugins/prsquad/skills/prsquad/SKILL.md");
+const PLUGIN_JSON = join(ROOT, "plugins/prsquad/plugin.json");
 const MARKETPLACE_JSON = join(ROOT, ".github/plugin/marketplace.json");
 const CONTROLLER_NAME = "prsquad";
 
