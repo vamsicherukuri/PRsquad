@@ -2100,6 +2100,16 @@ ${intel.slicedInstructions}`);
   }
   return sections.join("\n\n");
 }
+function formatControlPlaneTelemetry(meter, statusText) {
+  if (!meter && !statusText) return "";
+  const cleanedStatus = statusText ? statusText.replace(/^\[INSTRUCTION FOR CONTROLLER\]:\s*/i, "").trim() : "";
+  return `<!-- PR_SQUAD_CONTROL_PLANE_TELEMETRY_START -->
+### \u{1F4CA} Verified Control Plane Telemetry (Local Guardrail Hook)
+` + (meter ? `${meter}
+
+` : "") + (cleanedStatus ? `> **Control Plane Status**: ${cleanedStatus}
+` : "") + `<!-- PR_SQUAD_CONTROL_PLANE_TELEMETRY_END -->`;
+}
 function resolveIssueNumber(input, toolArgs, state, lock) {
   if (toolArgs.issueNumber && Number(toolArgs.issueNumber) > 0) {
     return Number(toolArgs.issueNumber);
@@ -2546,9 +2556,7 @@ APPROVED_SCOPE_PREFIX: "${lock2.approvedScope}"
 ACTIVE_FEATURE_BRANCH: "${branchName}"
 Developer write actions are strictly bounded to this prefix and branch.` + planSection + specSection + reworkSection + (chatMeter ? `
 
-${chatMeter}
-
-[INSTRUCTION FOR CONTROLLER]: Include this \u26A1 AI Credit Meter status in your implementation handoff summary.` : "") + (repoIntel ? `
+${formatControlPlaneTelemetry(chatMeter, "Include this \u{1F4CA} AI Credit Meter status in your implementation handoff summary.")}` : "") + (repoIntel ? `
 
 ${repoIntel}` : "");
     const output = {
@@ -2665,18 +2673,15 @@ ${tail}`;
   function buildEnrichedPostToolOutput(hookInput, meter, instructionText, agentName) {
     const raw = typeof hookInput.toolResult === "string" ? hookInput.toolResult : hookInput.toolResult?.textResultForLlm || hookInput.toolResult?.content || (hookInput.toolResult ? JSON.stringify(hookInput.toolResult) : "");
     const sanitized = sanitizeSpecialistHandoff(raw, agentName || targetAgent);
-    const enrichedText = `${sanitized}
+    const telemetryBlock = formatControlPlaneTelemetry(meter, instructionText);
+    const enrichedText = telemetryBlock ? `${sanitized}
 
-${meter}
-
-${instructionText}`;
+${telemetryBlock}` : sanitized;
     const modified = {
       resultType: hookInput.toolResult?.resultType || "success",
       textResultForLlm: enrichedText
     };
-    const addCtx = `${meter}
-
-${instructionText}`;
+    const addCtx = telemetryBlock;
     return {
       decision: "allow",
       modifiedResult: modified,
@@ -2998,9 +3003,9 @@ ${prompt}` : prompt;
 
 `;
     if (chatMeter) {
-      addCtx += `${chatMeter}
+      addCtx += `
 
-[INSTRUCTION FOR CONTROLLER]: Intake complete. Surface this live \u26A1 AI Credit Meter status in your handoff message to the user before generating the architectural plan.`;
+${formatControlPlaneTelemetry(chatMeter, "Intake complete. Surface this live \u{1F4CA} AI Credit Meter status in your handoff message to the user before generating the architectural plan.")}`;
     }
     const out = {
       decision: "allow",
@@ -3104,9 +3109,9 @@ Execute for verification: \`${tooling.testCommand}\`
 
 `;
     if (chatMeter) {
-      addCtx += `${chatMeter}
+      addCtx += `
 
-[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live \u26A1 AI Credit Meter status in your phase handoff message to the user before running QA.`;
+${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Include this live \u{1F4CA} AI Credit Meter status in your phase handoff message to the user before running QA.")}`;
     }
     const out = {
       decision: "allow",
@@ -3211,9 +3216,9 @@ ${truncatedDiff}
 
 `;
     if (chatMeter) {
-      addCtx += `${chatMeter}
+      addCtx += `
 
-[INSTRUCTION FOR CONTROLLER]: QA verification complete and passed. Include this live \u26A1 AI Credit Meter status in your phase handoff message to the user before running Reviewer.`;
+${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. Include this live \u{1F4CA} AI Credit Meter status in your phase handoff message to the user before running Reviewer.")}`;
     }
     const out = {
       decision: "allow",

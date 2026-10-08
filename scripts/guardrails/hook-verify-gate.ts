@@ -51,6 +51,18 @@ function formatRepoIntelligenceForPrompt(repoRoot: string, targetAgent: string, 
   return sections.join("\n\n");
 }
 
+function formatControlPlaneTelemetry(meter: string, statusText?: string): string {
+  if (!meter && !statusText) return "";
+  const cleanedStatus = statusText ? statusText.replace(/^\[INSTRUCTION FOR CONTROLLER\]:\s*/i, "").trim() : "";
+  return (
+    `<!-- PR_SQUAD_CONTROL_PLANE_TELEMETRY_START -->\n` +
+    `### 📊 Verified Control Plane Telemetry (Local Guardrail Hook)\n` +
+    (meter ? `${meter}\n\n` : "") +
+    (cleanedStatus ? `> **Control Plane Status**: ${cleanedStatus}\n` : "") +
+    `<!-- PR_SQUAD_CONTROL_PLANE_TELEMETRY_END -->`
+  );
+}
+
 function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: any): number {
   if (toolArgs.issueNumber && Number(toolArgs.issueNumber) > 0) {
     return Number(toolArgs.issueNumber);
@@ -582,7 +594,7 @@ async function main() {
       planSection +
       specSection +
       reworkSection +
-      (chatMeter ? `\n\n${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Include this ⚡ AI Credit Meter status in your implementation handoff summary.` : "") +
+      (chatMeter ? `\n\n${formatControlPlaneTelemetry(chatMeter, "Include this 📊 AI Credit Meter status in your implementation handoff summary.")}` : "") +
       (repoIntel ? `\n\n${repoIntel}` : "");
 
     const output = {
@@ -692,12 +704,13 @@ async function main() {
       ? hookInput.toolResult
       : hookInput.toolResult?.textResultForLlm || hookInput.toolResult?.content || (hookInput.toolResult ? JSON.stringify(hookInput.toolResult) : "");
     const sanitized = sanitizeSpecialistHandoff(raw, agentName || targetAgent);
-    const enrichedText = `${sanitized}\n\n${meter}\n\n${instructionText}`;
+    const telemetryBlock = formatControlPlaneTelemetry(meter, instructionText);
+    const enrichedText = telemetryBlock ? `${sanitized}\n\n${telemetryBlock}` : sanitized;
     const modified = {
       resultType: hookInput.toolResult?.resultType || "success",
       textResultForLlm: enrichedText,
     };
-    const addCtx = `${meter}\n\n${instructionText}`;
+    const addCtx = telemetryBlock;
     return {
       decision: "allow",
       modifiedResult: modified,
@@ -1136,7 +1149,7 @@ async function main() {
     if (astMap) addCtx += `${astMap}\n\n`;
     if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
-      addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Intake complete. Surface this live ⚡ AI Credit Meter status in your handoff message to the user before generating the architectural plan.`;
+      addCtx += `\n\n${formatControlPlaneTelemetry(chatMeter, "Intake complete. Surface this live 📊 AI Credit Meter status in your handoff message to the user before generating the architectural plan.")}`;
     }
 
     const out: any = {
@@ -1235,7 +1248,7 @@ async function main() {
     if (tooling.testCommand) addCtx += `### 🛠️ Configured Test Command\nExecute for verification: \`${tooling.testCommand}\`\n\n`;
     if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
-      addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Include this live ⚡ AI Credit Meter status in your phase handoff message to the user before running QA.`;
+      addCtx += `\n\n${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Include this live 📊 AI Credit Meter status in your phase handoff message to the user before running QA.")}`;
     }
 
     const out: any = {
@@ -1348,7 +1361,7 @@ async function main() {
     if (qaHandoff.markdown) addCtx += `${qaHandoff.markdown}\n\n`;
     if (repoIntel) addCtx += `${repoIntel}\n\n`;
     if (chatMeter) {
-      addCtx += `${chatMeter}\n\n[INSTRUCTION FOR CONTROLLER]: QA verification complete and passed. Include this live ⚡ AI Credit Meter status in your phase handoff message to the user before running Reviewer.`;
+      addCtx += `\n\n${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. Include this live 📊 AI Credit Meter status in your phase handoff message to the user before running Reviewer.")}`;
     }
 
     const out: any = {
