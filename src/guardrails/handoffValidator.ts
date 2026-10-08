@@ -118,8 +118,12 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
     if (!Array.isArray(json.acceptanceCriteria) || json.acceptanceCriteria.length === 0) {
       errors.push("READY triage requires at least 1 item in 'acceptanceCriteria'");
     }
-    if (!json.declaredScope || typeof json.declaredScope !== "string" || !json.declaredScope.trim()) {
-      errors.push("READY triage requires non-empty 'declaredScope' path prefix");
+    const hasValidScope =
+      (typeof json.declaredScope === "string" && json.declaredScope.trim().length > 0) ||
+      (typeof json.declaredScope === "object" && json.declaredScope !== null && Object.keys(json.declaredScope).length > 0) ||
+      (Array.isArray(json.declaredScope) && json.declaredScope.length > 0);
+    if (!hasValidScope) {
+      errors.push("READY triage requires non-empty 'declaredScope' (path prefix or functional scope boundaries)");
     }
   } else if (status === "NOT_READY") {
     if (!Array.isArray(json.missing) || json.missing.length === 0) {
@@ -135,6 +139,19 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
     return failValidation(errors, json);
   }
 
+  let normalizedScope: string | null = null;
+  if (typeof json.declaredScope === "string") {
+    normalizedScope = json.declaredScope.trim();
+  } else if (Array.isArray(json.declaredScope)) {
+    normalizedScope = json.declaredScope.join(", ");
+  } else if (typeof json.declaredScope === "object" && json.declaredScope !== null) {
+    if (Array.isArray(json.declaredScope.inScope)) {
+      normalizedScope = json.declaredScope.inScope.join("; ");
+    } else {
+      normalizedScope = JSON.stringify(json.declaredScope);
+    }
+  }
+
   return {
     valid: true,
     data: {
@@ -143,7 +160,7 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
       issue: json.issue,
       problem: json.problem,
       acceptanceCriteria: json.acceptanceCriteria || [],
-      declaredScope: json.declaredScope || null,
+      declaredScope: normalizedScope,
       missing: json.missing || [],
       clarifyingQuestion: json.clarifyingQuestion || null,
       fetchError: json.fetchError || null,

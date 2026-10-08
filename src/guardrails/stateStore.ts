@@ -1,8 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync, copyFileSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
-import { platform } from "node:os";
+import { platform, homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 import type { WorkflowState, ApprovalLock, AuditLogEntry } from "./types.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export const GATED_CHANGE_DIR = ".gated-change";
 export const STATE_FILE = "state.json";
@@ -139,6 +143,52 @@ export function findGatedChangeDir(rootDir: string = getRepoRoot()): string {
 }
 
 /**
+ * Ensures .gated-change/bin is provisioned with standalone CLI tools (gate-approve.mjs & pr-create.mjs).
+ */
+export function ensureGatedChangeBin(rootDir: string = getRepoRoot()): boolean {
+  try {
+    const binDir = join(rootDir, GATED_CHANGE_DIR, "bin");
+    if (!existsSync(binDir)) {
+      mkdirSync(binDir, { recursive: true });
+    }
+
+    const home = homedir();
+    const candidateDirs = [
+      join(home, ".copilot", "installed-plugins", "prsquad-marketplace", "prsquad", "dist"),
+      resolve(__dirname, "..", "..", "plugins", "prsquad", "dist"),
+      resolve(__dirname, "dist"),
+      resolve(rootDir, "plugins", "prsquad", "dist"),
+      resolve(__dirname),
+    ];
+
+    let foundDist: string | null = null;
+    for (const d of candidateDirs) {
+      if (existsSync(join(d, "gate-approve.mjs"))) {
+        foundDist = d;
+        break;
+      }
+    }
+
+    if (foundDist) {
+      const targetApprove = join(binDir, "gate-approve.mjs");
+      if (!existsSync(targetApprove)) {
+        copyFileSync(join(foundDist, "gate-approve.mjs"), targetApprove);
+      }
+      const targetPr = join(binDir, "pr-create.mjs");
+      if (!existsSync(targetPr)) {
+        copyFileSync(join(foundDist, "pr-create.mjs"), targetPr);
+      }
+      const pluginRootFile = join(rootDir, GATED_CHANGE_DIR, "plugin-root.txt");
+      if (!existsSync(pluginRootFile)) {
+        writeFileSync(pluginRootFile, resolve(foundDist, ".."), "utf-8");
+      }
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+/**
  * Ensures the runtime .gated-change directory exists in the true repository root.
  */
 export function ensureGatedChangeDir(rootDir: string = getRepoRoot()): string {
@@ -146,6 +196,7 @@ export function ensureGatedChangeDir(rootDir: string = getRepoRoot()): string {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+  ensureGatedChangeBin(rootDir);
   return dir;
 }
 

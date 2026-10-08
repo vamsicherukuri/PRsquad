@@ -7,9 +7,13 @@ import { tmpdir as tmpdir2 } from "node:os";
 import { execSync as execSync3, execFileSync as execFileSync2 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync, copyFileSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, dirname, basename } from "node:path";
+import { platform, homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
+var __filename = fileURLToPath(import.meta.url);
+var __dirname = dirname(__filename);
 var GATED_CHANGE_DIR = ".gated-change";
 var STATE_FILE = "state.json";
 var LOCK_FILE = "approval.lock";
@@ -74,11 +78,52 @@ function findGatedChangeDir(rootDir = getRepoRoot()) {
   }
   return localDir;
 }
+function ensureGatedChangeBin(rootDir = getRepoRoot()) {
+  try {
+    const binDir = join(rootDir, GATED_CHANGE_DIR, "bin");
+    if (!existsSync(binDir)) {
+      mkdirSync(binDir, { recursive: true });
+    }
+    const home = homedir();
+    const candidateDirs = [
+      join(home, ".copilot", "installed-plugins", "prsquad-marketplace", "prsquad", "dist"),
+      resolve(__dirname, "..", "..", "plugins", "prsquad", "dist"),
+      resolve(__dirname, "dist"),
+      resolve(rootDir, "plugins", "prsquad", "dist"),
+      resolve(__dirname)
+    ];
+    let foundDist = null;
+    for (const d of candidateDirs) {
+      if (existsSync(join(d, "gate-approve.mjs"))) {
+        foundDist = d;
+        break;
+      }
+    }
+    if (foundDist) {
+      const targetApprove = join(binDir, "gate-approve.mjs");
+      if (!existsSync(targetApprove)) {
+        copyFileSync(join(foundDist, "gate-approve.mjs"), targetApprove);
+      }
+      const targetPr = join(binDir, "pr-create.mjs");
+      if (!existsSync(targetPr)) {
+        copyFileSync(join(foundDist, "pr-create.mjs"), targetPr);
+      }
+      const pluginRootFile = join(rootDir, GATED_CHANGE_DIR, "plugin-root.txt");
+      if (!existsSync(pluginRootFile)) {
+        writeFileSync(pluginRootFile, resolve(foundDist, ".."), "utf-8");
+      }
+      return true;
+    }
+  } catch {
+  }
+  return false;
+}
 function ensureGatedChangeDir(rootDir = getRepoRoot()) {
   const dir = join(rootDir, GATED_CHANGE_DIR);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+  ensureGatedChangeBin(rootDir);
   return dir;
 }
 function loadState(rootDir = getRepoRoot()) {
@@ -214,7 +259,7 @@ function appendAuditLog(entry, rootDir = getRepoRoot()) {
 // src/guardrails/issueDashboard.ts
 import { existsSync as existsSync2, readFileSync as readFileSync2, writeFileSync as writeFileSync2, unlinkSync } from "node:fs";
 import { join as join2 } from "node:path";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir, homedir as homedir2 } from "node:os";
 import { execFileSync, execSync as execSync2 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
@@ -248,7 +293,7 @@ function renderCredits(credits) {
   return `**${credits.toFixed(2)} AIU**`;
 }
 function getGroundTruthTelemetry(sessionId, startEventId = 0) {
-  const dbPath = join2(homedir(), ".copilot", "session-store.db");
+  const dbPath = join2(homedir2(), ".copilot", "session-store.db");
   if (!existsSync2(dbPath)) return null;
   let db = null;
   try {
