@@ -164,6 +164,18 @@ function saveApprovalLock(lock, rootDir = getRepoRoot()) {
   const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
   writeFileSync(filePath, JSON.stringify(lock, null, 2), "utf-8");
   try {
+    const state = loadState(rootDir);
+    if (lock.status === "ACTIVE") {
+      state.humanApproval = true;
+      if (lock.approvedScope) state.approvedScope = lock.approvedScope;
+      saveState(state, rootDir);
+    } else if (lock.status === "REVOKED" || lock.status === "EXHAUSTED") {
+      state.humanApproval = false;
+      saveState(state, rootDir);
+    }
+  } catch {
+  }
+  try {
     const gitCommonDir = execSync("git rev-parse --git-common-dir", {
       cwd: rootDir,
       encoding: "utf-8",

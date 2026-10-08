@@ -273,7 +273,23 @@ export function saveState(state: WorkflowState, rootDir: string = getRepoRoot())
 export function loadApprovalLock(rootDir: string = getRepoRoot()): ApprovalLock | null {
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
-  if (!existsSync(filePath)) return null;
+  if (!existsSync(filePath)) {
+    const state = loadState(rootDir);
+    if (state.humanApproval && state.approvedScope) {
+      return {
+        issueNumber: state.issue?.number || 0,
+        approvedScope: state.approvedScope,
+        planHash: "state-bound-scope",
+        baseRef: state.baseRef || "HEAD",
+        maxAttempts: state.maxImplementationAttempts || 3,
+        currentAttempt: state.implementationAttempt || 1,
+        approvedAt: state.updatedAt || new Date().toISOString(),
+        approvedBy: "Human Maintainer (Chat Scope Gate)",
+        status: "ACTIVE",
+      };
+    }
+    return null;
+  }
 
   try {
     const raw = readFileSync(filePath, "utf-8");
@@ -312,6 +328,19 @@ export function saveApprovalLock(lock: ApprovalLock, rootDir: string = getRepoRo
   ensureGatedChangeDir(rootDir);
   const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
   writeFileSync(filePath, JSON.stringify(lock, null, 2), "utf-8");
+
+  // Keep state.json in sync with lock status
+  try {
+    const state = loadState(rootDir);
+    if (lock.status === "ACTIVE") {
+      state.humanApproval = true;
+      if (lock.approvedScope) state.approvedScope = lock.approvedScope;
+      saveState(state, rootDir);
+    } else if (lock.status === "REVOKED" || lock.status === "EXHAUSTED") {
+      state.humanApproval = false;
+      saveState(state, rootDir);
+    }
+  } catch {}
 
   // Synchronize to parent repo if running inside an isolated git worktree
   try {

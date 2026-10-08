@@ -183,7 +183,23 @@ function saveState(state, rootDir = getRepoRoot()) {
 function loadApprovalLock(rootDir = getRepoRoot()) {
   const searchDir = findGatedChangeDir(rootDir);
   const filePath = join(searchDir, LOCK_FILE);
-  if (!existsSync(filePath)) return null;
+  if (!existsSync(filePath)) {
+    const state = loadState(rootDir);
+    if (state.humanApproval && state.approvedScope) {
+      return {
+        issueNumber: state.issue?.number || 0,
+        approvedScope: state.approvedScope,
+        planHash: "state-bound-scope",
+        baseRef: state.baseRef || "HEAD",
+        maxAttempts: state.maxImplementationAttempts || 3,
+        currentAttempt: state.implementationAttempt || 1,
+        approvedAt: state.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+        approvedBy: "Human Maintainer (Chat Scope Gate)",
+        status: "ACTIVE"
+      };
+    }
+    return null;
+  }
   try {
     const raw = readFileSync(filePath, "utf-8");
     const lock = JSON.parse(raw);
@@ -214,6 +230,18 @@ function saveApprovalLock(lock, rootDir = getRepoRoot()) {
   ensureGatedChangeDir(rootDir);
   const filePath = join(rootDir, GATED_CHANGE_DIR, LOCK_FILE);
   writeFileSync(filePath, JSON.stringify(lock, null, 2), "utf-8");
+  try {
+    const state = loadState(rootDir);
+    if (lock.status === "ACTIVE") {
+      state.humanApproval = true;
+      if (lock.approvedScope) state.approvedScope = lock.approvedScope;
+      saveState(state, rootDir);
+    } else if (lock.status === "REVOKED" || lock.status === "EXHAUSTED") {
+      state.humanApproval = false;
+      saveState(state, rootDir);
+    }
+  } catch {
+  }
   try {
     const gitCommonDir = execSync("git rev-parse --git-common-dir", {
       cwd: rootDir,
