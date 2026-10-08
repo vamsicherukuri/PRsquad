@@ -2,6 +2,7 @@
 
 // scripts/guardrails/hook-intake-ingest.ts
 import { readFileSync as readFileSync4 } from "node:fs";
+import { execSync as execSync4 } from "node:child_process";
 
 // src/guardrails/ingestIssue.ts
 import { execSync } from "node:child_process";
@@ -34,13 +35,28 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
     }
   }
   try {
-    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
-    const stdout = execSync(cmd, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      timeout: 1e4,
-      stdio: ["ignore", "pipe", "ignore"]
-    });
+    let stdout = "";
+    if (owner && repo) {
+      try {
+        const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
+        stdout = execSync(cmd, {
+          cwd: rootDir,
+          encoding: "utf-8",
+          timeout: 1e4,
+          stdio: ["ignore", "pipe", "ignore"]
+        });
+      } catch {
+      }
+    }
+    if (!stdout.trim()) {
+      const fallbackCmd = `gh issue view ${issueNumber} --json number,title,body,comments,labels,author,state`;
+      stdout = execSync(fallbackCmd, {
+        cwd: rootDir,
+        encoding: "utf-8",
+        timeout: 1e4,
+        stdio: ["ignore", "pipe", "ignore"]
+      });
+    }
     const parsed = JSON.parse(stdout);
     return {
       owner,
@@ -1012,7 +1028,8 @@ async function main() {
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetAgent = toolArgs.agent_type || toolArgs.name || toolArgs.agent || input.agent;
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
-    const repoRoot = getRepoRoot();
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
     let issueNum = 1;
@@ -1027,10 +1044,24 @@ async function main() {
       issueNum = parseInt(nameNum[1], 10);
     } else if (state.issue?.number && state.issue.number > 0) {
       issueNum = state.issue.number;
+    } else {
+      const pathNum = repoRoot.match(/(?:issue-?|#)(\d+)/i);
+      if (pathNum) {
+        issueNum = parseInt(pathNum[1], 10);
+      } else {
+        try {
+          const branch = execSync4("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+          const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
+          if (branchNum) {
+            issueNum = parseInt(branchNum[1], 10);
+          }
+        } catch {
+        }
+      }
     }
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || remoteInfo.repo || "prsquad";
+    let owner = remoteInfo.owner || state.issue?.owner || "ADO2GH-Migration";
+    let repo = remoteInfo.repo || state.issue?.repo || "StarReads";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {
@@ -1044,11 +1075,11 @@ async function main() {
       }
     }
     try {
-      const issueData = fetchIssueDeterministic(owner, repo, issueNum);
+      const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
       if (issueData.state && issueData.state !== "OPEN") {
         state.issue = { owner, repo, number: issueData.number, title: issueData.title };
         state.phase = "PAUSED";
-        saveState(state);
+        saveState(state, repoRoot);
         appendAuditLog({
           sessionId: state.sessionId,
           agent: "controller",
@@ -1060,7 +1091,7 @@ async function main() {
             title: issueData.title,
             state: issueData.state
           }
-        });
+        }, repoRoot);
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
         const output2 = {
           decision: "deny",
@@ -1082,8 +1113,8 @@ async function main() {
       if (input.sessionId) {
         state.sessionId = input.sessionId;
       }
-      saveState(state);
-      syncWorkflowDashboard(process.cwd(), {
+      saveState(state, repoRoot);
+      syncWorkflowDashboard(repoRoot, {
         owner,
         repo,
         issueNumber: issueData.number,
@@ -1105,7 +1136,7 @@ async function main() {
           title: issueData.title,
           round: state.intakeRound
         }
-      });
+      }, repoRoot);
       const enrichedPrompt = prompt.includes("PRE_FETCHED_ISSUE_PAYLOAD") ? prompt : `${prompt}
 
 PRE_FETCHED_ISSUE_PAYLOAD:

@@ -6,6 +6,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch, getRepoOwnerAndName, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
@@ -36,7 +37,8 @@ async function main() {
 
   // Only intercept when invoking gated-change-intake (supports qualified names)
   if (isAgentMatch(targetAgent, "gated-change-intake")) {
-    const repoRoot = getRepoRoot();
+    const effectiveCwd = input.cwd || process.cwd();
+    const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
@@ -53,12 +55,26 @@ async function main() {
       issueNum = parseInt(nameNum[1], 10);
     } else if (state.issue?.number && state.issue.number > 0) {
       issueNum = state.issue.number;
+    } else {
+      // Fallback: extract from repoRoot path or active git branch
+      const pathNum = repoRoot.match(/(?:issue-?|#)(\d+)/i);
+      if (pathNum) {
+        issueNum = parseInt(pathNum[1], 10);
+      } else {
+        try {
+          const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+          const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
+          if (branchNum) {
+            issueNum = parseInt(branchNum[1], 10);
+          }
+        } catch {}
+      }
     }
 
     // Extract owner and repo dynamically from remote origin or prompt
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = state.issue?.owner || remoteInfo.owner || "vamsicherukuri";
-    let repo = state.issue?.repo || remoteInfo.repo || "prsquad";
+    let owner = remoteInfo.owner || state.issue?.owner || "ADO2GH-Migration";
+    let repo = remoteInfo.repo || state.issue?.repo || "StarReads";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo) {
@@ -73,13 +89,13 @@ async function main() {
     }
 
     try {
-      const issueData = fetchIssueDeterministic(owner, repo, issueNum);
+      const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
 
       // Deterministic lifecycle guardrail: strictly require OPEN
       if (issueData.state && issueData.state !== "OPEN") {
         state.issue = { owner, repo, number: issueData.number, title: issueData.title };
         state.phase = "PAUSED";
-        saveState(state);
+        saveState(state, repoRoot);
 
         appendAuditLog({
           sessionId: state.sessionId,
@@ -92,7 +108,7 @@ async function main() {
             title: issueData.title,
             state: issueData.state,
           },
-        });
+        }, repoRoot);
 
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
         const output = {
@@ -118,9 +134,9 @@ async function main() {
       if (input.sessionId) {
         state.sessionId = input.sessionId;
       }
-      saveState(state);
+      saveState(state, repoRoot);
 
-      syncWorkflowDashboard(process.cwd(), {
+      syncWorkflowDashboard(repoRoot, {
         owner,
         repo,
         issueNumber: issueData.number,
@@ -143,7 +159,7 @@ async function main() {
           title: issueData.title,
           round: state.intakeRound,
         },
-      });
+      }, repoRoot);
 
       const enrichedPrompt = prompt.includes("PRE_FETCHED_ISSUE_PAYLOAD")
         ? prompt

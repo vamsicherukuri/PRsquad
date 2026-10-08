@@ -41,13 +41,28 @@ export function fetchIssueDeterministic(
 
   // 1. Try native GitHub CLI
   try {
-    const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
-    const stdout = execSync(cmd, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      timeout: 10000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    let stdout = "";
+    if (owner && repo) {
+      try {
+        const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
+        stdout = execSync(cmd, {
+          cwd: rootDir,
+          encoding: "utf-8",
+          timeout: 10000,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch {}
+    }
+
+    if (!stdout.trim()) {
+      const fallbackCmd = `gh issue view ${issueNumber} --json number,title,body,comments,labels,author,state`;
+      stdout = execSync(fallbackCmd, {
+        cwd: rootDir,
+        encoding: "utf-8",
+        timeout: 10000,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    }
 
     const parsed = JSON.parse(stdout);
     return {
