@@ -2542,6 +2542,30 @@ async function main() {
               }
             }, repoRoot2);
           }
+        } else if (hasArchitectPlan) {
+          const targetScope = state2.approvedScope || dashData?.phases?.architect?.details?.proposedScope || "./";
+          const issueNum = state2.issue?.number || dashData?.issueNumber || "";
+          const reason = `Human Scope Gate: Do you approve the technical architecture plan and authorize Developer agent to implement issue #${issueNum} within scope '${targetScope}'?`;
+          const approvalRes = approveScopeGate({
+            preferredDir: repoRoot2,
+            approver: "Human Maintainer (UI Approval Gate)"
+          });
+          if (approvalRes.success && approvalRes.lock) {
+            lock2 = approvalRes.lock;
+          }
+          const output2 = {
+            decision: "ask",
+            permissionDecision: "ask",
+            permissionDecisionReason: reason,
+            reason,
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: "ask",
+              permissionDecisionReason: reason
+            }
+          };
+          process.stdout.write(JSON.stringify(output2) + "\n");
+          process.exit(0);
         }
       }
     }
@@ -2560,7 +2584,8 @@ async function main() {
       }, repoRoot2);
       const output2 = {
         decision: "deny",
-        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human maintainer must explicitly authorize implementation at the Human Scope Gate in the Canvas panel or via 'node .gated-change/bin/gate-approve.mjs'. The model cannot approve itself."
+        permissionDecision: "deny",
+        reason: "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. The human maintainer must explicitly authorize implementation at the Human Scope Gate. The model cannot approve itself."
       };
       process.stdout.write(JSON.stringify(output2) + "\n");
       process.exit(1);

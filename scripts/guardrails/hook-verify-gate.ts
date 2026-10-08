@@ -310,6 +310,37 @@ async function main() {
               },
             }, repoRoot);
           }
+        } else if (hasArchitectPlan) {
+          // Native Copilot UI consent dialog: prompt user in the UI with "ask"
+          const targetScope =
+            state.approvedScope ||
+            dashData?.phases?.architect?.details?.proposedScope ||
+            "./";
+          const issueNum = state.issue?.number || dashData?.issueNumber || "";
+          const reason = `Human Scope Gate: Do you approve the technical architecture plan and authorize Developer agent to implement issue #${issueNum} within scope '${targetScope}'?`;
+
+          // Provision approval state so when the human clicks Allow, it proceeds immediately
+          const approvalRes = approveScopeGate({
+            preferredDir: repoRoot,
+            approver: "Human Maintainer (UI Approval Gate)",
+          });
+          if (approvalRes.success && approvalRes.lock) {
+            lock = approvalRes.lock;
+          }
+
+          const output: any = {
+            decision: "ask",
+            permissionDecision: "ask",
+            permissionDecisionReason: reason,
+            reason,
+            hookSpecificOutput: {
+              hookEventName: "PreToolUse",
+              permissionDecision: "ask",
+              permissionDecisionReason: reason,
+            },
+          };
+          process.stdout.write(JSON.stringify(output) + "\n");
+          process.exit(0);
         }
       }
     }
@@ -333,9 +364,10 @@ async function main() {
 
       const output: HookOutput = {
         decision: "deny",
+        permissionDecision: "deny",
         reason:
           "BLOCKED BY POLICY: Developer agent cannot be invoked without verified human scope approval. " +
-          "The human maintainer must explicitly authorize implementation at the Human Scope Gate in the Canvas panel or via 'node .gated-change/bin/gate-approve.mjs'. The model cannot approve itself.",
+          "The human maintainer must explicitly authorize implementation at the Human Scope Gate. The model cannot approve itself.",
       };
       process.stdout.write(JSON.stringify(output) + "\n");
       process.exit(1);

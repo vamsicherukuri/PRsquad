@@ -11,9 +11,8 @@ The human maintainer explicitly authorizes implementation for the proposed techn
 ## Human Maintainer Action Required:
 Scope Gate authorization must originate from the human maintainer (autonomous agents are strictly prohibited from minting approval locks).
 
-1. Instruct the maintainer to run the deterministic approval command in their terminal:
-   `node .gated-change/bin/gate-approve.mjs`
-2. Once the maintainer executes this command, confirm:
-   "Human Scope Gate explicitly APPROVED. Deterministic approval lock minted on disk with approval integrity binding."
+1. Confirm scope approval with the maintainer directly in the UI or chat:
+   "Do you approve this technical plan and scope to proceed with implementation?"
+2. Once the maintainer approves (via the native UI confirmation or replying 'Approve'), the Human Scope Gate authorizes implementation.
 3. Delegate to `prsquad-dev` to begin implementation strictly bounded to the approved scope.
 4. Pass the approved plan, original acceptance criteria, risk tier, and approved scope to the developer.
