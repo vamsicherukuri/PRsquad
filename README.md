@@ -15,35 +15,57 @@ The agents remain probabilistic and isolated: they reason, plan, write code, val
 
 ## ⚡ Quick Setup
 
-> **Portable runtime bundle:** PR Squad hooks are bundled into self-contained ESM artifacts (`${PLUGIN_ROOT}/dist/run-hook.mjs`) and automatically provision local human-gate binaries into `.gated-change/bin/`. No runtime `npm install`, `tsx`, or repository source dependency is required.
+> **Zero build dependencies:** PR Squad hooks are bundled into self-contained ESM artifacts (`dist/run-hook.mjs`) and automatically provision local human-gate binaries. No runtime `npm install`, `tsx`, or local build dependencies are required.
 
-### GitHub Copilot App
+### Method 1: GitHub Copilot Desktop App (UI)
 
-1. Open the GitHub Copilot App and select **Customize → Plugins**.
-2. In the **Plugins** view, click the icon next to the marketplace dropdown and add this repository as a custom marketplace:
+1. Open the GitHub Copilot Desktop App and click **Customize** in the left sidebar.
+2. In the Marketplaces section, add this repository if not already listed:
    ```text
    https://github.com/vamsicherukuri/PRsquad
    ```
-3. Find **`prsquad`** in the marketplace and click **Install**.
-4. Open the repository and GitHub issue you want PR Squad to work on.
+3. Click **+ Add** in the top-right corner and select **Install plugin...**.
+4. In the dialog, enter the marketplace plugin spec:
+   ```text
+   prsquad@prsquad-marketplace
+   ```
+5. Click **Install**.
+6. **Restart the GitHub Copilot App** so its backend daemon loads the newly installed agent catalog into memory.
 
+### Method 2: GitHub Copilot CLI (Terminal)
 
+Run the following commands in your shell:
+
+```bash
+# 1. Register the marketplace (one-time setup)
+copilot plugin marketplace add vamsicherukuri/PRsquad
+
+# 2. Install the plugin
+copilot plugin install prsquad@prsquad-marketplace
+```
+
+> [!NOTE]
+> If the GitHub Copilot Desktop App was open during CLI installation, restart the app to reload the agent manifest.
+
+---
 
 ## 🚀 Run Your First Workflow
 
-Open a repository with a GitHub issue and invoke:
+1. Open your target repository in the GitHub Copilot Desktop App.
+2. In the chat prompt bar, click the **Agent Picker** dropdown (the `Default agent` pill next to your model selector) and select **`prsquad`**.
+3. Prompt PR Squad to start on your issue:
 
 ```text
-@prsquad resolve issue #22
+Resolve issue #22
 ```
 
-PRSquad coordinates the workflow from the issue to a reviewable pull request:
+PR Squad coordinates the workflow from the issue to a reviewable pull request:
 
 ```text
-Issue → Triage → Plan → Human Scope Approval → Implementation → QA → Review → Human PR Approval → Pull Request
+Issue → Triage → Plan → Human Scope Gate → Implementation → QA → Review → Human PR Gate → Pull Request
 ```
 
-The specialists do **not** directly delegate work to one another. Every specialist returns a structured handoff to `@prsquad`, which validates the result and determines the next allowed action.
+Specialist agents do **not** directly delegate work to one another. Every specialist returns a structured handoff to `@prsquad`, which validates the result and determines the next allowed action under deterministic policy enforcement.
 
 
 
