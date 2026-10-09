@@ -6,7 +6,7 @@
 [![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
-## The Challenge: Coding Agent Autonomy Dilemma
+### The Challenge: Coding Agent Autonomy Dilemma
 
 Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
 
@@ -32,6 +32,7 @@ This preserves flexibility in how agents solve a problem without giving them aut
 PR Squad also provides stage level observability by tracking AI credit and token consumption across specialist agents and rework cycles.
 
 > **Agents reason. The orchestrator coordinates. The control plane enforces. Humans approve. Execution remains observable.**
+
 
 ## ⚡ Quick Setup
 
@@ -69,19 +70,18 @@ Issue → Triage → Plan → Human Scope Gate → Implementation → QA → Rev
 
 Specialist agents do **not** directly delegate work to one another. Every specialist returns a structured handoff to orchestrator, which validates the result and determines the next allowed action under deterministic policy enforcement.
 
-> 🎮 **Interactive Visualizer & Policy Sandbox:** Walk through all 7 pipeline stages, inspect the 4 Copilot hook engines, and test real-time policy barriers in your browser: **[Open Interactive Workflow](https://vamsicherukuri.github.io/PRsquad/)** *(or open [docs/index.html](docs/index.html) locally)*.
-
 ## Architecture at a Glance
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
-### The Two Layers
+## The Execution & Control Planes
 
 ![The Two Layers: Probabilistic Coding Agents + Deterministic Control Plane](docs/images/prsquad-two-layers.svg)
 
-4 Deterministic Hook Engines enforcing 6 Specialized Guardrails across the lifecycle.
 
 ### ⚡ Hook Interception Matrix
+
+4 Deterministic Hook Engines enforcing 6 Specialized Guardrails across the lifecycle.
 
 | # | Hook Interception | Deployed At Which Agent? | Trigger Event |
 |:---:|---|---|---|
@@ -94,7 +94,10 @@ Specialist agents do **not** directly delegate work to one another. Every specia
 
 Only a human can authorize the implementation plan at the **Scope Gate** before code can be written, and approve opening the pull request at the **PR Gate** once independent verification is complete. Final code review and merging always remain with humans.
 
+
 ### 🛡️ What the Control Plane Enforces
+
+
 
 | Control | What PRSquad does |
 |---|---|
@@ -105,30 +108,31 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 | **🧬 Evidence integrity** | Approved plans, implementation references, QA evidence, review evidence, and current Git HEAD are checked so stale or unverified work cannot silently advance. |
 | **⚡ Context & cost observability** | PRSquad uses deterministic precomputation, role-scoped context, repository-aware skills, workflow state, audit records, and Copilot AIU/token telemetry to reduce redundant work and expose resource consumption. |
 
----
 
-## 📊 Stage-Level Observability & Live Visual Canvas
+## Coding Agent Observability & Live Canvas
 
-PR Squad provides enterprise-grade execution transparency so autonomous multi-agent workflows never become unobservable black boxes.
+PR Squad makes multi-agent execution observable by tracking workflow state, resource usage, retries, and deterministic policy decisions throughout the workflow.
 
-### ⚡ Real-Time AI Credit & Token Telemetry
+### ⚡ AI Credit & Token Telemetry
 
-On every specialist handoff, the control plane intercepts execution via `postToolUse` hooks to record ground-truth Copilot session telemetry into `.gated-change/dashboard.json` and `.gated-change/audit.jsonl`.
+At each specialist handoff, `postToolUse` hooks capture Copilot session telemetry and workflow state.
 
-- **Per-Stage Cost Breakdown**: Quantifies exact AI credit consumption (Copilot AIUs), prompt tokens, completion tokens, and prompt cache hit rates for each phase: Triage, Architecture, Implementation, Independent QA, and Security Review.
-- **In-Chat ⚡ AI Credit Meter**: Surfaces a live Markdown telemetry table directly in GitHub Copilot chat, displaying accumulated resource consumption and remaining retry budgets (e.g., Attempt 1/3).
-- **Rework Loop Cost Accounting**: Directly tracks the exact cost of Developer ↔ QA repair iterations, preventing runaway token loops and providing visibility into regression fixes.
+- **Per-Stage Cost Breakdown**: Tracks AI credit consumption (AIUs), prompt tokens, completion tokens, and cache usage across Triage, Architecture, Implementation, QA, and Review.
+- **In-Chat AI Credit Meter**: Surfaces accumulated resource usage and workflow retry status directly in the Copilot chat.
+- **Rework Cost Tracking**: Accounts for additional AI usage across Developer ↔ QA repair cycles and bounded retries.
 
 ### 🎨 PR Squad Live Visual Canvas
 
-Users can open the **PR Squad Live Visual Canvas** to pictographically view the real-time workflow status and inspect stage details:
+The **PR Squad Live Visual Canvas** provides a visual view of workflow progress, agent activity, and deterministic control plane decisions.
 
-👉 **[Open Live Visual Canvas](https://vamsicherukuri.github.io/PRsquad/)** *(or open [docs/index.html](docs/index.html) locally)*
+👉 [**Open Live Visual Canvas**](https://vamsicherukuri.github.io/PRsquad/) *(or open `docs/index.html` locally)*
 
-- **Pictographic 7-Stage Stepper**: Visually follows the pipeline from Issue Intake to PR Creation, color-coding active, completed, and human-gated stages.
-- **Stage Execution Storyboard**: Click any stage to inspect the active agent's role, injected repository skills, sliced instructions, and exact token overhead.
-- **Deterministic Checkpoint Cards**: Pictographically reviews Allow (✓) and Block (⛔) decisions recorded by the 4 mechanical hook engines (`hook-intake-ingest`, `hook-verify-gate`, `hook-enforce-scope`, `hook-sandbox-bash`).
-- **Interactive Policy Sandbox**: Directly test and simulate write-scope barriers, shell command allowlists, cryptographic approval locks, and anti-stale commit bindings in real time.
+- **7-Stage Workflow View**: Shows the pipeline from Issue Intake through Pull Request creation, including active, completed, blocked, and human-gated stages.
+- **Stage Details**: Inspect the active agent, role-specific context, repository skills, instructions, and token usage for each stage.
+- **Deterministic Checkpoints**: Shows Allow (✓) and Block (⛔) decisions produced by the four hook engines: `hook-intake-ingest`, `hook-verify-gate`, `hook-enforce-scope`, and `hook-sandbox-bash`.
+- **Interactive Policy Sandbox**: Simulate and inspect scope enforcement, command restrictions, approval locks, and stale-evidence protections.
+
+
 
 ---
 
