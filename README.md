@@ -6,7 +6,7 @@
 [![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
-### The Challenge: Coding Agent Autonomy
+### ⚠️ The Challenge: Coding Agent Autonomy
 
 Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
 
@@ -19,7 +19,7 @@ As agent autonomy increases, critical development controls should not depend on 
 
 > **Use AI for reasoning. Do not rely on AI to enforce the boundaries around its own autonomy.**
 
-### The Solution: Probabilistic Agents, Deterministic Control
+### 🧠 The Solution: Probabilistic Agents, Deterministic Control
 
 PR Squad separates AI reasoning from deterministic workflow control.
 
@@ -70,16 +70,16 @@ Issue → Triage → Plan → Human Scope Gate → Implementation → QA → Rev
 
 Specialist agents do **not** directly delegate work to one another. Every specialist returns a structured handoff to orchestrator, which validates the result and determines the next allowed action under deterministic policy enforcement.
 
-## Architecture at a Glance
+## 🏗️ Architecture at a Glance
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
-## The Execution & Control Planes
+## 🧭 The Execution & Control Planes
 
 ![The Two Layers: Probabilistic Coding Agents + Deterministic Control Plane](docs/images/prsquad-two-layers.svg)
 
 
-### ⚡ Hook Interception Matrix
+### 🪝 Hook Interception Matrix
 
 4 Deterministic Hook Engines enforcing 6 Specialized Guardrails across the lifecycle.
 
@@ -109,7 +109,7 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 | **⚡ Context & cost observability** | PRSquad uses deterministic precomputation, role-scoped context, repository-aware skills, workflow state, audit records, and Copilot AIU/token telemetry to reduce redundant work and expose resource consumption. |
 
 
-## Coding Agent Observability & Live Canvas
+## 📊 Coding Agent Observability & Live Canvas
 
 [![Live Canvas](https://img.shields.io/badge/Live%20Canvas-Launch-8250df?style=flat-square&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
@@ -138,6 +138,6 @@ The **[PR Squad Live Visual Canvas](https://vamsicherukuri.github.io/PRsquad/)**
 
 ---
 
-## License
+## 📄 License
 
 See [LICENSE](LICENSE).
