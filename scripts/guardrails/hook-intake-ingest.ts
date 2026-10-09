@@ -72,17 +72,33 @@ async function main() {
     }
 
     // Extract owner and repo dynamically from remote origin or prompt
+    const isValidRepoPart = (s?: string) =>
+      Boolean(s && !s.startsWith(".") && !/\.(json|js|ts|md|txt|ya?ml)$/i.test(s));
+
+    // Sanitize poisoned state.issue if present from path matching
+    if (state.issue?.owner && !isValidRepoPart(state.issue.owner)) {
+      delete (state.issue as any).owner;
+    }
+    if (state.issue?.repo && !isValidRepoPart(state.issue.repo)) {
+      delete (state.issue as any).repo;
+    }
+
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = remoteInfo.owner || state.issue?.owner || "ADO2GH-Migration";
-    let repo = remoteInfo.repo || state.issue?.repo || "StarReads";
+    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") ||
+                (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") ||
+                "ADO2GH-Migration";
+    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") ||
+               (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") ||
+               "StarReads";
+
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
-    if (jsonOwner && jsonRepo) {
+    if (jsonOwner && jsonRepo && isValidRepoPart(jsonOwner[1]) && isValidRepoPart(jsonRepo[1])) {
       owner = jsonOwner[1];
       repo = jsonRepo[1];
     } else {
-      const explicitRepo = prompt.match(/\b(?:in|repo(?:sitory)?(?:\s*name)?\s*[:=]?)\s*([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
-      if (explicitRepo) {
+      const explicitRepo = prompt.match(/\b(?:repo(?:sitory)?(?:\s*name)?\s*[:=]\s*|\bfor\s+repo\s+)([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
+      if (explicitRepo && isValidRepoPart(explicitRepo[1]) && isValidRepoPart(explicitRepo[2])) {
         owner = explicitRepo[1];
         repo = explicitRepo[2];
       }

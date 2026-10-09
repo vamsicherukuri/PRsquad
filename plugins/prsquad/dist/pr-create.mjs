@@ -524,9 +524,11 @@ function renderDashboardMarkdown(data) {
     md += `> **Scope Compliance:** \`${qaDetails.scopeCompliance || "NOT RECORDED"}\`  
 `;
     if (Array.isArray(qaDetails.acceptanceCriteriaResults) && qaDetails.acceptanceCriteriaResults.length > 0) {
-      const passedCount = qaDetails.acceptanceCriteriaResults.filter(
-        (ac) => ac.verdict === "PASS" || ac.pass === true
-      ).length;
+      const isItemPassing = (ac) => {
+        const val = String(ac.verdict || ac.result || ac.status || "").toUpperCase();
+        return val === "PASS" || val === "PASSED" || ac.pass === true || ac.passed === true || ac.verified === true;
+      };
+      const passedCount = qaDetails.acceptanceCriteriaResults.filter(isItemPassing).length;
       md += `> **Acceptance Criteria Verification:** ${passedCount} / ${qaDetails.acceptanceCriteriaResults.length} PASSED  
 
 `;
@@ -534,9 +536,12 @@ function renderDashboardMarkdown(data) {
 `;
       md += `|:---:|:---|:---:|:---|
 `;
-      for (const ac of qaDetails.acceptanceCriteriaResults) {
-        const acVerdict = ac.verdict || (ac.pass ? "PASS" : "FAIL");
-        md += `| **${ac.id || "AC"}** | ${ac.description || ac.criterion || "\u2014"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |
+      for (let i = 0; i < qaDetails.acceptanceCriteriaResults.length; i++) {
+        const ac = qaDetails.acceptanceCriteriaResults[i];
+        const rawVerdict = ac.verdict || ac.result || ac.status;
+        const acVerdict = rawVerdict ? String(rawVerdict).toUpperCase() : isItemPassing(ac) ? "PASS" : "FAIL";
+        const acId = ac.id || (typeof ac.criterion === "string" && ac.criterion.match(/^(AC-?\d+)/i) ? ac.criterion.match(/^(AC-?\d+)/i)[1] : `AC-${i + 1}`);
+        md += `| **${acId}** | ${ac.description || ac.criterion || "\u2014"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |
 `;
       }
       md += `

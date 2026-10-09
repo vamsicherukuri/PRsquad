@@ -466,16 +466,27 @@ export function renderDashboardMarkdown(data: DashboardState): string {
     md += `> **Scope Compliance:** \`${qaDetails.scopeCompliance || "NOT RECORDED"}\`  \n`;
 
     if (Array.isArray(qaDetails.acceptanceCriteriaResults) && qaDetails.acceptanceCriteriaResults.length > 0) {
-      const passedCount = qaDetails.acceptanceCriteriaResults.filter(
-        (ac: any) => ac.verdict === "PASS" || ac.pass === true
-      ).length;
+      const isItemPassing = (ac: any) => {
+        const val = String(ac.verdict || ac.result || ac.status || "").toUpperCase();
+        return (
+          val === "PASS" ||
+          val === "PASSED" ||
+          ac.pass === true ||
+          ac.passed === true ||
+          ac.verified === true
+        );
+      };
+      const passedCount = qaDetails.acceptanceCriteriaResults.filter(isItemPassing).length;
       md += `> **Acceptance Criteria Verification:** ${passedCount} / ${qaDetails.acceptanceCriteriaResults.length} PASSED  \n\n`;
 
       md += `| Criterion | Description | Verdict | Evidence |\n`;
       md += `|:---:|:---|:---:|:---|\n`;
-      for (const ac of qaDetails.acceptanceCriteriaResults) {
-        const acVerdict = ac.verdict || (ac.pass ? "PASS" : "FAIL");
-        md += `| **${ac.id || "AC"}** | ${ac.description || ac.criterion || "—"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |\n`;
+      for (let i = 0; i < qaDetails.acceptanceCriteriaResults.length; i++) {
+        const ac = qaDetails.acceptanceCriteriaResults[i];
+        const rawVerdict = ac.verdict || ac.result || ac.status;
+        const acVerdict = rawVerdict ? String(rawVerdict).toUpperCase() : (isItemPassing(ac) ? "PASS" : "FAIL");
+        const acId = ac.id || (typeof ac.criterion === "string" && ac.criterion.match(/^(AC-?\d+)/i) ? ac.criterion.match(/^(AC-?\d+)/i)![1] : `AC-${i + 1}`);
+        md += `| **${acId}** | ${ac.description || ac.criterion || "—"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |\n`;
       }
       md += `\n`;
     } else if (qaDetails.criteriaSummary) {
@@ -1003,7 +1014,8 @@ export function extractQADetails(promptOrText: string): Record<string, any> {
       if (Array.isArray(parsed.failureClassification)) details.failureClassification = parsed.failureClassification;
       if (Array.isArray(parsed.blockingFindings)) details.blockingFindings = parsed.blockingFindings;
       if (Array.isArray(parsed.testResults)) details.testResults = parsed.testResults;
-      if (Array.isArray(parsed.acceptanceCriteriaResults)) details.acceptanceCriteriaResults = parsed.acceptanceCriteriaResults;
+      const acList = parsed.acceptanceCriteriaResults || parsed.criteriaResults || parsed.criteria;
+      if (Array.isArray(acList)) details.acceptanceCriteriaResults = acList;
     } catch {}
   }
 

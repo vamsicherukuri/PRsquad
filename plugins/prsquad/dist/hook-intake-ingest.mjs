@@ -585,9 +585,11 @@ function renderDashboardMarkdown(data) {
     md += `> **Scope Compliance:** \`${qaDetails.scopeCompliance || "NOT RECORDED"}\`  
 `;
     if (Array.isArray(qaDetails.acceptanceCriteriaResults) && qaDetails.acceptanceCriteriaResults.length > 0) {
-      const passedCount = qaDetails.acceptanceCriteriaResults.filter(
-        (ac) => ac.verdict === "PASS" || ac.pass === true
-      ).length;
+      const isItemPassing = (ac) => {
+        const val = String(ac.verdict || ac.result || ac.status || "").toUpperCase();
+        return val === "PASS" || val === "PASSED" || ac.pass === true || ac.passed === true || ac.verified === true;
+      };
+      const passedCount = qaDetails.acceptanceCriteriaResults.filter(isItemPassing).length;
       md += `> **Acceptance Criteria Verification:** ${passedCount} / ${qaDetails.acceptanceCriteriaResults.length} PASSED  
 
 `;
@@ -595,9 +597,12 @@ function renderDashboardMarkdown(data) {
 `;
       md += `|:---:|:---|:---:|:---|
 `;
-      for (const ac of qaDetails.acceptanceCriteriaResults) {
-        const acVerdict = ac.verdict || (ac.pass ? "PASS" : "FAIL");
-        md += `| **${ac.id || "AC"}** | ${ac.description || ac.criterion || "\u2014"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |
+      for (let i = 0; i < qaDetails.acceptanceCriteriaResults.length; i++) {
+        const ac = qaDetails.acceptanceCriteriaResults[i];
+        const rawVerdict = ac.verdict || ac.result || ac.status;
+        const acVerdict = rawVerdict ? String(rawVerdict).toUpperCase() : isItemPassing(ac) ? "PASS" : "FAIL";
+        const acId = ac.id || (typeof ac.criterion === "string" && ac.criterion.match(/^(AC-?\d+)/i) ? ac.criterion.match(/^(AC-?\d+)/i)[1] : `AC-${i + 1}`);
+        md += `| **${acId}** | ${ac.description || ac.criterion || "\u2014"} | ${getStatusBadge(acVerdict)} | ${ac.evidence || "Verified in test run"} |
 `;
       }
       md += `
@@ -1060,17 +1065,24 @@ async function main() {
         }
       }
     }
+    const isValidRepoPart = (s) => Boolean(s && !s.startsWith(".") && !/\.(json|js|ts|md|txt|ya?ml)$/i.test(s));
+    if (state.issue?.owner && !isValidRepoPart(state.issue.owner)) {
+      delete state.issue.owner;
+    }
+    if (state.issue?.repo && !isValidRepoPart(state.issue.repo)) {
+      delete state.issue.repo;
+    }
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = remoteInfo.owner || state.issue?.owner || "ADO2GH-Migration";
-    let repo = remoteInfo.repo || state.issue?.repo || "StarReads";
+    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") || (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") || "ADO2GH-Migration";
+    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") || (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") || "StarReads";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
-    if (jsonOwner && jsonRepo) {
+    if (jsonOwner && jsonRepo && isValidRepoPart(jsonOwner[1]) && isValidRepoPart(jsonRepo[1])) {
       owner = jsonOwner[1];
       repo = jsonRepo[1];
     } else {
-      const explicitRepo = prompt.match(/\b(?:in|repo(?:sitory)?(?:\s*name)?\s*[:=]?)\s*([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
-      if (explicitRepo) {
+      const explicitRepo = prompt.match(/\b(?:repo(?:sitory)?(?:\s*name)?\s*[:=]\s*|\bfor\s+repo\s+)([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\b/i);
+      if (explicitRepo && isValidRepoPart(explicitRepo[1]) && isValidRepoPart(explicitRepo[2])) {
         owner = explicitRepo[1];
         repo = explicitRepo[2];
       }

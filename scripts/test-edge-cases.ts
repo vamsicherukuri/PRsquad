@@ -38,7 +38,7 @@ import {
 import { isEditAllowed, formatScopeDenialNudge } from "../src/guardrails/scopeEnforcer.js";
 import { validateCommandForAgent } from "../src/guardrails/bashSandbox.js";
 import { buildPullRequestBody, createPullRequest } from "../src/guardrails/prCreator.js";
-import { syncWorkflowDashboard } from "../src/guardrails/issueDashboard.js";
+import { syncWorkflowDashboard, renderDashboardMarkdown } from "../src/guardrails/issueDashboard.js";
 import {
   validateTriage,
   validateArchitect,
@@ -1483,6 +1483,66 @@ async function runEdgeCases() {
     };
     const hashA_reordered = computeApprovalEnvelopeHash(envA_reordered);
     assert(hashA === hashA_reordered, "computeApprovalEnvelopeHash is canonical and invariant to key ordering");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 29: Ingestion Repo Sanitization & QA Dashboard Table Mapping
+  // -------------------------------------------------------------------------
+  logCase(29, "Ingestion Repo Sanitization & QA Dashboard Table Mapping");
+  {
+    // Part 1: QA Acceptance Criteria Matrix rendering
+    const testDashboardState: any = {
+      version: "1.0",
+      issueNumber: 42,
+      issueTitle: "Test Billing Rounding Issue",
+      owner: "vamsicherukuri",
+      repo: "PRsquad",
+      activeBranch: "fix/issue-42",
+      phases: {
+        qa: {
+          status: "PASS",
+          summary: "Independent QA verification passed all acceptance criteria",
+          details: {
+            verdict: "PASS",
+            scopeCompliance: "PASS",
+            acceptanceCriteriaResults: [
+              { criterion: "AC1: Rounding precision is maintained", result: "PASS", evidence: "test/billing.test.ts:25" },
+              { criterion: "AC2: Ledger records exact balance", result: "PASS", evidence: "test/billing.test.ts:50" },
+              { criterion: "AC3: Boundary conditions", result: "FAIL", evidence: "boundary failure" },
+            ],
+            suiteResults: "2/3 tests passing",
+          },
+        },
+      },
+    };
+
+    const renderedMd = renderDashboardMarkdown(testDashboardState);
+    assert(renderedMd.includes("2 / 3 PASSED"), "QA Acceptance Criteria summary renders accurate passed ratio (2 / 3 PASSED)");
+    assert(renderedMd.includes("| **AC1** | AC1: Rounding precision is maintained | ✅ `PASS` | test/billing.test.ts:25 |"), "Passing criterion with result: 'PASS' renders with green checkmark and AC id");
+    assert(renderedMd.includes("| **AC3** | AC3: Boundary conditions | ❌ `FAIL` | boundary failure |"), "Failing criterion with result: 'FAIL' renders with red X");
+
+    // Part 2: Hook intake ingest ignores 'in .gated-change/state.json'
+    const hookScript = path.join(REPO_ROOT, "plugins", "prsquad", "dist", "hook-intake-ingest.mjs");
+    const intakeInput = JSON.stringify({
+      agent: "gated-change-intake",
+      tool: "agent",
+      toolArgs: {
+        prompt: "Review issue #1 in .gated-change/state.json for triage",
+      },
+      cwd: REPO_ROOT,
+    });
+    const hookOutput = execSync(`node "${hookScript}"`, {
+      input: intakeInput,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const parsedOutput = JSON.parse(hookOutput);
+    assert(parsedOutput.decision === "allow", "Intake hook succeeds on prompt containing local file path");
+
+    // Confirm state was not poisoned with '.gated-change' owner
+    const currentState = loadState(REPO_ROOT);
+    assert(currentState.issue?.owner !== ".gated-change", "State issue owner is strictly not poisoned with '.gated-change'");
+    assert(currentState.issue?.repo !== "state.json", "State issue repo is strictly not poisoned with 'state.json'");
   }
 
   // -------------------------------------------------------------------------

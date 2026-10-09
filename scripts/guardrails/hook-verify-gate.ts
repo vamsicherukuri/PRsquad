@@ -786,7 +786,7 @@ async function main() {
             return `\`\`\`json\n${JSON.stringify({
               verdict: parsed.verdict,
               scopeCompliance: parsed.scopeCompliance || "PASS",
-              acceptanceCriteriaResults: parsed.acceptanceCriteriaResults || [],
+              acceptanceCriteriaResults: parsed.acceptanceCriteriaResults || parsed.criteriaResults || parsed.criteria || [],
               testResults: parsed.testResults || { passed: true },
               blockingFindings: parsed.blockingFindings || [],
               notes: parsed.notes || "",
