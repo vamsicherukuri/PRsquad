@@ -6,7 +6,7 @@
 [![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
-### ⚠️ The Challenge: Coding Agent Autonomy
+### 🤖 The Challenge: Coding Agent Autonomy
 
 Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
 
