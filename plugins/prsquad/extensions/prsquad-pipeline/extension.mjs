@@ -80,14 +80,13 @@ function findDashboardJson() {
 	const latestWorktree = getLatestWorktreeDir();
 	const candidates = [
 		latestWorktree ? join(latestWorktree, ".gated-change", "dashboard.json") : null,
+		resolve(__dirname, "../../../..", ".gated-change", "dashboard.json"),
 		resolve(process.cwd(), ".gated-change", "dashboard.json"),
 		resolve(process.cwd(), "..", ".gated-change", "dashboard.json"),
 		join(userHome, "factory", "sample repos", "prsquad", ".gated-change", "dashboard.json"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "dashboard.json"),
-		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "dashboard.json"),
+		join(userHome, "Documents", "prsquad", ".gated-change", "dashboard.json"),
 		join(userHome, "factory", "sample repos", "gated-fix-pipeline", ".gated-change", "dashboard.json"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "dashboard.json"),
-		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "dashboard.json")
+		join(userHome, "Documents", "gated-fix-pipeline", ".gated-change", "dashboard.json")
 	].filter(Boolean);
 
 	for (const p of candidates) {
@@ -110,14 +109,13 @@ function findAuditJsonl() {
 	const latestWorktree = getLatestWorktreeDir();
 	const candidates = [
 		latestWorktree ? join(latestWorktree, ".gated-change", "audit.jsonl") : null,
+		resolve(__dirname, "../../../..", ".gated-change", "audit.jsonl"),
 		resolve(process.cwd(), ".gated-change", "audit.jsonl"),
 		resolve(process.cwd(), "..", ".gated-change", "audit.jsonl"),
 		join(userHome, "factory", "sample repos", "prsquad", ".gated-change", "audit.jsonl"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "audit.jsonl"),
-		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".gated-change", "audit.jsonl"),
+		join(userHome, "Documents", "prsquad", ".gated-change", "audit.jsonl"),
 		join(userHome, "factory", "sample repos", "gated-fix-pipeline", ".gated-change", "audit.jsonl"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "audit.jsonl"),
-		join(userHome, "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".gated-change", "audit.jsonl")
+		join(userHome, "Documents", "gated-fix-pipeline", ".gated-change", "audit.jsonl")
 	].filter(Boolean);
 
 	for (const p of candidates) {
@@ -142,10 +140,10 @@ function getHtmlContent() {
 		resolve(__dirname, "canvas.html"),
 		resolve(process.cwd(), ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		resolve(process.cwd(), ".github", "extensions", "gated-change-pipeline", "canvas.html"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "prsquad", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
-		join(userHome, "OneDrive - Microsoft", "Documents", "GitHub Copilot App Enterprise Challenge", "gated-fix-pipeline", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
+		resolve(__dirname, "../../../..", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
+		resolve(__dirname, "../../../..", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
+		join(userHome, "Documents", "prsquad", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
+		join(userHome, "Documents", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline", "vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8", ".github", "extensions", "gated-change-pipeline", "canvas.html")
 	];
 	for (const p of candidates) {

@@ -156,10 +156,10 @@ async function main() {
       const home = homedir();
       const candidates = [
         join(home, "factory/sample repos/copilot-worktrees/prsquad"),
-        join(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
+        join(home, "Documents/prsquad"),
         join(home, "factory/sample repos/prsquad"),
         join(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join(home, "Documents/gated-fix-pipeline"),
         join(home, "factory/sample repos/gated-fix-pipeline"),
       ];
       let bestState: any = null;

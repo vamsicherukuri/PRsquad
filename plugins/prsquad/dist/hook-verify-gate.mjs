@@ -2417,10 +2417,10 @@ async function main() {
       const home = homedir3();
       const candidates = [
         join7(home, "factory/sample repos/copilot-worktrees/prsquad"),
-        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/prsquad"),
+        join7(home, "Documents/prsquad"),
         join7(home, "factory/sample repos/prsquad"),
         join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join7(home, "OneDrive - Microsoft/Documents/GitHub Copilot App Enterprise Challenge/gated-fix-pipeline"),
+        join7(home, "Documents/gated-fix-pipeline"),
         join7(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
@@ -3471,6 +3471,14 @@ ${displayFailures.join("\n")}
       }
     }
     if (devPhaseStatus !== "IMPLEMENTED") {
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "qa_invocation_blocked_developer_not_implemented",
+        decision: "deny",
+        details: { devPhaseStatus: devPhaseStatus || "NOT RECORDED" }
+      }, repoRoot);
       const output = {
         decision: "deny",
         reason: `BLOCKED BY POLICY: QA agent cannot be invoked before Developer implementation has completed with status 'IMPLEMENTED' (current: '${devPhaseStatus || "NOT RECORDED"}'). Stage transitions require verified prior evidence; downstream stages may never manufacture upstream success.`

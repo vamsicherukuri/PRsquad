@@ -3,7 +3,7 @@
   "version": "0.2.8",
   "private": true,
   "license": "MIT",
-  "description": "GitHub Copilot App Enterprise Challenge submission - narrow slice: Issue -> Intake Triage -> Architect -> Scope gate",
+  "description": "PRsquad: Supervised Agentic Workflow for GitHub Copilot with deterministic controls, human approval gates, and stage-level observability.",
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
