@@ -2391,6 +2391,23 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   }
   return Number(process.env.TARGET_ISSUE) || 0;
 }
+function resolveBaseRef(repoRoot, preferredBase) {
+  if (preferredBase && preferredBase !== "HEAD") return preferredBase;
+  const candidates = ["origin/HEAD", "origin/master", "origin/main", "master", "main"];
+  for (const candidate of candidates) {
+    try {
+      const mb = execSync4(`git merge-base HEAD ${candidate}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      if (mb) return mb;
+    } catch {
+    }
+  }
+  try {
+    const parent = execSync4("git rev-parse HEAD~1", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (parent) return parent;
+  } catch {
+  }
+  return "HEAD~1";
+}
 async function main() {
   if (process.argv.includes("--meter")) {
     let effectiveCwd2 = process.cwd();
@@ -3188,7 +3205,7 @@ ${issueBody}`);
       if (!devVal.valid && repoRoot2) {
         try {
           const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-          const baseRef = state2.baseRef || lock2?.baseRef;
+          const baseRef = resolveBaseRef(repoRoot2, state2.baseRef || lock2?.baseRef);
           if (baseRef && currentHead && currentHead !== baseRef) {
             const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
             if (diffFiles.length > 0) {
@@ -3427,10 +3444,14 @@ ${displayFailures.join("\n")}
       } catch {
       }
     }
+    if (!devPhaseStatus && state.phase === "IMPLEMENTED") {
+      devPhaseStatus = "IMPLEMENTED";
+    }
     if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
       try {
         const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-        const baseRef = state.baseRef || existsSync7(dashFile) && JSON.parse(readFileSync7(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
+        const preferred = state.baseRef || lock?.baseRef || existsSync7(dashFile) && JSON.parse(readFileSync7(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
+        const baseRef = resolveBaseRef(repoRoot, preferred);
         if (baseRef && currentHead && currentHead !== baseRef) {
           const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
           if (diffFiles.length > 0) {
@@ -3442,6 +3463,7 @@ ${displayFailures.join("\n")}
               details: { commitSha: currentHead, baseRef, changedFiles: diffFiles }
             });
             state.phase = "IMPLEMENTED";
+            if (!state.baseRef) state.baseRef = baseRef;
             saveState(state, repoRoot);
           }
         }

@@ -126,6 +126,25 @@ function resolveIssueNumber(input: HookInput, toolArgs: any, state: any, lock: a
   return Number(process.env.TARGET_ISSUE) || 0;
 }
 
+/**
+ * Resolves a reliable baseRef from state, approval lock, or git merge-base.
+ */
+function resolveBaseRef(repoRoot: string, preferredBase?: string | null): string {
+  if (preferredBase && preferredBase !== "HEAD") return preferredBase;
+  const candidates = ["origin/HEAD", "origin/master", "origin/main", "master", "main"];
+  for (const candidate of candidates) {
+    try {
+      const mb = execSync(`git merge-base HEAD ${candidate}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      if (mb) return mb;
+    } catch {}
+  }
+  try {
+    const parent = execSync("git rev-parse HEAD~1", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    if (parent) return parent;
+  } catch {}
+  return "HEAD~1";
+}
+
 async function main() {
   if (process.argv.includes("--meter")) {
     let effectiveCwd = process.cwd();
@@ -1071,7 +1090,7 @@ async function main() {
       if (!devVal.valid && repoRoot) {
         try {
           const currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-          const baseRef = state.baseRef || lock?.baseRef;
+          const baseRef = resolveBaseRef(repoRoot, state.baseRef || lock?.baseRef);
           if (baseRef && currentHead && currentHead !== baseRef) {
             const diffFiles = execSync(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
               .trim().split(/\r?\n/).filter(Boolean);
@@ -1368,11 +1387,15 @@ async function main() {
         devPhaseStatus = d?.phases?.developer?.status || "";
       } catch {}
     }
+    if (!devPhaseStatus && state.phase === "IMPLEMENTED") {
+      devPhaseStatus = "IMPLEMENTED";
+    }
     // Ground in git truth: if Developer was not explicitly BLOCKED, verify whether genuine commits exist on feature branch
     if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
       try {
         const currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-        const baseRef = state.baseRef || (existsSync(dashFile) && JSON.parse(readFileSync(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef);
+        const preferred = state.baseRef || lock?.baseRef || (existsSync(dashFile) && JSON.parse(readFileSync(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef);
+        const baseRef = resolveBaseRef(repoRoot, preferred);
         if (baseRef && currentHead && currentHead !== baseRef) {
           const diffFiles = execSync(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
             .trim().split(/\r?\n/).filter(Boolean);
@@ -1385,6 +1408,7 @@ async function main() {
               details: { commitSha: currentHead, baseRef, changedFiles: diffFiles },
             });
             state.phase = "IMPLEMENTED";
+            if (!state.baseRef) state.baseRef = baseRef;
             saveState(state, repoRoot);
           }
         }
