@@ -385,8 +385,8 @@ function validateCommandForAgent(command, agent = "unknown", rootDir) {
   }
   const PR_CREATE_REGEX = /\bpr-create(?:\.ts|\.js|\.mjs)?\b/i;
   if (PR_CREATE_REGEX.test(trimmed)) {
-    const isController = isAgentMatch(agent, "prsquad") || isAgentMatch(agent, "controller");
-    if (!isController) {
+    const isSpecialist = isAgentMatch(agent, "prsquad-dev") || isAgentMatch(agent, "prsquad-qa") || isAgentMatch(agent, "prsquad-review") || isAgentMatch(agent, "prsquad-architect") || isAgentMatch(agent, "prsquad-triage");
+    if (isSpecialist) {
       return {
         allowed: false,
         reason: "POLICY_DENIAL (HUMAN_ONLY_GATE): Specialist agents are strictly prohibited from executing 'pr-create'. PR creation at the PR Approval Gate is managed by the orchestrator upon human authorization."
