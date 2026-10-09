@@ -72,7 +72,7 @@ Specialist agents do **not** directly delegate work to one another. Every specia
 
 ## 🏗️ Architecture at a Glance
 
-![How PRSquad Flows](docs/images/prsquad-flow.png)
+![How PRSquad Flows](docs/images/prsquad-flow.svg)
 
 ## 🧭 The Execution & Control Planes
 

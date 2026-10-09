@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 450" width="100%" height="100%">
+  <defs>
+    <style>
+      .font-title { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 700; font-size: 13px; }
+      .font-sub { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 600; font-size: 11px; }
+      .font-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-weight: 400; font-size: 10.5px; }
+      .font-mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; font-size: 10.5px; font-weight: 600; }
+      .font-pill { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+      .font-badge { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11px; font-weight: 700; }
+      .font-caption { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 11.5px; font-style: italic; }
+    </style>
+    <marker id="arrow-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10B981"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#EA580C"/>
+    </marker>
+  </defs>
+
+  <!-- Canvas Card Container -->
+  <rect x="0" y="0" width="1100" height="450" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
+
+  <!-- ==================== TOP ROW: HOOKS & ORCHESTRATOR ==================== -->
+
+  <!-- HOOK 1 (Intake) -->
+  <g transform="translate(25, 24)">
+    <circle cx="68" cy="-6" r="11" fill="#FFEDD5" stroke="#FDBA74" stroke-width="1.2" />
+    <text x="68" y="-2" class="font-badge" fill="#EA580C" text-anchor="middle">1</text>
+    <rect x="0" y="8" width="136" height="66" rx="8" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2" />
+    <text x="68" y="27" class="font-sub" fill="#2563EB" text-anchor="middle">🪝 [preToolUse]</text>
+    <text x="68" y="44" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-intake-ingest</text>
+    <text x="68" y="60" class="font-body" fill="#64748B" text-anchor="middle">quarantine &amp; prompt strip</text>
+  </g>
+  <!-- Connector Hook 1 -> Stage 1 -->
+  <path d="M 93 98 L 93 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+
+  <!-- HOOK 2A (Scope Gate) -->
+  <g transform="translate(176, 24)">
+    <circle cx="68" cy="-6" r="11" fill="#FFEDD5" stroke="#FDBA74" stroke-width="1.2" />
+    <text x="68" y="-2" class="font-badge" fill="#EA580C" text-anchor="middle">2</text>
+    <rect x="0" y="8" width="136" height="66" rx="8" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2" />
+    <text x="68" y="27" class="font-sub" fill="#2563EB" text-anchor="middle">🪝 [preToolUse]</text>
+    <text x="68" y="44" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-verify-gate</text>
+    <text x="68" y="60" class="font-body" fill="#64748B" text-anchor="middle">check approval.lock</text>
+  </g>
+  <!-- Connector Hook 2 -> Gate 1 -->
+  <path d="M 244 98 L 244 140 L 395 140 L 395 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+
+  <!-- ORCHESTRATOR CARD (Center) -->
+  <g transform="translate(327, 24)">
+    <rect x="0" y="8" width="220" height="106" rx="10" fill="#F0F7FF" stroke="#3B82F6" stroke-width="2" />
+    <rect x="55" y="16" width="110" height="18" rx="9" fill="#DBEAFE" />
+    <text x="110" y="29" class="font-pill" fill="#1E40AF" text-anchor="middle">ORCHESTRATOR</text>
+    <text x="110" y="52" class="font-title" fill="#1E3A8A" text-anchor="middle">Chat &amp; Delegation</text>
+    <text x="110" y="68" class="font-sub" fill="#2563EB" text-anchor="middle">GitHub Copilot App (@prsquad)</text>
+    <text x="110" y="85" class="font-body" fill="#475569" text-anchor="middle">Governs 5 Stateless Specialists</text>
+    <text x="110" y="100" class="font-body" fill="#64748B" text-anchor="middle">(0 code-editing tools)</text>
+  </g>
+
+  <!-- HOOK 3 (Scope & Sandbox Barrier) -->
+  <g transform="translate(562, 24)">
+    <circle cx="68" cy="-6" r="11" fill="#FFEDD5" stroke="#FDBA74" stroke-width="1.2" />
+    <text x="68" y="-2" class="font-badge" fill="#EA580C" text-anchor="middle">3</text>
+    <rect x="0" y="8" width="136" height="66" rx="8" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2" />
+    <text x="68" y="25" class="font-sub" fill="#2563EB" text-anchor="middle">🪝 [preToolUse]</text>
+    <text x="68" y="42" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-enforce-scope</text>
+    <text x="68" y="57" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-sandbox-bash</text>
+  </g>
+  <!-- Connector Hook 3 -> Stage 3 (Developer) -->
+  <path d="M 630 98 L 630 145 L 546 145 L 546 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+
+  <!-- HOOK 4 (Sandbox Bash) -->
+  <g transform="translate(713, 24)">
+    <circle cx="68" cy="-6" r="11" fill="#FFEDD5" stroke="#FDBA74" stroke-width="1.2" />
+    <text x="68" y="-2" class="font-badge" fill="#EA580C" text-anchor="middle">4</text>
+    <rect x="0" y="8" width="136" height="66" rx="8" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2" />
+    <text x="68" y="27" class="font-sub" fill="#2563EB" text-anchor="middle">🪝 [preToolUse]</text>
+    <text x="68" y="44" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-sandbox-bash</text>
+    <text x="68" y="60" class="font-body" fill="#64748B" text-anchor="middle">permit test, block push/git</text>
+  </g>
+  <!-- Connector Hook 4 -> Stage 4 (QA) & Stage 5 (Review) -->
+  <path d="M 781 98 L 781 145 L 697 145 L 697 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+  <path d="M 781 145 L 848 145 L 848 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+
+  <!-- HOOK 2B (PR Gate & Telemetry) -->
+  <g transform="translate(931, 24)">
+    <circle cx="68" cy="-6" r="11" fill="#FFEDD5" stroke="#FDBA74" stroke-width="1.2" />
+    <text x="68" y="-2" class="font-badge" fill="#EA580C" text-anchor="middle">2</text>
+    <rect x="0" y="8" width="136" height="66" rx="8" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.2" />
+    <text x="68" y="27" class="font-sub" fill="#2563EB" text-anchor="middle">🪝 [postToolUse]</text>
+    <text x="68" y="44" class="font-mono" fill="#1E3A8A" text-anchor="middle">hook-verify-gate</text>
+    <text x="68" y="60" class="font-body" fill="#64748B" text-anchor="middle">AI credits &amp; PR eligibility</text>
+  </g>
+  <!-- Connector Hook 2B -> Gate 2 (PR Gate) -->
+  <path d="M 999 98 L 999 234" stroke="#EA580C" stroke-width="1.5" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-orange)" />
+
+  <!-- ==================== ORCHESTRATOR DELEGATION BUS ==================== -->
+  <path d="M 437 138 L 437 185" stroke="#64748B" stroke-width="1.5" fill="none" />
+  <!-- Main bus horizontal trunk -->
+  <path d="M 93 185 L 848 185" stroke="#64748B" stroke-width="1.5" fill="none" />
+  <!-- Bus drop-lines to 5 specialist agents -->
+  <path d="M 93 185 L 93 234" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#arrow-gray)" />
+  <path d="M 244 185 L 244 234" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#arrow-gray)" />
+  <path d="M 546 185 L 546 234" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#arrow-gray)" />
+  <path d="M 697 185 L 697 234" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#arrow-gray)" />
+  <path d="M 848 185 L 848 234" stroke="#64748B" stroke-width="1.5" fill="none" marker-end="url(#arrow-gray)" />
+
+  <!-- ==================== BOTTOM ROW: 7 STAGES & GATES ==================== -->
+
+  <!-- STAGE 1: Intake Triage -->
+  <g transform="translate(25, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#D1FAE5" />
+    <text x="68" y="23" class="font-pill" fill="#065F46" text-anchor="middle">STAGE 1</text>
+    <text x="68" y="47" class="font-title" fill="#064E3B" text-anchor="middle">Intake Triage</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#A7F3D0" stroke-width="1" />
+    <text x="68" y="76" class="font-body" fill="#047857" text-anchor="middle">Def. of ready</text>
+    <text x="68" y="94" class="font-body" fill="#047857" text-anchor="middle">Zero-tool air-gap</text>
+    <text x="68" y="112" class="font-body" fill="#065F46" text-anchor="middle">(0 repo tools)</text>
+    <text x="68" y="130" class="font-body" fill="#64748B" text-anchor="middle">Quarantined intake</text>
+  </g>
+
+  <!-- Sequence Arrow 1 -> 2 -->
+  <path d="M 161 313 L 173 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- STAGE 2: Architect -->
+  <g transform="translate(176, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#D1FAE5" />
+    <text x="68" y="23" class="font-pill" fill="#065F46" text-anchor="middle">STAGE 2</text>
+    <text x="68" y="47" class="font-title" fill="#064E3B" text-anchor="middle">Architect</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#A7F3D0" stroke-width="1" />
+    <text x="68" y="76" class="font-body" fill="#047857" text-anchor="middle">Root-cause plan</text>
+    <text x="68" y="94" class="font-body" fill="#047857" text-anchor="middle">Read-only tools</text>
+    <text x="68" y="112" class="font-body" fill="#047857" text-anchor="middle">AST Symbol sweep</text>
+    <text x="68" y="130" class="font-body" fill="#64748B" text-anchor="middle">(0 edit tools)</text>
+  </g>
+
+  <!-- Sequence Arrow 2 -> Gate 1 -->
+  <path d="M 312 313 L 324 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- GATE 1: Scope Gate (Human Gate) -->
+  <g transform="translate(327, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#FFFBEB" stroke="#F59E0B" stroke-width="2" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#FEF3C7" />
+    <text x="68" y="23" class="font-pill" fill="#B45309" text-anchor="middle">🔒 GATE 1</text>
+    <text x="68" y="47" class="font-title" fill="#92400E" text-anchor="middle">Scope Gate</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#FDE68A" stroke-width="1" />
+    <text x="68" y="76" class="font-mono" fill="#B45309" text-anchor="middle">/approve</text>
+    <text x="68" y="94" class="font-mono" fill="#B45309" text-anchor="middle">approval.lock</text>
+    <text x="68" y="112" class="font-body" fill="#78350F" text-anchor="middle">AI Meter table</text>
+    <text x="68" y="130" class="font-body" fill="#B45309" font-weight="600" text-anchor="middle">Human sign-off</text>
+  </g>
+
+  <!-- Sequence Arrow Gate 1 -> 3 -->
+  <path d="M 463 313 L 475 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- STAGE 3: Developer -->
+  <g transform="translate(478, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#D1FAE5" />
+    <text x="68" y="23" class="font-pill" fill="#065F46" text-anchor="middle">STAGE 3</text>
+    <text x="68" y="47" class="font-title" fill="#064E3B" text-anchor="middle">Developer</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#A7F3D0" stroke-width="1" />
+    <text x="68" y="76" class="font-body" fill="#047857" text-anchor="middle">Fix + test suite</text>
+    <text x="68" y="94" class="font-body" fill="#047857" text-anchor="middle">Isolated worktree</text>
+    <text x="68" y="112" class="font-body" fill="#047857" text-anchor="middle">OS write barrier</text>
+    <text x="68" y="130" class="font-body" fill="#64748B" text-anchor="middle">Enforced scope</text>
+  </g>
+
+  <!-- Sequence Arrow 3 -> 4 -->
+  <path d="M 614 313 L 626 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- STAGE 4: QA Specialist -->
+  <g transform="translate(629, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#D1FAE5" />
+    <text x="68" y="23" class="font-pill" fill="#065F46" text-anchor="middle">STAGE 4</text>
+    <text x="68" y="47" class="font-title" fill="#064E3B" text-anchor="middle">QA Specialist</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#A7F3D0" stroke-width="1" />
+    <text x="68" y="76" class="font-body" fill="#047857" text-anchor="middle">Criteria tests</text>
+    <text x="68" y="94" class="font-body" fill="#047857" text-anchor="middle">Bash sandbox</text>
+    <text x="68" y="112" class="font-body" fill="#047857" text-anchor="middle">No mutating git</text>
+    <text x="68" y="130" class="font-body" fill="#64748B" text-anchor="middle">Bounded retries (≤3)</text>
+  </g>
+
+  <!-- Sequence Arrow 4 -> 5 -->
+  <path d="M 765 313 L 777 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- STAGE 5: Reviewer -->
+  <g transform="translate(780, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#ECFDF5" stroke="#10B981" stroke-width="1.5" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#D1FAE5" />
+    <text x="68" y="23" class="font-pill" fill="#065F46" text-anchor="middle">STAGE 5</text>
+    <text x="68" y="47" class="font-title" fill="#064E3B" text-anchor="middle">Reviewer</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#A7F3D0" stroke-width="1" />
+    <text x="68" y="76" class="font-body" fill="#047857" text-anchor="middle">Read-only diff</text>
+    <text x="68" y="94" class="font-body" fill="#047857" text-anchor="middle">Security check</text>
+    <text x="68" y="112" class="font-body" fill="#047857" text-anchor="middle">Audit trail inspect</text>
+    <text x="68" y="130" class="font-body" fill="#64748B" text-anchor="middle">Independent review</text>
+  </g>
+
+  <!-- Sequence Arrow 5 -> Gate 2 -->
+  <path d="M 916 313 L 928 313" stroke="#10B981" stroke-width="2" fill="none" marker-end="url(#arrow-green)" />
+
+  <!-- GATE 2: PR Gate (Human Gate) -->
+  <g transform="translate(931, 242)">
+    <rect x="0" y="0" width="136" height="142" rx="10" fill="#FFFBEB" stroke="#F59E0B" stroke-width="2" />
+    <rect x="28" y="10" width="80" height="18" rx="9" fill="#FEF3C7" />
+    <text x="68" y="23" class="font-pill" fill="#B45309" text-anchor="middle">🔒 GATE 2</text>
+    <text x="68" y="47" class="font-title" fill="#92400E" text-anchor="middle">PR Gate</text>
+    <line x1="16" y1="58" x2="120" y2="58" stroke="#FDE68A" stroke-width="1" />
+    <text x="68" y="76" class="font-mono" fill="#B45309" text-anchor="middle">/create-pr</text>
+    <text x="68" y="94" class="font-body" fill="#78350F" text-anchor="middle">Human merge</text>
+    <text x="68" y="112" class="font-body" fill="#78350F" text-anchor="middle">(0 auto-merge)</text>
+    <text x="68" y="130" class="font-body" fill="#B45309" font-weight="600" text-anchor="middle">Human sign-off</text>
+  </g>
+
+  <!-- ==================== FOOTER CAPTION ==================== -->
+  <text x="550" y="420" class="font-caption" fill="#64748B" text-anchor="middle">"4 Deterministic Hook Engines intercept tool execution · 2 Human Approval Gates enforce scope &amp; PR · @prsquad orchestrates structured stage handoffs"</text>
+</svg>
