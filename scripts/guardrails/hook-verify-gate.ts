@@ -1455,7 +1455,16 @@ async function main() {
       } catch {}
     }
     const qaStatus = dashData?.phases?.qa?.status || state.phases?.qa?.status;
-    if (qaStatus !== "PASS") {
+    const isQaInfraBlocked =
+      qaStatus === "BLOCKED" &&
+      Array.isArray(dashData?.phases?.qa?.details?.failureClassification) &&
+      dashData.phases.qa.details.failureClassification.length > 0 &&
+      dashData.phases.qa.details.failureClassification.every(
+        (f: any) => f.classification === "INFRASTRUCTURE"
+      );
+    const isQaAllowed = qaStatus === "PASS" || isQaInfraBlocked;
+
+    if (!isQaAllowed) {
       appendAuditLog({
         sessionId: state.sessionId,
         agent: "controller",

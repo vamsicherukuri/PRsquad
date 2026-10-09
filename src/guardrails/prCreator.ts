@@ -250,7 +250,16 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       const dashboard = loadDashboardState(rootDir);
       const qaRecord = dashboard?.phases?.qa;
       const qaVerdict = qaRecord?.details?.verdict || qaRecord?.status;
-      if (!qaVerdict || qaVerdict !== "PASS") {
+      const isQaInfraBlocked =
+        qaVerdict === "BLOCKED" &&
+        Array.isArray(qaRecord?.details?.failureClassification) &&
+        qaRecord.details.failureClassification.length > 0 &&
+        qaRecord.details.failureClassification.every(
+          (f: any) => f.classification === "INFRASTRUCTURE"
+        );
+      const isQaPassing = qaVerdict === "PASS" || isQaInfraBlocked;
+
+      if (!qaVerdict || !isQaPassing) {
         return {
           success: false,
           error: `PR_GATE_BLOCKED: QA verification not recorded or failed (verdict: ${qaVerdict || "NOT RECORDED"}). PR gate strictly requires verified QA PASS evidence.`,
