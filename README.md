@@ -6,23 +6,38 @@
 [![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
-**Probabilistic reasoning · Deterministic control · Human-in-the-loop governance.**
+## The Challenge: The Agent Autonomy Dilemma
 
-PR Squad is a GitHub Copilot App/VS Code plugin that takes a GitHub issue through planning, implementation, independent QA, code review, and pull-request creation using specialized AI agents.
+Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
 
-The agents remain probabilistic and isolated: they reason, plan, write code, validate behavior, and review changes. PR Squad adds a **deterministic control plane** around that reasoning to enforce critical workflow boundaries such as human approvals, scope containment, branch isolation, command restrictions, stage ordering, bounded retries, evidence integrity, and PR eligibility.
+An agent can hallucinate, misinterpret intent, drift from the original objective, lose constraints during long-running workflows, act on stale assumptions, or be influenced by untrusted data and prompt injection embedded in issues, source code, documentation, logs, or tool output.
 
-> **PR Squad does not make LLM reasoning deterministic. It applies policy-as-code to deterministically enforce the boundaries, permissions, and controls around agent autonomy.**
+There is also a fundamental difference between what an agent believes is true and the actual state of the system. A model may believe it is operating within the approved scope, on the correct branch, against validated code, or after a successful test run—but reasoning alone does not prove those conditions are true.
 
+As agent autonomy increases, critical development controls should not depend on the model remembering or correctly interpreting instructions.
+
+
+> **Use AI for reasoning. Do not rely on AI to enforce the boundaries around its own autonomy.**
+
+### The Solution: Probabilistic Agents, Deterministic Control
+
+PR Squad separates AI reasoning from deterministic workflow control.
+
+Specialized agents perform role-specific work within defined scopes, while the `@prsquad` orchestrator coordinates execution through structured stage handoffs.
+
+An independent deterministic control plane mechanically enforces approved write scopes, role-based command restrictions, protected branch rules, stage ordering, bounded repair loops, evidence integrity, and non-bypassable human approval gates.
+
+This preserves flexibility in how agents solve a problem without giving them authority to bypass the policies governing what they may change and when the workflow may advance.
+
+PR Squad also provides stage-level observability by tracking AI credit and token consumption across specialist agents and rework cycles.
+
+> **Agents reason. The orchestrator coordinates. The control plane enforces. Humans approve. Execution remains observable.**
 
 ## ⚡ Quick Setup
 
-> **Zero build dependencies:** PR Squad hooks are bundled into self-contained ESM artifacts (`dist/run-hook.mjs`) and automatically provision local human-gate binaries. No runtime `npm install`, `tsx`, or local build dependencies are required.
-
-### Method 1: GitHub Copilot Desktop App (UI)
-
-1. Open the GitHub Copilot Desktop App and click **Customize** in the left sidebar.
+1. Open the **GitHub Copilot Desktop App** and click **Customize** in the left sidebar.
 2. In the Marketplaces section, add this repository if not already listed:
+
    ```text
    https://github.com/vamsicherukuri/PRsquad
    ```
@@ -34,34 +49,19 @@ The agents remain probabilistic and isolated: they reason, plan, write code, val
 5. Click **Install**.
 6. **Restart the GitHub Copilot App** so its backend daemon loads the newly installed agent catalog into memory.
 
-### Method 2: GitHub Copilot CLI (Terminal)
-
-Run the following commands in your shell:
-
-```bash
-# 1. Register the marketplace (one-time setup)
-copilot plugin marketplace add vamsicherukuri/PRsquad
-
-# 2. Install the plugin
-copilot plugin install prsquad@prsquad-marketplace
-```
-
-> [!NOTE]
-> If the GitHub Copilot Desktop App was open during CLI installation, restart the app to reload the agent manifest.
-
----
 
 ## 🚀 Run Your First Workflow
 
-1. Open your target repository in the GitHub Copilot Desktop App.
-2. In the chat prompt bar, click the **Agent Picker** dropdown (the `Default agent` pill next to your model selector) and select **`prsquad`**.
-3. Prompt PR Squad to start on your issue:
+1. Open your target repository in the **GitHub Copilot Desktop App**.
+2. Add a new project or open an existing one, select the GitHub issue you want to work on, and click **New Session**.
+3. In the chat prompt bar, open the **Agent Picker** dropdown (the `Default agent` selector next to the model picker) and choose **`prsquad`**.
+4. Prompt PR Squad to start on your issue:
 
 ```text
-Resolve issue #22
+Resolve issue
 ```
 
-PR Squad coordinates the workflow from the issue to a reviewable pull request:
+PR Squad orchestrates the workflow from a GitHub issue to a review-ready Pull Request, while deterministic hooks enforce governance within each agent's defined scope and permissions:
 
 ```text
 Issue → Triage → Plan → Human Scope Gate → Implementation → QA → Review → Human PR Gate → Pull Request
@@ -71,44 +71,10 @@ Specialist agents do **not** directly delegate work to one another. Every specia
 
 > 🎮 **Interactive Visualizer & Policy Sandbox:** Walk through all 7 pipeline stages, inspect the 4 Copilot hook engines, and test real-time policy barriers in your browser: **[Open Interactive Workflow](https://vamsicherukuri.github.io/PRsquad/)** *(or open [docs/index.html](docs/index.html) locally)*.
 
-
-
-## What is PR Squad?
-
-PR Squad is a supervised agentic development workflow for GitHub Copilot that takes a GitHub issue through planning, implementation, independent QA, review, and pull-request creation using specialized AI agents.
-
-### The Challenge
-
-Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
-
-An agent can hallucinate, misinterpret intent, drift from the original objective, lose constraints across long-running workflows, act on stale or incorrect assumptions, or be influenced by untrusted data and prompt injection embedded in issues, source code, documentation, logs, or tool output.
-
-There is also a fundamental difference between **what an agent believes is true and the actual state of the system**. A model may believe it is operating within the approved scope, on the correct branch, against validated code, or after a successful test run but its reasoning alone is not proof that those conditions are actually true.
-
-As autonomy increases, critical development controls should not depend on the model remembering or correctly interpreting instructions.
-
-> **Use AI for reasoning. Do not rely on AI to enforce the boundaries around its own autonomy.**
-
-### The Solution
-
-PRSquad separates **probabilistic reasoning from deterministic control**.
-
-Specialized agents handle the work that benefits from AI reasoning triage, architecture, implementation, QA, and review while `@prsquad` orchestrates the workflow through structured stage handoffs.
-
-An independent deterministic control plane verifies whether actions and transitions are permitted. It enforces approved scope, tool and branch boundaries, workflow ordering, bounded retries, evidence integrity, machine-state validation, and explicit human approval gates.
-
-This allows agents to remain flexible in **how** they solve a problem without giving them unrestricted authority over **what** they may change, **when** they may proceed, or **whether** the workflow is allowed to advance.
-
-PRSquad also makes agentic execution observable by tracking **AI credit consumption by agent and workflow stage**, providing visibility into the cost of planning, implementation, QA, review, and retry cycles.
-
-> **Agents reason. The orchestrator coordinates. The control plane enforces. Humans approve. Execution remains observable.**
-
-
-
 ## Architecture at a Glance
 
 
-`@prsquad` is an orchestrator which coordinates the workflow, routes work to specialist's agents, validates their handoffs, and selects the next stage. All specialist agents result return through the orchestrator, while deterministic hooks independently enforce whether each transition is allowed.
+`@prsquad` orchestrates the workflow: it routes work to isolated specialist agents, validates their structured handoffs against strict schemas, and selects the next stage. Every specialist reports results back exclusively through the orchestrator, while independent deterministic hooks verify whether each transition is permitted.
 
 ![How PRSquad Flows](docs/images/prsquad-flow.png)
 
@@ -282,4 +248,3 @@ PRSquad opens the pull request but never performs the final merge.
 ## License
 
 See [LICENSE](LICENSE).
-
