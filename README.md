@@ -125,7 +125,7 @@ At each specialist handoff, `postToolUse` hooks capture Copilot session telemetr
 
 The **PR Squad Live Visual Canvas** provides a visual view of workflow progress, agent activity, and deterministic control plane decisions.
 
-👉 [**Open Live Visual Canvas**](https://vamsicherukuri.github.io/PRsquad/) *(or open `docs/index.html` locally)*
+[![Live Visual Canvas](https://img.shields.io/badge/Live%20Visual%20Canvas-Launch%20Interactive%20App-8250df?style=for-the-badge&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 - **7-Stage Workflow View**: Shows the pipeline from Issue Intake through Pull Request creation, including active, completed, blocked, and human-gated stages.
 - **Stage Details**: Inspect the active agent, role-specific context, repository skills, instructions, and token usage for each stage.
