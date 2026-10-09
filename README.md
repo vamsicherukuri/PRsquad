@@ -107,6 +107,31 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 
 ---
 
+## 📊 Stage-Level Observability & Live Visual Canvas
+
+PR Squad provides enterprise-grade execution transparency so autonomous multi-agent workflows never become unobservable black boxes.
+
+### ⚡ Real-Time AI Credit & Token Telemetry
+
+On every specialist handoff, the control plane intercepts execution via `postToolUse` hooks to record ground-truth Copilot session telemetry into `.gated-change/dashboard.json` and `.gated-change/audit.jsonl`.
+
+- **Per-Stage Cost Breakdown**: Quantifies exact AI credit consumption (Copilot AIUs), prompt tokens, completion tokens, and prompt cache hit rates for each phase: Triage, Architecture, Implementation, Independent QA, and Security Review.
+- **In-Chat ⚡ AI Credit Meter**: Surfaces a live Markdown telemetry table directly in GitHub Copilot chat, displaying accumulated resource consumption and remaining retry budgets (e.g., Attempt 1/3).
+- **Rework Loop Cost Accounting**: Directly tracks the exact cost of Developer ↔ QA repair iterations, preventing runaway token loops and providing visibility into regression fixes.
+
+### 🎨 PR Squad Live Visual Canvas
+
+Users can open the **PR Squad Live Visual Canvas** to pictographically view the real-time workflow status and inspect stage details:
+
+👉 **[Open Live Visual Canvas](https://vamsicherukuri.github.io/PRsquad/)** *(or open [docs/index.html](docs/index.html) locally)*
+
+- **Pictographic 7-Stage Stepper**: Visually follows the pipeline from Issue Intake to PR Creation, color-coding active, completed, and human-gated stages.
+- **Stage Execution Storyboard**: Click any stage to inspect the active agent's role, injected repository skills, sliced instructions, and exact token overhead.
+- **Deterministic Checkpoint Cards**: Pictographically reviews Allow (✓) and Block (⛔) decisions recorded by the 4 mechanical hook engines (`hook-intake-ingest`, `hook-verify-gate`, `hook-enforce-scope`, `hook-sandbox-bash`).
+- **Interactive Policy Sandbox**: Directly test and simulate write-scope barriers, shell command allowlists, cryptographic approval locks, and anti-stale commit bindings in real time.
+
+---
+
 ## License
 
 See [LICENSE](LICENSE).
