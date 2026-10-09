@@ -6,7 +6,7 @@
 [![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
-### The Challenge: Coding Agent Autonomy Dilemma
+### The Challenge: Coding Agent Autonomy
 
 Agentic coding systems are powerful because LLMs can reason, plan, write code, use tools, and adapt to changing context. But that behavior is inherently probabilistic.
 
@@ -112,6 +112,8 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 ## Coding Agent Observability & Live Canvas
 
 [![Live Canvas](https://img.shields.io/badge/Live%20Canvas-Launch-8250df?style=flat-square&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
+
+![Coding Agent Observability & Live Canvas](docs/images/canvas.gif)
 
 PR Squad makes multi-agent execution observable by tracking workflow state, resource usage, retries, and deterministic policy decisions throughout the workflow.
 
