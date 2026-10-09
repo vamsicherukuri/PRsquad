@@ -903,7 +903,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
     }
     writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
-    const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
+    const isPrPhase = update.phase === "mergeGate" || current.phases.mergeGate?.status === "PR_OPEN" || current.phases.mergeGate?.status === "PR_CREATED" || current.phases.mergeGate?.status === "READY_FOR_MERGE" || Boolean(current.commentId);
+    const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && isPrPhase && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
       writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");

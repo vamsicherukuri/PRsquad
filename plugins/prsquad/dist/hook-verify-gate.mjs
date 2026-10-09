@@ -918,7 +918,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
     }
     writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
-    const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
+    const isPrPhase = update.phase === "mergeGate" || current.phases.mergeGate?.status === "PR_OPEN" || current.phases.mergeGate?.status === "PR_CREATED" || current.phases.mergeGate?.status === "READY_FOR_MERGE" || Boolean(current.commentId);
+    const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && isPrPhase && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
       writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
@@ -2489,7 +2490,7 @@ async function main() {
   const firstTool = input.toolCalls?.[0];
   const toolArgs = input.toolArgs || firstTool?.args || {};
   const targetAgent = toolArgs.agent_type || toolArgs.name || toolArgs.agent || input.agent;
-  if (isAgentMatch(targetAgent, "gated-change-developer")) {
+  if (!input.toolResult && isAgentMatch(targetAgent, "gated-change-developer")) {
     const effectiveCwd2 = input.cwd || process.cwd();
     const repoRoot2 = getRepoRoot(effectiveCwd2);
     ensureNodeModulesInWorktree(repoRoot2);
@@ -3182,8 +3183,29 @@ ${issueBody}`);
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
-      const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
+      let devVal = validateDeveloper(input.toolResult);
+      let devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
+      if (!devVal.valid && repoRoot2) {
+        try {
+          const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+          const baseRef = state2.baseRef || lock2?.baseRef;
+          if (baseRef && currentHead && currentHead !== baseRef) {
+            const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
+            if (diffFiles.length > 0) {
+              devStatus = "IMPLEMENTED";
+              devVal = {
+                valid: true,
+                data: {
+                  status: "IMPLEMENTED",
+                  filesChanged: diffFiles,
+                  diffReference: { baseRef, headRef: currentHead }
+                }
+              };
+            }
+          }
+        } catch {
+        }
+      }
       if (devVal.valid && devStatus === "IMPLEMENTED") {
         try {
           const statusOut = execSync4("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
@@ -3194,6 +3216,8 @@ ${issueBody}`);
           }
         } catch {
         }
+        state2.phase = "IMPLEMENTED";
+        saveState(state2, repoRoot2);
       }
       const devDetails = devVal.valid ? extractDeveloperDetails(input.toolResult, repoRoot2) : { status: "SCHEMA_INVALID", errors: devVal.errors };
       const devSummary = devVal.valid ? devStatus === "IMPLEMENTED" ? devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally" : devStatus === "SCOPE_AMENDMENT_REQUIRED" ? "Developer requested scope amendment outside approved boundary" : `Developer reported BLOCKED: ${devVal.data.blocker?.description || "Execution halted"}` : `Developer handoff validation failed: ${devVal.errors.join("; ")}`;
@@ -3400,6 +3424,27 @@ ${displayFailures.join("\n")}
       try {
         const d = JSON.parse(readFileSync7(dashFile, "utf-8"));
         devPhaseStatus = d?.phases?.developer?.status || "";
+      } catch {
+      }
+    }
+    if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
+      try {
+        const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const baseRef = state.baseRef || existsSync7(dashFile) && JSON.parse(readFileSync7(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
+        if (baseRef && currentHead && currentHead !== baseRef) {
+          const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
+          if (diffFiles.length > 0) {
+            devPhaseStatus = "IMPLEMENTED";
+            syncWorkflowDashboard(repoRoot, {
+              phase: "developer",
+              status: "IMPLEMENTED",
+              summary: `Fix committed in ${currentHead.slice(0, 8)}`,
+              details: { commitSha: currentHead, baseRef, changedFiles: diffFiles }
+            });
+            state.phase = "IMPLEMENTED";
+            saveState(state, repoRoot);
+          }
+        }
       } catch {
       }
     }

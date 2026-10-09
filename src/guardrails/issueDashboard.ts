@@ -748,13 +748,23 @@ export function syncWorkflowDashboard(
       process.env.GATED_CHANGE_TEST === "1" ||
       process.env.npm_lifecycle_event?.startsWith("test");
 
+    // Gate remote GitHub issue comments to PR Approval Gate / PR creation
+    const isPrPhase =
+      update.phase === "mergeGate" ||
+      current.phases.mergeGate?.status === "PR_OPEN" ||
+      current.phases.mergeGate?.status === "PR_CREATED" ||
+      current.phases.mergeGate?.status === "READY_FOR_MERGE" ||
+      Boolean(current.commentId);
+
     // Push update to GitHub issue comment unless suppressed during automated test runs
+    // Only post to remote GitHub issue at the PR Approval Gate (mergeGate / PR creation)
     const shouldPostComment =
       !isTest &&
       current.issueNumber > 0 &&
       current.issueNumber !== 999 &&
       Boolean(current.owner) &&
       Boolean(current.repo) &&
+      isPrPhase &&
       process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
 
     if (shouldPostComment) {

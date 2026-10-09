@@ -236,8 +236,8 @@ async function main() {
     toolArgs.agent ||
     input.agent;
 
-  // Intercept Developer agent invocation (supports qualified gated-change:gated-change-developer)
-  if (isAgentMatch(targetAgent, "gated-change-developer")) {
+  // Intercept Developer agent invocation (preToolUse only; postToolUse is handled below)
+  if (!input.toolResult && isAgentMatch(targetAgent, "gated-change-developer")) {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
     ensureNodeModulesInWorktree(repoRoot);
@@ -1064,8 +1064,31 @@ async function main() {
       process.stdout.write(JSON.stringify(out) + "\n");
       process.exit(0);
     } else if (isAgentMatch(targetAgent, "gated-change-developer")) {
-      const devVal = validateDeveloper(input.toolResult);
-      const devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
+      let devVal = validateDeveloper(input.toolResult);
+      let devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
+
+      // If schema validation failed on LLM text, check if valid git commit was made on feature branch
+      if (!devVal.valid && repoRoot) {
+        try {
+          const currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+          const baseRef = state.baseRef || lock?.baseRef;
+          if (baseRef && currentHead && currentHead !== baseRef) {
+            const diffFiles = execSync(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+              .trim().split(/\r?\n/).filter(Boolean);
+            if (diffFiles.length > 0) {
+              devStatus = "IMPLEMENTED";
+              devVal = {
+                valid: true,
+                data: {
+                  status: "IMPLEMENTED",
+                  filesChanged: diffFiles,
+                  diffReference: { baseRef, headRef: currentHead },
+                },
+              };
+            }
+          }
+        } catch {}
+      }
 
       // Deterministic auto-commit: strictly require VALID IMPLEMENTED handoff
       if (devVal.valid && devStatus === "IMPLEMENTED") {
@@ -1077,6 +1100,9 @@ async function main() {
             execSync(`git commit -m "${commitMsg}"`, { cwd: repoRoot, stdio: "ignore" });
           }
         } catch {}
+
+        state.phase = "IMPLEMENTED";
+        saveState(state, repoRoot);
       }
 
       const devDetails = devVal.valid
@@ -1340,6 +1366,28 @@ async function main() {
       try {
         const d = JSON.parse(readFileSync(dashFile, "utf-8"));
         devPhaseStatus = d?.phases?.developer?.status || "";
+      } catch {}
+    }
+    // Ground in git truth: if Developer was not explicitly BLOCKED, verify whether genuine commits exist on feature branch
+    if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
+      try {
+        const currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const baseRef = state.baseRef || (existsSync(dashFile) && JSON.parse(readFileSync(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef);
+        if (baseRef && currentHead && currentHead !== baseRef) {
+          const diffFiles = execSync(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
+            .trim().split(/\r?\n/).filter(Boolean);
+          if (diffFiles.length > 0) {
+            devPhaseStatus = "IMPLEMENTED";
+            syncWorkflowDashboard(repoRoot, {
+              phase: "developer",
+              status: "IMPLEMENTED",
+              summary: `Fix committed in ${currentHead.slice(0, 8)}`,
+              details: { commitSha: currentHead, baseRef, changedFiles: diffFiles },
+            });
+            state.phase = "IMPLEMENTED";
+            saveState(state, repoRoot);
+          }
+        }
       } catch {}
     }
 
