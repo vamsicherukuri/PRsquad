@@ -111,6 +111,8 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 
 ## Coding Agent Observability & Live Canvas
 
+[![Live Visual Canvas](https://img.shields.io/badge/Live%20Visual%20Canvas-Launch%20Interactive%20App-8250df?style=for-the-badge&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
+
 PR Squad makes multi-agent execution observable by tracking workflow state, resource usage, retries, and deterministic policy decisions throughout the workflow.
 
 ### ⚡ AI Credit & Token Telemetry
@@ -123,9 +125,7 @@ At each specialist handoff, `postToolUse` hooks capture Copilot session telemetr
 
 ### 🎨 PR Squad Live Visual Canvas
 
-The **PR Squad Live Visual Canvas** provides a visual view of workflow progress, agent activity, and deterministic control plane decisions.
-
-[![Live Visual Canvas](https://img.shields.io/badge/Live%20Visual%20Canvas-Launch%20Interactive%20App-8250df?style=for-the-badge&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
+The **[PR Squad Live Visual Canvas](https://vamsicherukuri.github.io/PRsquad/)** provides a visual view of workflow progress, agent activity, and deterministic control plane decisions:
 
 - **7-Stage Workflow View**: Shows the pipeline from Issue Intake through Pull Request creation, including active, completed, blocked, and human-gated stages.
 - **Stage Details**: Inspect the active agent, role-specific context, repository skills, instructions, and token usage for each stage.
