@@ -111,7 +111,7 @@ Only a human can authorize the implementation plan at the **Scope Gate** before 
 
 ## Coding Agent Observability & Live Canvas
 
-[![Live Visual Canvas](https://img.shields.io/badge/Live%20Visual%20Canvas-Launch%20Interactive%20App-8250df?style=for-the-badge&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
+[![Live Canvas](https://img.shields.io/badge/Live%20Canvas-Launch-8250df?style=flat-square&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 PR Squad makes multi-agent execution observable by tracking workflow state, resource usage, retries, and deterministic policy decisions throughout the workflow.
 
