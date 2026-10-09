@@ -1416,6 +1416,15 @@ async function main() {
     }
 
     if (devPhaseStatus !== "IMPLEMENTED") {
+      appendAuditLog({
+        sessionId: state.sessionId,
+        agent: "controller",
+        tool: "agent",
+        action: "qa_invocation_blocked_developer_not_implemented",
+        decision: "deny",
+        details: { devPhaseStatus: devPhaseStatus || "NOT RECORDED" },
+      }, repoRoot);
+
       const output: HookOutput = {
         decision: "deny",
         reason: `BLOCKED BY POLICY: QA agent cannot be invoked before Developer implementation has completed with status 'IMPLEMENTED' (current: '${devPhaseStatus || "NOT RECORDED"}'). Stage transitions require verified prior evidence; downstream stages may never manufacture upstream success.`,

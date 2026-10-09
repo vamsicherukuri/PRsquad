@@ -26,15 +26,33 @@ function getLatestWorktreeDir() {
 	}
 	lastWorktreeScan = now;
 
-	const candidates = [
-		join(userHome, "factory", "sample repos", "copilot-worktrees", "prsquad"),
-		join(userHome, "copilot-worktrees", "prsquad"),
-		resolve(process.cwd(), "..", "copilot-worktrees", "prsquad"),
-		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline"),
-		join(userHome, "copilot-worktrees", "gated-fix-pipeline"),
-		resolve(process.cwd(), "..", "copilot-worktrees", "gated-fix-pipeline")
+	const worktreeRoots = [
+		join(userHome, "factory", "sample repos", "copilot-worktrees"),
+		join(userHome, "copilot-worktrees"),
+		resolve(process.cwd(), "..", "copilot-worktrees"),
+		resolve(process.cwd(), "copilot-worktrees"),
 	];
 
+	const candidates = [
+		join(userHome, "factory", "sample repos", "copilot-worktrees", "StarReads"),
+		join(userHome, "factory", "sample repos", "copilot-worktrees", "prsquad"),
+		join(userHome, "copilot-worktrees", "prsquad"),
+		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline"),
+		join(userHome, "copilot-worktrees", "gated-fix-pipeline"),
+	];
+
+	for (const root of worktreeRoots) {
+		if (existsSync(root)) {
+			try {
+				const repoDirs = readdirSync(root, { withFileTypes: true }).filter(d => d.isDirectory());
+				for (const r of repoDirs) {
+					candidates.push(join(root, r.name));
+				}
+			} catch (_) {}
+		}
+	}
+
+	const allEntries = [];
 	for (const base of candidates) {
 		if (existsSync(base)) {
 			try {
@@ -43,14 +61,16 @@ function getLatestWorktreeDir() {
 					.map(d => ({
 						path: join(base, d.name),
 						time: statSync(join(base, d.name)).mtimeMs
-					}))
-					.sort((a, b) => b.time - a.time);
-				if (entries.length > 0) {
-					cachedWorktreeDir = entries[0].path;
-					return cachedWorktreeDir;
-				}
+					}));
+				allEntries.push(...entries);
 			} catch (_) {}
 		}
+	}
+
+	if (allEntries.length > 0) {
+		allEntries.sort((a, b) => b.time - a.time);
+		cachedWorktreeDir = allEntries[0].path;
+		return cachedWorktreeDir;
 	}
 	cachedWorktreeDir = null;
 	return null;
