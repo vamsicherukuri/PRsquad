@@ -2,6 +2,8 @@
 
 [![GitHub Copilot App Plugin](https://img.shields.io/badge/GitHub%20Copilot%20App-Plugin-6f42c1?logo=githubcopilot&logoColor=white)](https://github.com/vamsicherukuri/PRsquad)
 [![Releases](https://img.shields.io/badge/releases-v0.2.8-blue)](https://github.com/vamsicherukuri/PRsquad/releases)
+[![Interactive Workflow](https://img.shields.io/badge/🎮%20Interactive%20Workflow-7--Stage%20Pipeline%20%26%20Hooks-8250df?style=flat-square&logo=googlechrome&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
+[![Automated Tests](https://img.shields.io/badge/tests-331%20passing%20(100%25)-3fb950?style=flat-square&logo=githubactions&logoColor=white)](https://vamsicherukuri.github.io/PRsquad/)
 
 
 **Probabilistic reasoning · Deterministic control · Human-in-the-loop governance.**
@@ -66,6 +68,8 @@ Issue → Triage → Plan → Human Scope Gate → Implementation → QA → Rev
 ```
 
 Specialist agents do **not** directly delegate work to one another. Every specialist returns a structured handoff to `@prsquad`, which validates the result and determines the next allowed action under deterministic policy enforcement.
+
+> 🎮 **Interactive Visualizer & Policy Sandbox:** Walk through all 7 pipeline stages, inspect the 4 Copilot hook engines, and test real-time policy barriers in your browser: **[Open Interactive Workflow](https://vamsicherukuri.github.io/PRsquad/)** *(or open [docs/index.html](docs/index.html) locally)*.
 
 
 

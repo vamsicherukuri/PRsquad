@@ -796,8 +796,8 @@
     </div>
 
     <div class="header-links">
-      <span class="badge-pill badge-green">● 277 Tests (100% Pass)</span>
-      <span class="badge-pill badge-gray">GitHub Copilot App Native</span>
+      <span class="badge-pill badge-green">● 331 Tests (100% Pass)</span>
+      <a href="https://github.com/vamsicherukuri/PRsquad" target="_blank" class="badge-pill badge-gray" style="text-decoration:none; color:inherit;">GitHub: PRsquad</a>
     </div>
   </header>
 
@@ -961,7 +961,8 @@
                 <option value="src/guardrails/prCreator.ts">src/guardrails/prCreator.ts (Inside Approved Scope)</option>
                 <option value="package.json">package.json (Out of Scope Violation)</option>
                 <option value=".github/workflows/ci.yml">.github/workflows/ci.yml (Protected System Directory)</option>
-                <option value="src/common/errors.ts">src/common/errors.ts (Unapproved Sibling Directory)</option>
+                <option value=".gated-change/approval.lock">.gated-change/approval.lock (Tamper Barrier: Model Cannot Self-Approve)</option>
+                <option value="../external/config.ts">../external/config.ts (Path Traversal / Escape Attempt)</option>
               </select>
             </div>
             <div class="tester-result-box" id="file-scope-result">
@@ -982,6 +983,8 @@
                 <option value="git commit -m 'fix: sanitize branch'">git commit -m 'fix: sanitize branch' (Feature Branch Commit)</option>
                 <option value="git push origin main">git push origin main (Direct Base Branch Push Attempt)</option>
                 <option value="git checkout main">git checkout main (Base Branch Checkout Attempt)</option>
+                <option value="node .gated-change/bin/gate-approve.mjs">node .gated-change/bin/gate-approve.mjs (Autonomous Agent Gate Mint Attempt)</option>
+                <option value="cat > script.sh">cat > script.sh (Shell File Redirection Attempt)</option>
                 <option value="npx -y tsx scripts/test-guardrails.ts">npx -y tsx scripts/test-guardrails.ts (Test Runner Execution)</option>
               </select>
             </div>
@@ -1002,12 +1005,34 @@
               <select class="tester-select" id="test-gate-state" onchange="runGateBarrierTest()">
                 <option value="lock_present">approval.lock present (Signed by maintainer via /approve)</option>
                 <option value="lock_missing">approval.lock missing (Agent attempting autonomous jump)</option>
+                <option value="plan_drift">Plan Drift: planHash mismatch against approved lock</option>
                 <option value="stale_lock">Stale Lock from Issue #999 (Current Issue #22)</option>
               </select>
             </div>
             <div class="tester-result-box" id="gate-barrier-result">
               <div class="result-badge result-allow">✓ PERMITTED (ALLOW)</div>
-              <div style="color:#8b949e; margin-top:4px;">Active lock verified on disk for Issue #22. Developer agent spawn authorized.</div>
+              <div style="color:#8b949e; margin-top:4px;">Active lock verified on disk for Issue #22 with canonical planHash integrity binding. Developer agent spawn authorized.</div>
+            </div>
+          </div>
+
+          <!-- Tester 4: PR Creation Gate & Anti-Stale HEAD Binding -->
+          <div class="tester-card">
+            <div class="tester-title">
+              <span>🚀 PR Creation Gate & Anti-Stale Binding</span>
+              <span class="check-hook-pill">(prCreator.ts / pr-create)</span>
+            </div>
+            <div class="tester-input-group">
+              <label>PR Gate Verification Condition:</label>
+              <select class="tester-select" id="test-pr-gate-state" onchange="runPrGateTest()">
+                <option value="pr_valid">Maintainer /create-pr + testedSha === currentHead (All Evidence Verified)</option>
+                <option value="pr_stale">Stale Commit Evidence: testedSha !== currentHead (Code Modified After QA)</option>
+                <option value="pr_agent_attempt">Autonomous Specialist Agent Attempts PR Creation (Human Authorization Missing)</option>
+                <option value="pr_qa_failed">QA Verification Verdict is FAIL or PENDING (Unverified Code)</option>
+              </select>
+            </div>
+            <div class="tester-result-box" id="pr-gate-result">
+              <div class="result-badge result-allow">✓ PERMITTED (ALLOW)</div>
+              <div style="color:#8b949e; margin-top:4px;">PR #24 authorized: Active lock present, QA PASS verified, Reviewer CLEAR verified, and tested HEAD matches current commit. Auto-merge disabled.</div>
             </div>
           </div>
         </div>
@@ -1053,6 +1078,81 @@
           </tr>
         </tbody>
       </table>
+
+      <!-- Authoritative Hook Enforcement Matrix -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+          <h3 style="font-size:14px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px;">
+            <span>⚡ Authoritative Hook & Gate Enforcement Matrix</span>
+          </h3>
+          <span class="badge-pill badge-green" style="font-size:10px;">Registered in plugins/prsquad/.../hooks.json</span>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted); line-height:1.5;">
+          The GitHub repo <code>master</code> control plane enforces 4 mechanical Copilot hook engines and 2 human authorization gates. Policy denials are deliberate control-plane decisions, returning clean fail-closed exit codes in &lt;15ms with 0 tokens consumed.
+        </p>
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th style="width:18%;">Hook / Gate Engine</th>
+              <th style="width:13%;">Trigger Event</th>
+              <th style="width:19%;">Target Tools / CLI</th>
+              <th style="width:18%;">Guarded Agents</th>
+              <th style="width:32%;">Deterministic Policy Guarantee</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>hook-intake-ingest</code></td>
+              <td><code>preToolUse</code></td>
+              <td><code>agent</code>, <code>task</code></td>
+              <td><code>@prsquad-triage</code></td>
+              <td>Quarantines issue context before Intake starts; fetches via GitHub API in &lt;2s (0 LLM tokens); verifies issue is OPEN; neutralizes prompt injection hazards.</td>
+            </tr>
+            <tr>
+              <td><code>hook-verify-gate</code></td>
+              <td><code>preToolUse</code></td>
+              <td><code>agent</code>, <code>task</code></td>
+              <td><code>@prsquad-architect</code><br><code>@prsquad-dev</code><br><code>@prsquad-qa</code><br><code>@prsquad-review</code></td>
+              <td>Verifies physical <code>approval.lock</code> presence; binds canonical SHA-256 <code>planHash</code>; isolates feature branch &amp; locks base branch; enforces Developer <code>IMPLEMENTED</code> before QA; enforces QA <code>PASS</code> before Reviewer; pre-executes test suite via Tooling Bridge (0 tokens); bounds retries (max 3).</td>
+            </tr>
+            <tr>
+              <td><code>hook-verify-gate</code></td>
+              <td><code>postToolUse</code></td>
+              <td><code>agent</code>, <code>task</code></td>
+              <td>All specialists returning to <code>@prsquad</code></td>
+              <td>Fail-closed JSON schema validation on handoffs; auto-commits verified fix on feature branch; records audit trail in <code>audit.jsonl</code>; calculates and syncs AI credit meter telemetry.</td>
+            </tr>
+            <tr>
+              <td><code>hook-enforce-scope</code></td>
+              <td><code>preToolUse</code></td>
+              <td><code>edit</code>, <code>edit_file</code><br><code>write_to_file</code>, <code>create_file</code></td>
+              <td><code>@prsquad-dev</code></td>
+              <td>Path normalization &amp; <code>../</code> traversal denial; confines writes strictly to <code>approvedScope</code>; strictly shields <code>.github/</code> &amp; <code>.gated-change/</code>; returns Smart Nudges on violation.</td>
+            </tr>
+            <tr>
+              <td><code>hook-sandbox-bash</code></td>
+              <td><code>preToolUse</code></td>
+              <td><code>bash</code>, <code>execute</code><br><code>terminal</code>, <code>powershell</code></td>
+              <td><code>@prsquad-dev</code><br><code>@prsquad-qa</code><br><code>@prsquad-review</code></td>
+              <td>Role-based command allowlists; blocks base branch checkout/commit/push; blocks branch deletion; blocks file redirects (<code>&gt;</code>), chaining (<code>;</code>, <code>&amp;&amp;</code>, <code>|</code>), and script write bypasses (<code>node -e</code>, <code>python -c</code>); prevents agents from executing human gates.</td>
+            </tr>
+            <tr>
+              <td><strong>Human Scope Gate</strong></td>
+              <td>Maintainer CLI / Chat</td>
+              <td><code>node gate-approve.mjs</code><br><code>/approve</code> in chat</td>
+              <td>Human Maintainer</td>
+              <td>Physical gate barrier requiring human authorization before code modification begins. Mints <code>.gated-change/approval.lock</code> with SHA-256 plan hash. Models cannot approve themselves.</td>
+            </tr>
+            <tr>
+              <td><strong>Human PR Gate</strong></td>
+              <td>Maintainer CLI / Chat</td>
+              <td><code>node pr-create.mjs</code><br><code>/create-pr</code> in chat</td>
+              <td>Human Maintainer</td>
+              <td>Physical gate barrier requiring human authorization to open PR. Enforces active lock, QA PASS, Review CLEAR, and anti-stale commit binding (<code>testedSha === currentHead</code>) with auto-merge disabled.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       <!-- Agents Grid -->
       <div class="agents-grid">
@@ -1118,20 +1218,22 @@
           </div>
           <div class="term-body">
 <span class="code-comment"># 1. Clone repository and install dependencies</span>
-<span class="code-cmd">git clone</span> https://github.com/vamsicherukuri/prsquad.git
-<span class="code-cmd">cd</span> prsquad && <span class="code-cmd">npm install</span>
+<span class="code-cmd">git clone</span> https://github.com/vamsicherukuri/PRsquad.git
+<span class="code-cmd">cd</span> PRsquad && <span class="code-cmd">npm install</span>
 
-<span class="code-comment"># 2. Run the 78-point GitHub Copilot App plugin consistency check</span>
-<span class="code-cmd">npm run</span> <span class="code-param">check:plugin</span>
+<span class="code-comment"># 2. Check 78-point GitHub Copilot App plugin consistency</span>
+<span class="code-cmd">npm run</span> <span class="code-param">check:plugin</span>              <span class="code-comment"># 78/78 checks passed</span>
 
-<span class="code-comment"># 3. Verify all 55 mechanical guardrail and security policies</span>
-<span class="code-cmd">npm run</span> <span class="code-param">test:guardrails</span>
+<span class="code-comment"># 3. Verify 79 deterministic guardrails and security hooks</span>
+<span class="code-cmd">npm test</span>                                 <span class="code-comment"># 79/79 checks passed</span>
 
-<span class="code-comment"># 4. Verify semantic instruction slicing and dynamic tooling detection</span>
-<span class="code-cmd">npm run</span> <span class="code-param">test:skills</span>
+<span class="code-comment"># 4. Verify 24 architectural security invariants</span>
+<span class="code-cmd">npm run</span> <span class="code-param">test:security-invariants</span>        <span class="code-comment"># 24/24 checks passed</span>
 
-<span class="code-comment"># 5. Execute full 7-stage end-to-end workflow simulation (100% pass)</span>
-<span class="code-cmd">npm run</span> <span class="code-param">test:e2e</span>
+<span class="code-comment"># 5. Verify 150 adversarial edge cases & containment contracts</span>
+<span class="code-cmd">npm run</span> <span class="code-param">test:edge-cases</span>                 <span class="code-comment"># 150/150 checks passed</span>
+
+<span class="code-comment"># Total: 331/331 automated checks passing (100% Pass)</span>
           </div>
         </div>
 
@@ -1153,7 +1255,7 @@
   <!-- Footer -->
   <footer>
     <div>PRsquad · GitHub Copilot App Enterprise Challenge · Governed Multi-Agent Delivery</div>
-    <div>277/277 Automated Tests Passed (100%)</div>
+    <div>331/331 Automated Tests Passed (100%)</div>
   </footer>
 
   <script>
@@ -1208,9 +1310,16 @@
         title: "@prsquad-architect · Architecture Planning",
         badge: "PLAN_READY",
         badgeClass: "badge-green",
-        desc: "Diagnosed root-cause shell injection hazard in prCreator.ts, mapped surgical blast-radius, and produced technical plan. Strictly read-only.",
-        intelText: "💡 Injected Intelligence (+487 tokens)\n• Skill: pr-governance (.prsquad/skills/pr-governance/SKILL.md)\n• Sliced Instruction: Architecture boundaries & linear pipeline structure.",
+        desc: "Diagnosed root-cause shell injection hazard in prCreator.ts, mapped surgical blast-radius, generated AST pre-fetch map, and produced technical plan. Strictly read-only.",
+        intelText: "💡 Injected Intelligence (+487 tokens)\n• Hook: hook-verify-gate (preToolUse AST pre-fetch map & sliced repo instructions)\n• Skill: pr-governance (.prsquad/skills/pr-governance/SKILL.md)\n• Sliced Instruction: Architecture boundaries & linear pipeline structure.",
         checkpoints: [
+          {
+            allow: true,
+            title: "AST Pre-Fetch Map & Repo Intelligence Injected",
+            hook: "hook-verify-gate",
+            desc: "PreToolUse hook deterministically mapped exported symbols & declared scope with 0 token overhead.",
+            code: "AST Map: src/guardrails/prCreator.ts (5 symbols) · Declared Scope: src/guardrails/"
+          },
           {
             allow: true,
             title: "Architecture Plan Verified & Blast Radius Bounded",
@@ -1225,22 +1334,22 @@
         title: "Scope Approval Gate · Human Authorization Barrier",
         badge: "APPROVED",
         badgeClass: "badge-green",
-        desc: "Deterministic human-in-the-loop barrier. Physical approval.lock must be present on disk before developer agent process can spawn.",
-        intelText: "Physical Gate Lock Barrier\n• Requires maintainer /approve in chat. Prevents autonomous subagent dispatch.",
+        desc: "Deterministic human-in-the-loop barrier. Physical approval.lock with SHA-256 planHash must be present on disk before developer agent process can spawn.",
+        intelText: "Physical Gate Lock Barrier\n• Requires maintainer /approve in chat. Prevents autonomous subagent dispatch.\n• Computes canonical SHA-256 planHash binding to prevent plan drift.",
         checkpoints: [
           {
             allow: true,
             title: "Deterministic Approval Lock Active: approval.lock",
             hook: "hook-verify-gate",
-            desc: "Verified maintainer in-chat approval for: src/guardrails/prCreator.ts, scripts/test-guardrails.ts",
-            code: "approval.lock: { issueNumber: 22, approvedBy: 'human-in-chat', maxAttempts: 3 }"
+            desc: "Verified maintainer in-chat approval (/approve) and valid planHash binding: src/guardrails/prCreator.ts.",
+            code: "approval.lock: { issueNumber: 22, approvedBy: 'human-in-chat', planHash: 'a8f9c...', maxAttempts: 3 }"
           },
           {
             allow: false,
             title: "Developer Process Spawning Blocked (No Lock)",
             hook: "hook-verify-gate",
-            desc: "Physical gate barrier halts subagent process spawn when approval.lock is absent.",
-            code: "EXIT_CODE 1: Developer process blocked without physical approval.lock"
+            desc: "Physical gate barrier halts subagent process spawn (exit code 1 fail-closed) when approval.lock is absent.",
+            code: "EXIT_CODE 1: Developer process blocked without physical approval.lock (models cannot approve themselves)"
           }
         ]
       },
@@ -1249,8 +1358,8 @@
         title: "@prsquad-dev · Developer Implementation",
         badge: "IMPLEMENTED",
         badgeClass: "badge-green",
-        desc: "Developer implements regex sanitization strictly bounded to approved scope files under active write-barrier containment on branch fix/issue-22.",
-        intelText: "💡 Injected Intelligence (+485 tokens)\n• Skill: pr-governance (Branch regex: ^[a-zA-Z0-9/_.-]+$)\n• Sliced Instruction: TypeScript Coding Standards (ESM imports, parameterized child_process)",
+        desc: "Developer implements regex sanitization strictly bounded to approved scope files under active write-barrier containment on isolated branch fix/issue-22.",
+        intelText: "💡 Injected Intelligence (+485 tokens)\n• Skill: pr-governance (Branch regex: ^[a-zA-Z0-9/_.-]+$)\n• Sliced Instruction: TypeScript Coding Standards (ESM imports, parameterized child_process)\n• Hook: hook-verify-gate (preToolUse canonical plan injection & branch isolation)",
         checkpoints: [
           {
             allow: true,
@@ -1278,7 +1387,7 @@
             title: "Blocked Dangerous Command: git push origin main",
             hook: "hook-sandbox-bash",
             desc: "Enforced sandbox security policy. Direct base branch mutation strictly forbidden.",
-            code: "POLICY_DENIAL: Direct mutation or checkout of base branch 'main' forbidden."
+            code: "POLICY_DENIAL: Direct mutation, checkout, or push to base branch ('main'/'master') forbidden."
           }
         ]
       },
@@ -1287,15 +1396,22 @@
         title: "@prsquad-qa · Independent Verification Sandbox",
         badge: "PASS (100%)",
         badgeClass: "badge-green",
-        desc: "Independent QA subagent executed verification test suite inside isolated worktree sandbox. 55/55 passed without mutating code.",
-        intelText: "💡 Injected Intelligence (+454 tokens)\n• Skill: pr-governance (Sanitization assertions & regression test suites)\n• Sliced Instruction: Testing & QA Standards",
+        desc: "Independent QA subagent executed verification test suite inside isolated worktree sandbox. 79/79 guardrail checks passed (331 across suites) without mutating code.",
+        intelText: "💡 Injected Intelligence (+454 tokens)\n• Skill: pr-governance (Sanitization assertions & regression test suites)\n• Sliced Instruction: Testing & QA Standards\n• Hook: hook-verify-gate (preToolUse test pre-execution via Tooling Bridge & stage isolation check)",
         checkpoints: [
           {
             allow: true,
-            title: "Permitted Command: npx -y tsx scripts/test-guardrails.ts",
+            title: "Tooling Bridge Test Pre-Execution & Stage Isolation Verified",
+            hook: "hook-verify-gate",
+            desc: "Verified prior Developer status is IMPLEMENTED. Pre-executed automated test suite with 0 LLM credits.",
+            code: "Stage Invariant: devStatus === 'IMPLEMENTED' · Tooling Bridge: 79/79 checks passed (100%)"
+          },
+          {
+            allow: true,
+            title: "Permitted Command: npm run test:guardrails",
             hook: "hook-sandbox-bash",
             desc: "Executed automated test runner in isolated worktree sandbox.",
-            code: "Runner: npm run test:guardrails -> 55/55 checks passed (100%)"
+            code: "Runner: npm test / test:guardrails -> 79/79 checks passed (331 total across 4 suites)"
           },
           {
             allow: false,
@@ -1312,14 +1428,14 @@
         badge: "CLEAR",
         badgeClass: "badge-green",
         desc: "Read-only inspection verified AST contract stability, zero shell command tampering vulnerabilities, and zero secrets leaked.",
-        intelText: "💡 Injected Intelligence (+136 tokens)\n• Skill: Read-Only Inspection\n• Sliced Instruction: Security Review & OWASP Compliance (Zero Shell Injection)",
+        intelText: "💡 Injected Intelligence (+136 tokens)\n• Skill: Read-Only Inspection\n• Sliced Instruction: Security Review & OWASP Compliance (Zero Shell Injection)\n• Hook: hook-verify-gate (preToolUse QA PASS gate & cumulative diff pre-injection)",
         checkpoints: [
           {
             allow: true,
-            title: "AST Symbol Sweep Completed",
-            hook: "hook-ast-audit",
-            desc: "Verified public API surface and external references. Risk: LOW.",
-            code: "Exported symbols: 5 verified · External references: 2 verified"
+            title: "QA Verification Gate & AST Symbol Sweep Completed",
+            hook: "hook-verify-gate",
+            desc: "Verified QA status is PASS. Pre-injected cumulative git diff and symbol sweep with 0 AI credits.",
+            code: "Gate: qaStatus === 'PASS' · Exported symbols: 5 verified · External references: 2 verified"
           },
           {
             allow: true,
@@ -1327,6 +1443,13 @@
             hook: "hook-sandbox-bash",
             desc: "Permitted non-mutating inspection command.",
             code: "git diff HEAD --stat"
+          },
+          {
+            allow: false,
+            title: "Blocked Dangerous File Redirection / Script Bypasses",
+            hook: "hook-sandbox-bash",
+            desc: "Reviewer cannot execute shell file redirects ('>') or node -e script write-bypasses.",
+            code: "POLICY_DENIAL: Shell mutation surfaces and redirection forbidden for Reviewer."
           }
         ]
       },
@@ -1335,15 +1458,22 @@
         title: "Pull Request Gate · Enterprise Delivery Barrier",
         badge: "PR #24 OPEN",
         badgeClass: "badge-green",
-        desc: "Opens GitHub Pull Request with auto-merge physically disabled. Human maintainer review required before merge.",
-        intelText: "Enterprise Delivery Gate\n• Pull request delivery barrier enforced. Auto-merge physically disabled.",
+        desc: "Opens GitHub Pull Request after explicit maintainer authorization (/create-pr). Verifies anti-stale commit binding (testedSha === currentHead) with auto-merge disabled.",
+        intelText: "Enterprise Delivery Gate (Human Authorized)\n• Pull request delivery barrier enforced by src/guardrails/prCreator.ts.\n• Anti-stale commit binding: testedSha === currentHead.\n• Auto-merge physically disabled.",
         checkpoints: [
           {
             allow: true,
+            title: "Anti-Stale HEAD Commit Binding Verified",
+            hook: "prCreator.ts / pr-create",
+            desc: "Verified git HEAD has not drifted since QA verified and Reviewer cleared the implementation.",
+            code: "Invariant: testedSha === currentHead (b8e4f1a) · All evidence monotonic and verified"
+          },
+          {
+            allow: true,
             title: "Pull Request #24 Opened on GitHub",
-            hook: "hook-verify-gate",
-            desc: "PR opened from branch fix/issue-22 with automated test evidence and AST audit trail.",
-            code: "PR: https://github.com/vamsicherukuri/prsquad/pull/24"
+            hook: "prCreator.ts / pr-create",
+            desc: "PR opened from branch fix/issue-22 with automated test evidence and AST audit trail. Auto-merge disabled.",
+            code: "PR: https://github.com/vamsicherukuri/PRsquad/pull/24 · Auto-Merge: Disabled"
           }
         ]
       }
@@ -1445,6 +1575,18 @@
           <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
           <div style="color:var(--red); margin-top:4px; font-weight:600;">SYSTEM_POLICY_DENIAL: Path '.github/workflows/' is a protected system directory and cannot be modified by agents.</div>
         `;
+      } else if (val === '.gated-change/approval.lock') {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">SYSTEM_POLICY_DENIAL: Path '.gated-change/' contains critical governance artifacts.</div>
+          <div style="color:#8b949e; margin-top:2px;">Tamper barrier active: models cannot mint, forge, or tamper with approval locks.</div>
+        `;
+      } else if (val.includes('../')) {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">PATH_TRAVERSAL_DENIAL: Relative directory traversal ('../') strictly denied.</div>
+          <div style="color:#8b949e; margin-top:2px;">Path normalization confines file modifications strictly to active repository root.</div>
+        `;
       } else {
         res.innerHTML = `
           <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
@@ -1472,6 +1614,18 @@
           <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
           <div style="color:var(--red); margin-top:4px; font-weight:600;">POLICY_DENIAL: Agent cannot switch working tree to base branch 'main'. Must remain on designated feature branch.</div>
         `;
+      } else if (val.includes('gate-approve.mjs')) {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">AGENT_AUTHORIZATION_DENIAL: Autonomous specialist agents cannot execute gate-approve.</div>
+          <div style="color:#8b949e; margin-top:2px;">Scope Gate authorization is strictly reserved for human maintainers typing /approve.</div>
+        `;
+      } else if (val.includes('cat >') || val.includes('>')) {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">MUTATION_SURFACE_RESTRICTION: Shell file redirection ('>') is strictly blocked.</div>
+          <div style="color:#8b949e; margin-top:2px;">Prevents agents from bypassing write-scope barriers via bash shell redirects.</div>
+        `;
       } else {
         res.innerHTML = `
           <div class="result-badge result-allow">✓ PERMITTED (ALLOW)</div>
@@ -1486,19 +1640,54 @@
       if (val === 'lock_present') {
         res.innerHTML = `
           <div class="result-badge result-allow">✓ PERMITTED (ALLOW)</div>
-          <div style="color:#8b949e; margin-top:4px;">Active lock verified on disk for Issue #22. Developer agent spawn authorized.</div>
+          <div style="color:#8b949e; margin-top:4px;">Active lock verified on disk for Issue #22 with canonical planHash integrity binding. Developer agent spawn authorized.</div>
         `;
       } else if (val === 'lock_missing') {
         res.innerHTML = `
           <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
-          <div style="color:var(--red); margin-top:4px; font-weight:600;">POLICY_DENIAL: approval.lock missing on disk. Subagent process spawning halted.</div>
-          <div style="color:#8b949e; margin-top:2px;">Maintainer must explicitly type /approve in chat before Developer can spawn.</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">POLICY_DENIAL: approval.lock missing on disk. Subagent process spawning halted (Exit Code 1).</div>
+          <div style="color:#8b949e; margin-top:2px;">Maintainer must explicitly type /approve in chat before Developer can spawn. Models cannot approve themselves.</div>
+        `;
+      } else if (val === 'plan_drift') {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">APPROVAL_INTEGRITY_DRIFT: planHash mismatch against approved lock.</div>
+          <div style="color:#8b949e; margin-top:2px;">The plan has mutated since the human maintainer signed approval.lock. Re-approval is required.</div>
         `;
       } else {
         res.innerHTML = `
           <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
           <div style="color:var(--red); margin-top:4px; font-weight:600;">STALE_LOCK_INVALIDATED: Detected lock belonging to prior Issue #999. Current is #22.</div>
           <div style="color:#8b949e; margin-top:2px;">Stale lock erased from disk to prevent unauthorized cross-issue write leakage.</div>
+        `;
+      }
+    }
+
+    function runPrGateTest() {
+      const val = document.getElementById('test-pr-gate-state').value;
+      const res = document.getElementById('pr-gate-result');
+      if (val === 'pr_valid') {
+        res.innerHTML = `
+          <div class="result-badge result-allow">✓ PERMITTED (ALLOW)</div>
+          <div style="color:#8b949e; margin-top:4px;">PR #24 creation authorized: Active lock present, QA PASS verified, Reviewer CLEAR verified, and tested HEAD matches current commit. Auto-merge disabled.</div>
+        `;
+      } else if (val === 'pr_stale') {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">STALE_EVIDENCE: Tested commit SHA does not match current HEAD.</div>
+          <div style="color:#8b949e; margin-top:2px;">Code was modified after QA verification. PR gate rejects stale verification evidence to prevent untested changes from landing.</div>
+        `;
+      } else if (val === 'pr_agent_attempt') {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">POLICY_DENIAL: Autonomous specialist agents cannot execute pr-create.</div>
+          <div style="color:#8b949e; margin-top:2px;">PR creation is strictly reserved for human maintainers typing /create-pr or running pr-create.mjs.</div>
+        `;
+      } else {
+        res.innerHTML = `
+          <div class="result-badge result-deny">⛔ BLOCKED (DENY)</div>
+          <div style="color:var(--red); margin-top:4px; font-weight:600;">GATE_PRECONDITION_FAILED: QA verification is FAIL or incomplete.</div>
+          <div style="color:#8b949e; margin-top:2px;">PR gate strictly requires independent QA PASS before pull request can be generated.</div>
         `;
       }
     }
