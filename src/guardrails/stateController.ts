@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 import type { WorkflowState, WorkflowPhase, FetchedIssueData } from "./types.js";
+import type { TriageHandoff } from "./handoffValidator.js";
 import {
   loadState,
   saveState,
@@ -257,6 +258,7 @@ export class StateController {
   ): WorkflowState {
     const state = loadState(rootDir);
     state.phase = "PAUSED";
+    state.pauseReason = reason;
     state.updatedAt = new Date().toISOString();
     saveState(state, rootDir);
 
@@ -287,5 +289,131 @@ export class StateController {
     );
 
     return state;
+  }
+
+  /**
+   * Commits the Intake specialist's verdict to the State Machine:
+   * 1. Evaluates state machine transition rules.
+   * 2. If READY:
+   *    - sets state.phase = "ARCHITECTING"
+   *    - records state.issue.declaredScope = triageData.declaredScope
+   *    - syncs derived dashboard projection: phase="intake", status="READY"
+   *    - logs audit entry: action="intake_verdict_ready"
+   * 3. If NOT_READY:
+   *    - increments intakeRound
+   *    - if intakeRound >= maxIntakeRounds: pauses workflow ("CLARIFICATION_LIMIT_EXCEEDED")
+   *    - syncs derived dashboard projection: phase="intake", status="NOT_READY"
+   *    - logs audit entry: action="intake_verdict_not_ready"
+   * 4. If invalid status: fails closed to PAUSED ("HANDOFF_INVALID")
+   */
+  static commitIntakeVerdict(
+    rootDir: string,
+    triageData: TriageHandoff,
+    sessionId?: string
+  ): WorkflowState {
+    const state = loadState(rootDir);
+    const effectiveSessionId = sessionId || state.sessionId;
+
+    if (triageData.status === "READY") {
+      const allowed = StateController.validateTransition(state.phase, "READY", "ARCHITECTING");
+      if (!allowed) {
+        return StateController.pauseWorkflow(
+          rootDir,
+          `STATE_TRANSITION_VIOLATION: Cannot transition from phase '${state.phase}' to 'ARCHITECTING' on event 'READY'`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+
+      state.phase = "ARCHITECTING";
+      if (triageData.declaredScope) {
+        state.issue.declaredScope = triageData.declaredScope;
+      }
+      state.updatedAt = new Date().toISOString();
+      saveState(state, rootDir);
+
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Definition-of-Ready triage verified criteria & declared scope.",
+        details: triageData,
+      });
+
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_ready",
+          decision: "allow",
+          details: {
+            issueNumber: state.issue.number,
+            phase: "ARCHITECTING",
+            declaredScope: triageData.declaredScope,
+            acceptanceCriteriaCount: triageData.acceptanceCriteria?.length || 0,
+          },
+        },
+        rootDir
+      );
+
+      return state;
+    } else if (triageData.status === "NOT_READY") {
+      state.intakeRound = (state.intakeRound || 0) + 1;
+      const maxRounds = state.maxIntakeRounds || 2;
+      if (state.intakeRound >= maxRounds) {
+        return StateController.pauseWorkflow(
+          rootDir,
+          `CLARIFICATION_LIMIT_EXCEEDED: Intake triage returned NOT_READY after ${state.intakeRound} rounds. Definition of Ready not satisfied.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+
+      state.updatedAt = new Date().toISOString();
+      saveState(state, rootDir);
+
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "NOT_READY",
+        summary: `Definition of Ready not met (missing: ${(triageData.missing || []).join(", ")})`,
+        details: triageData,
+      });
+
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_not_ready",
+          decision: "info",
+          details: {
+            issueNumber: state.issue.number,
+            round: state.intakeRound,
+            missing: triageData.missing,
+            clarifyingQuestion: triageData.clarifyingQuestion,
+          },
+        },
+        rootDir
+      );
+
+      return state;
+    } else {
+      return StateController.pauseWorkflow(
+        rootDir,
+        `INTAKE_TRIAGE_FAILED: Triage returned status '${triageData.status}'. Pipeline halted.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    }
   }
 }

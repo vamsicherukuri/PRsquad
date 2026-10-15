@@ -12,6 +12,7 @@ import { execSync } from "node:child_process";
 import { loadState, saveState, loadApprovalLock, saveApprovalLock, revokeApprovalLock, appendAuditLog, isAgentMatch, getRepoRoot, ensureNodeModulesInWorktree } from "../../src/guardrails/stateStore.js";
 import {
   syncWorkflowDashboard,
+  loadDashboardState,
   formatChatCreditMeter,
   getGroundTruthTelemetry,
   extractPlanMarkdown,
@@ -19,6 +20,7 @@ import {
   extractQADetails,
   extractReviewerDetails,
 } from "../../src/guardrails/issueDashboard.js";
+import { StateController } from "../../src/guardrails/stateController.js";
 import { generateAstPreFetchMap, runSymbolSweep } from "../../src/guardrails/symbolSweep.js";
 import { packageRepoIntelligence } from "../../src/guardrails/repoSkillResolver.js";
 import { detectRepoStack } from "../../src/guardrails/toolingBridge.js";
@@ -990,7 +992,7 @@ async function main() {
     }
 
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
-      const triageVal = validateTriage(input.toolResult);
+      const triageVal = validateTriage(input.toolResult, repoRoot);
       const triageStatus = triageVal.valid ? triageVal.data.status : "HANDOFF_INVALID";
       const triageSummary = triageVal.valid
         ? (triageStatus === "READY"
@@ -1000,17 +1002,22 @@ async function main() {
               : `Triage reported ${triageStatus}`)
         : `Triage handoff validation failed: ${triageVal.errors.join("; ")}`;
 
-      const dashIntake = syncWorkflowDashboard(repoRoot, {
-        owner: state.issue?.owner || "vamsicherukuri",
-        repo: state.issue?.repo || "prsquad",
-        issueNumber: resolvedIssue,
-        issueTitle: state.issue?.title || (state.issue?.number ? `Issue #${state.issue.number}` : "Active Pipeline Task"),
-        sessionId: input.sessionId || state.sessionId,
-        phase: "intake",
-        status: triageStatus,
-        summary: triageSummary,
-        details: triageVal.valid ? triageVal.data : { errors: triageVal.errors },
-      });
+      if (triageVal.valid) {
+        StateController.commitIntakeVerdict(
+          repoRoot,
+          triageVal.data,
+          input.sessionId || state.sessionId
+        );
+      } else {
+        StateController.pauseWorkflow(
+          repoRoot,
+          `INTAKE_HANDOFF_INVALID: ${triageVal.errors.join("; ")}`,
+          resolvedIssue,
+          input.sessionId || state.sessionId
+        );
+      }
+
+      const dashIntake = loadDashboardState(repoRoot);
 
       const triageInstruction = !triageVal.valid
         ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.`

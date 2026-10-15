@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync7, readFileSync as readFileSync7, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { join as join7 } from "node:path";
+import { existsSync as existsSync9, readFileSync as readFileSync8, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
+import { join as join8 } from "node:path";
 import { homedir as homedir3 } from "node:os";
-import { execSync as execSync4 } from "node:child_process";
+import { execSync as execSync5 } from "node:child_process";
 
 // src/guardrails/stateStore.ts
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, realpathSync, symlinkSync, copyFileSync } from "node:fs";
@@ -40,6 +40,21 @@ function getRepoRoot(preferredDir) {
     if (!preferredDir) cachedRepoRoot = fallback;
     return fallback;
   }
+}
+function getRepoOwnerAndName(rootDir = getRepoRoot()) {
+  try {
+    const remoteUrl = execSync("git remote get-url origin", {
+      cwd: rootDir,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const match = remoteUrl.match(/[:/]([^/:]+)\/([^/:]+?)(?:\.git)?$/);
+    if (match) {
+      return { owner: match[1], repo: match[2] };
+    }
+  } catch {
+  }
+  return { owner: "", repo: "" };
 }
 function toPosixRelative(filePath, rootDir = getRepoRoot()) {
   let cleanFilePath = filePath.replace(/\\/g, "/");
@@ -370,6 +385,17 @@ import { tmpdir, homedir as homedir2 } from "node:os";
 import { execFileSync, execSync as execSync2 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
+function loadDashboardState(rootDir = getRepoRoot()) {
+  try {
+    const gatedDir = findGatedChangeDir(rootDir);
+    const dashboardFile = join2(gatedDir, "dashboard.json");
+    if (existsSync2(dashboardFile)) {
+      return JSON.parse(readFileSync2(dashboardFile, "utf-8"));
+    }
+  } catch {
+  }
+  return null;
+}
 function getStatusBadge(status) {
   if (!status || status === "PENDING") return "\u26AA `PENDING`";
   if (status === "IN_PROGRESS") return "\u23F3 `IN_PROGRESS`";
@@ -1170,9 +1196,337 @@ function extractReviewerDetails(toolResultOrText) {
   return details;
 }
 
+// src/guardrails/stateController.ts
+import { existsSync as existsSync3, mkdirSync as mkdirSync2 } from "node:fs";
+import { execSync as execSync3 } from "node:child_process";
+var ALLOWED_TRANSITIONS = [
+  { from: "INITIAL", event: "INGEST_OPEN", to: "INTAKE_TRIAGE" },
+  { from: "INTAKE_TRIAGE", event: "READY", to: "ARCHITECTING" },
+  { from: "INTAKE_TRIAGE", event: "NOT_READY", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "EMPTY", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "FETCH_FAILED", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "ARCHITECTING", event: "PLAN_READY", to: "AWAITING_SCOPE_APPROVAL" },
+  { from: "ARCHITECTING", event: "BLOCKED", to: "PAUSED" },
+  { from: "ARCHITECTING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "AWAITING_SCOPE_APPROVAL", event: "HUMAN_APPROVE", to: "DEVELOPING" },
+  { from: "AWAITING_SCOPE_APPROVAL", event: "HUMAN_REJECT", to: "PAUSED" },
+  { from: "DEVELOPING", event: "IMPLEMENTED", to: "TESTING" },
+  { from: "DEVELOPING", event: "SCOPE_AMENDMENT", to: "ARCHITECTING" },
+  { from: "DEVELOPING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "TESTING", event: "PASS", to: "REVIEWING" },
+  { from: "TESTING", event: "FAIL", to: "DEVELOPING" },
+  { from: "TESTING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "REVIEWING", event: "CLEAR", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" }
+];
+var StateController = class _StateController {
+  /**
+   * Validates if a proposed state transition is permissible under the State Machine.
+   */
+  static validateTransition(fromPhase, event, toPhase) {
+    const normalizedFrom = fromPhase.toUpperCase();
+    const normalizedTo = toPhase.toUpperCase();
+    const normalizedEvent = event.toUpperCase();
+    const effectiveFrom = normalizedFrom === "INTAKE" ? "INTAKE_TRIAGE" : normalizedFrom;
+    const effectiveTo = normalizedTo === "INTAKE" ? "INTAKE_TRIAGE" : normalizedTo;
+    return ALLOWED_TRANSITIONS.some(
+      (t) => t.from === effectiveFrom && t.event === normalizedEvent && t.to === effectiveTo
+    );
+  }
+  /**
+   * Checks whether the current workflow phase represents an advanced, in-flight pipeline stage
+   * that must be preserved on session resume rather than reset to intake.
+   */
+  static isAdvancedPhase(phase) {
+    const p = String(phase || "").toUpperCase();
+    return [
+      "ARCHITECTING",
+      "AWAITING_SCOPE_APPROVAL",
+      "DEVELOPING",
+      "TESTING",
+      "QA_VALIDATING",
+      "REVIEWING",
+      "AWAITING_PR_APPROVAL",
+      "PR_READY",
+      "PR_OPEN"
+    ].includes(p);
+  }
+  /**
+   * Resolves the issue number from session context:
+   * 1. Initial user prompt
+   * 2. Cwd path (e.g. Copilot App worktree named StarReads-issue-42-slug)
+   * 3. Active git branch (e.g. fix/issue-42)
+   * 4. Existing workflow state
+   */
+  static resolveIssueFromSession(cwd, prompt, repoRoot, state) {
+    if (prompt) {
+      const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
+      if (jsonNum) return parseInt(jsonNum[1], 10);
+      const explicitNum = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
+      if (explicitNum) return parseInt(explicitNum[1], 10);
+      const wordNum = prompt.match(/\bissue-?(\d+)\b/i);
+      if (wordNum) return parseInt(wordNum[1], 10);
+    }
+    const cwdMatch = cwd.match(/(?:issue-?|#)(\d+)/i);
+    if (cwdMatch) {
+      return parseInt(cwdMatch[1], 10);
+    }
+    const rootMatch = repoRoot.match(/(?:issue-?|#)(\d+)/i);
+    if (rootMatch) {
+      return parseInt(rootMatch[1], 10);
+    }
+    try {
+      const branch = execSync3("git rev-parse --abbrev-ref HEAD", {
+        cwd,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      const branchMatch = branch.match(/(?:issue-?|#)(\d+)/i);
+      if (branchMatch) {
+        return parseInt(branchMatch[1], 10);
+      }
+    } catch {
+    }
+    if (state?.issue?.number && state.issue.number > 0) {
+      return state.issue.number;
+    }
+    return null;
+  }
+  /**
+   * Initializes or loads the workflow state for the session safely.
+   * Guarantees the .gated-change directory exists on disk.
+   */
+  static loadOrCreateState(rootDir = getRepoRoot(), sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync3(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId && (!state.sessionId || state.sessionId !== sessionId)) {
+      state.sessionId = sessionId;
+      saveState(state, rootDir);
+    }
+    return state;
+  }
+  /**
+   * Performs the atomic intake authorization commit (Streamlined Fix for Redundancy A):
+   * 1. Records issue metadata in state.json
+   * 2. Sets phase = "INTAKE_TRIAGE" and active branch
+   * 3. Syncs dashboard.json with status = "INTAKE_AUTHORIZED"
+   * 4. Logs audit entry in audit.jsonl
+   * All executed as a single atomic transaction.
+   */
+  static authorizeIntake(rootDir, issue, cacheFilePath, sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync3(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+    state.issue = {
+      owner: issue.owner,
+      repo: issue.repo,
+      number: issue.number,
+      title: issue.title,
+      body: issue.body
+    };
+    state.phase = "INTAKE";
+    state.activeBranch = `fix/issue-${issue.number}`;
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    syncWorkflowDashboard(rootDir, {
+      owner: issue.owner,
+      repo: issue.repo,
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+      activeBranch: `fix/issue-${issue.number}`,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: "INTAKE_AUTHORIZED",
+      summary: `Session initialized & issue #${issue.number} verified OPEN. Authorized for Intake triage.`,
+      details: {
+        issueNumber: issue.number,
+        title: issue.title,
+        author: issue.author,
+        state: issue.state,
+        cacheFile: cacheFilePath
+      }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "intake_stage_authorized",
+        decision: "allow",
+        details: {
+          issueNumber: issue.number,
+          title: issue.title,
+          phase: "INTAKE_TRIAGE",
+          status: "INTAKE_AUTHORIZED",
+          cacheFile: cacheFilePath
+        }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Pauses the workflow due to validation failure, closed issue, or policy block.
+   * Atomically records reason in state.json, dashboard.json, and audit.jsonl.
+   */
+  static pauseWorkflow(rootDir, reason, issueNumber, sessionId) {
+    const state = loadState(rootDir);
+    state.phase = "PAUSED";
+    state.pauseReason = reason;
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = state.issue?.owner || remoteInfo.owner;
+    const repo = state.issue?.repo || remoteInfo.repo;
+    syncWorkflowDashboard(rootDir, {
+      owner,
+      repo,
+      issueNumber: issueNumber || state.issue?.number || 0,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: "BLOCKED",
+      summary: reason,
+      details: { reason }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "workflow_paused",
+        decision: "deny",
+        details: { reason, issueNumber: issueNumber || state.issue?.number }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Commits the Intake specialist's verdict to the State Machine:
+   * 1. Evaluates state machine transition rules.
+   * 2. If READY:
+   *    - sets state.phase = "ARCHITECTING"
+   *    - records state.issue.declaredScope = triageData.declaredScope
+   *    - syncs derived dashboard projection: phase="intake", status="READY"
+   *    - logs audit entry: action="intake_verdict_ready"
+   * 3. If NOT_READY:
+   *    - increments intakeRound
+   *    - if intakeRound >= maxIntakeRounds: pauses workflow ("CLARIFICATION_LIMIT_EXCEEDED")
+   *    - syncs derived dashboard projection: phase="intake", status="NOT_READY"
+   *    - logs audit entry: action="intake_verdict_not_ready"
+   * 4. If invalid status: fails closed to PAUSED ("HANDOFF_INVALID")
+   */
+  static commitIntakeVerdict(rootDir, triageData, sessionId) {
+    const state = loadState(rootDir);
+    const effectiveSessionId = sessionId || state.sessionId;
+    if (triageData.status === "READY") {
+      const allowed = _StateController.validateTransition(state.phase, "READY", "ARCHITECTING");
+      if (!allowed) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `STATE_TRANSITION_VIOLATION: Cannot transition from phase '${state.phase}' to 'ARCHITECTING' on event 'READY'`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.phase = "ARCHITECTING";
+      if (triageData.declaredScope) {
+        state.issue.declaredScope = triageData.declaredScope;
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Definition-of-Ready triage verified criteria & declared scope.",
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_ready",
+          decision: "allow",
+          details: {
+            issueNumber: state.issue.number,
+            phase: "ARCHITECTING",
+            declaredScope: triageData.declaredScope,
+            acceptanceCriteriaCount: triageData.acceptanceCriteria?.length || 0
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else if (triageData.status === "NOT_READY") {
+      state.intakeRound = (state.intakeRound || 0) + 1;
+      const maxRounds = state.maxIntakeRounds || 2;
+      if (state.intakeRound >= maxRounds) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `CLARIFICATION_LIMIT_EXCEEDED: Intake triage returned NOT_READY after ${state.intakeRound} rounds. Definition of Ready not satisfied.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "NOT_READY",
+        summary: `Definition of Ready not met (missing: ${(triageData.missing || []).join(", ")})`,
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_not_ready",
+          decision: "info",
+          details: {
+            issueNumber: state.issue.number,
+            round: state.intakeRound,
+            missing: triageData.missing,
+            clarifyingQuestion: triageData.clarifyingQuestion
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `INTAKE_TRIAGE_FAILED: Triage returned status '${triageData.status}'. Pipeline halted.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    }
+  }
+};
+
 // src/guardrails/symbolSweep.ts
 import { createRequire as createRequire2 } from "node:module";
-import { existsSync as existsSync3, readFileSync as readFileSync3, readdirSync, statSync } from "node:fs";
+import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync, statSync } from "node:fs";
 import { join as join3 } from "node:path";
 var _cachedTs = void 0;
 function getTsCompiler() {
@@ -1187,8 +1541,8 @@ function getTsCompiler() {
 }
 function extractExportedSymbols(filePath, rootDir = process.cwd()) {
   const full = join3(rootDir, filePath);
-  if (!existsSync3(full)) return [];
-  const content = readFileSync3(full, "utf-8");
+  if (!existsSync4(full)) return [];
+  const content = readFileSync4(full, "utf-8");
   const symbols = /* @__PURE__ */ new Set();
   const ts = getTsCompiler();
   if (ts) {
@@ -1344,7 +1698,7 @@ function runSymbolSweep(changedFiles, approvedScopePrefix, rootDir = process.cwd
   const externalReferencesFound = [];
   for (const extFile of externalFiles) {
     const full = join3(rootDir, extFile);
-    const content = readFileSync3(full, "utf-8");
+    const content = readFileSync4(full, "utf-8");
     const lines = content.split("\n");
     for (const sym of exportedSymbols) {
       if (sym === "default") continue;
@@ -1387,8 +1741,8 @@ function generateAstPreFetchMap(declaredScope, rootDir = process.cwd()) {
   const targetScopeFiles = [];
   for (const relFile of files) {
     const full = join3(rootDir, relFile);
-    if (!existsSync3(full) || !statSync(full).isFile()) continue;
-    const content = readFileSync3(full, "utf-8");
+    if (!existsSync4(full) || !statSync(full).isFile()) continue;
+    const content = readFileSync4(full, "utf-8");
     const lines = content.split("\n");
     const fileSymbols = [];
     const lineExportRegex = /export\s+(?:default\s+)?(?:async\s+)?(function|class|const|let|var|type|interface|enum)\s+([A-Za-z0-9_$]+)/;
@@ -1429,7 +1783,7 @@ function generateAstPreFetchMap(declaredScope, rootDir = process.cwd()) {
         if (otherFile === t.file || files.includes(otherFile)) continue;
         const fullOther = join3(rootDir, otherFile);
         try {
-          const c = readFileSync3(fullOther, "utf-8");
+          const c = readFileSync4(fullOther, "utf-8");
           if (symRegex.test(c)) {
             if (!importersMap.has(otherFile)) {
               importersMap.set(otherFile, /* @__PURE__ */ new Set());
@@ -1458,7 +1812,7 @@ function generateAstPreFetchMap(declaredScope, rootDir = process.cwd()) {
 }
 
 // src/guardrails/repoSkillResolver.ts
-import { existsSync as existsSync4, readFileSync as readFileSync4, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
+import { existsSync as existsSync5, readFileSync as readFileSync5, readdirSync as readdirSync2, statSync as statSync2 } from "node:fs";
 import { join as join4, relative as relative2 } from "node:path";
 function parseFrontmatter(raw) {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -1567,11 +1921,11 @@ function sliceCopilotInstructions(repoRoot, targetAgent) {
     return null;
   }
   const instructionPath = join4(repoRoot, ".github", "copilot-instructions.md");
-  if (!existsSync4(instructionPath)) {
+  if (!existsSync5(instructionPath)) {
     return null;
   }
   try {
-    const raw = readFileSync4(instructionPath, "utf-8");
+    const raw = readFileSync5(instructionPath, "utf-8");
     if (!raw.trim()) return null;
     let matchedRoleKey = "prsquad-dev";
     if (isAgentMatch(targetAgent, "prsquad-architect")) matchedRoleKey = "prsquad-architect";
@@ -1621,7 +1975,7 @@ function sliceCopilotInstructions(repoRoot, targetAgent) {
   }
 }
 function scanSkillFiles(dir) {
-  if (!existsSync4(dir)) return [];
+  if (!existsSync5(dir)) return [];
   const results = [];
   try {
     const entries = readdirSync2(dir);
@@ -1657,7 +2011,7 @@ function resolveRepoSkills(repoRoot, targetAgent, approvedScope) {
       if (seenPaths.has(file)) continue;
       seenPaths.add(file);
       try {
-        const raw = readFileSync4(file, "utf-8");
+        const raw = readFileSync5(file, "utf-8");
         const { data, content } = parseFrontmatter(raw);
         const targets = Array.isArray(data.targets) ? data.targets : [data.targets || "prsquad-dev", "prsquad-architect"];
         const roleMatches = targets.some((t) => isAgentMatch(targetAgent, t));
@@ -1704,7 +2058,7 @@ ${skill.content}`);
 }
 
 // src/guardrails/toolingBridge.ts
-import { existsSync as existsSync5, readFileSync as readFileSync5, readdirSync as readdirSync3 } from "node:fs";
+import { existsSync as existsSync6, readFileSync as readFileSync6, readdirSync as readdirSync3 } from "node:fs";
 import { join as join5 } from "node:path";
 function detectRepoStack(rootDir = getRepoRoot()) {
   const explicitPaths = [
@@ -1712,9 +2066,9 @@ function detectRepoStack(rootDir = getRepoRoot()) {
     join5(rootDir, ".prsquad.json")
   ];
   for (const configPath of explicitPaths) {
-    if (existsSync5(configPath)) {
+    if (existsSync6(configPath)) {
       try {
-        const raw = readFileSync5(configPath, "utf-8");
+        const raw = readFileSync6(configPath, "utf-8");
         const parsed = JSON.parse(raw);
         if (parsed.tooling && parsed.tooling.testCommand) {
           return {
@@ -1730,7 +2084,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       }
     }
   }
-  if (existsSync5(join5(rootDir, "pom.xml"))) {
+  if (existsSync6(join5(rootDir, "pom.xml"))) {
     return {
       stack: "maven",
       testCommand: "mvn test",
@@ -1740,8 +2094,8 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "build.gradle")) || existsSync5(join5(rootDir, "build.gradle.kts"))) {
-    const gradleCmd = existsSync5(join5(rootDir, "gradlew")) ? "./gradlew" : "gradle";
+  if (existsSync6(join5(rootDir, "build.gradle")) || existsSync6(join5(rootDir, "build.gradle.kts"))) {
+    const gradleCmd = existsSync6(join5(rootDir, "gradlew")) ? "./gradlew" : "gradle";
     return {
       stack: "gradle",
       testCommand: `${gradleCmd} test`,
@@ -1751,11 +2105,11 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "package.json"))) {
+  if (existsSync6(join5(rootDir, "package.json"))) {
     let runner = "npm test";
-    if (existsSync5(join5(rootDir, "pnpm-lock.yaml"))) {
+    if (existsSync6(join5(rootDir, "pnpm-lock.yaml"))) {
       runner = "pnpm test";
-    } else if (existsSync5(join5(rootDir, "yarn.lock"))) {
+    } else if (existsSync6(join5(rootDir, "yarn.lock"))) {
       runner = "yarn test";
     }
     return {
@@ -1767,7 +2121,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "pytest.ini")) || existsSync5(join5(rootDir, "pyproject.toml")) || existsSync5(join5(rootDir, "requirements.txt"))) {
+  if (existsSync6(join5(rootDir, "pytest.ini")) || existsSync6(join5(rootDir, "pyproject.toml")) || existsSync6(join5(rootDir, "requirements.txt"))) {
     return {
       stack: "pytest",
       testCommand: "pytest",
@@ -1776,7 +2130,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "Cargo.toml"))) {
+  if (existsSync6(join5(rootDir, "Cargo.toml"))) {
     return {
       stack: "cargo",
       testCommand: "cargo test",
@@ -1786,7 +2140,7 @@ function detectRepoStack(rootDir = getRepoRoot()) {
       isExplicitConfig: false
     };
   }
-  if (existsSync5(join5(rootDir, "go.mod"))) {
+  if (existsSync6(join5(rootDir, "go.mod"))) {
     return {
       stack: "go",
       testCommand: "go test ./...",
@@ -1817,6 +2171,8 @@ function detectRepoStack(rootDir = getRepoRoot()) {
 }
 
 // src/guardrails/handoffValidator.ts
+import { existsSync as existsSync7 } from "node:fs";
+import { join as join6 } from "node:path";
 function failValidation(errors, rawJson) {
   return { valid: false, controlState: "HANDOFF_INVALID", errors, rawJson };
 }
@@ -1858,7 +2214,16 @@ function extractJsonFromOutput(raw) {
     return null;
   }
 }
-function validateTriage(output) {
+var TRIVIAL_AC_PATTERNS = [
+  /^(everything|all)\s+works?$/i,
+  /^fix\s*(the)?\s*bugs?$/i,
+  /^done$/i,
+  /^works?$/i,
+  /^tests?\s*pass(es)?$/i,
+  /^n\/?a$/i,
+  /^todo$/i
+];
+function validateTriage(output, rootDir) {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
     return failValidation(["Triage output contains no valid JSON object"]);
@@ -1872,6 +2237,17 @@ function validateTriage(output) {
   if (status === "READY") {
     if (!Array.isArray(json.acceptanceCriteria) || json.acceptanceCriteria.length === 0) {
       errors.push("READY triage requires at least 1 item in 'acceptanceCriteria'");
+    } else {
+      const substantiveAcs = json.acceptanceCriteria.filter((ac) => {
+        const str = String(ac || "").trim();
+        if (str.length < 8) return false;
+        return !TRIVIAL_AC_PATTERNS.some((p) => p.test(str));
+      });
+      if (substantiveAcs.length === 0) {
+        errors.push(
+          "Acceptance criteria are trivial placeholders (e.g. 'Everything works'). Definition of Ready requires concrete, testable conditions of satisfaction."
+        );
+      }
     }
     const hasValidScope = typeof json.declaredScope === "string" && json.declaredScope.trim().length > 0 || typeof json.declaredScope === "object" && json.declaredScope !== null && Object.keys(json.declaredScope).length > 0 || Array.isArray(json.declaredScope) && json.declaredScope.length > 0;
     if (!hasValidScope) {
@@ -1886,9 +2262,6 @@ function validateTriage(output) {
       errors.push("FETCH_FAILED triage requires 'fetchError' explaining the failure");
     }
   }
-  if (errors.length > 0) {
-    return failValidation(errors, json);
-  }
   let normalizedScope = null;
   if (typeof json.declaredScope === "string") {
     normalizedScope = json.declaredScope.trim();
@@ -1900,6 +2273,22 @@ function validateTriage(output) {
     } else {
       normalizedScope = JSON.stringify(json.declaredScope);
     }
+  }
+  if (rootDir && status === "READY" && normalizedScope && !normalizedScope.toLowerCase().startsWith("functional:") && !normalizedScope.includes(";")) {
+    const cleanPath = normalizedScope.replace(/^\.\//, "").replace(/\/+$/, "");
+    if (cleanPath && !cleanPath.includes("*") && !cleanPath.includes(",")) {
+      if (!existsSync7(join6(rootDir, cleanPath))) {
+        const topSegment = cleanPath.split("/")[0];
+        if (!existsSync7(join6(rootDir, topSegment))) {
+          errors.push(
+            `Declared scope '${normalizedScope}' does not exist within repository '${rootDir}'`
+          );
+        }
+      }
+    }
+  }
+  if (errors.length > 0) {
+    return failValidation(errors, json);
   }
   return {
     valid: true,
@@ -2161,10 +2550,10 @@ function validateReview(output) {
 }
 
 // src/guardrails/scopeApprover.ts
-import { existsSync as existsSync6, readFileSync as readFileSync6 } from "node:fs";
-import { join as join6 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync7 } from "node:fs";
+import { join as join7 } from "node:path";
 import { createHash } from "node:crypto";
-import { execSync as execSync3 } from "node:child_process";
+import { execSync as execSync4 } from "node:child_process";
 function canonicalJsonStringify(value) {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -2199,11 +2588,11 @@ function computeApprovalEnvelopeHash(envelope) {
 function approveScopeGate(options = {}) {
   const repoRoot = getRepoRoot(options.preferredDir || process.cwd());
   const state = loadState(repoRoot);
-  const dashFile = join6(repoRoot, ".gated-change", "dashboard.json");
+  const dashFile = join7(repoRoot, ".gated-change", "dashboard.json");
   let dashData = null;
-  if (existsSync6(dashFile)) {
+  if (existsSync8(dashFile)) {
     try {
-      dashData = JSON.parse(readFileSync6(dashFile, "utf-8"));
+      dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
     } catch {
     }
   }
@@ -2244,7 +2633,7 @@ function approveScopeGate(options = {}) {
   let baseRef = options.baseRef;
   if (!baseRef) {
     try {
-      baseRef = execSync3("git rev-parse HEAD", {
+      baseRef = execSync4("git rev-parse HEAD", {
         cwd: repoRoot,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]
@@ -2374,7 +2763,7 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   }
   try {
     const effectiveCwd = input.cwd || process.cwd();
-    const gitBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
+    const gitBranch = execSync5("git rev-parse --abbrev-ref HEAD", {
       cwd: effectiveCwd,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"]
@@ -2386,9 +2775,9 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   try {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
-    const cacheFile = join7(repoRoot, ".gated-change", "issue-cache.json");
-    if (existsSync7(cacheFile)) {
-      const parsed = JSON.parse(readFileSync7(cacheFile, "utf-8"));
+    const cacheFile = join8(repoRoot, ".gated-change", "issue-cache.json");
+    if (existsSync9(cacheFile)) {
+      const parsed = JSON.parse(readFileSync8(cacheFile, "utf-8"));
       if (parsed?.number && Number(parsed.number) > 0) {
         return Number(parsed.number);
       }
@@ -2402,13 +2791,13 @@ function resolveBaseRef(repoRoot, preferredBase) {
   const candidates = ["origin/HEAD", "origin/master", "origin/main", "master", "main"];
   for (const candidate of candidates) {
     try {
-      const mb = execSync4(`git merge-base HEAD ${candidate}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      const mb = execSync5(`git merge-base HEAD ${candidate}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
       if (mb) return mb;
     } catch {
     }
   }
   try {
-    const parent = execSync4("git rev-parse HEAD~1", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    const parent = execSync5("git rev-parse HEAD~1", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     if (parent) return parent;
   } catch {
   }
@@ -2422,29 +2811,29 @@ async function main() {
     if (!state2?.sessionId) {
       const home = homedir3();
       const candidates = [
-        join7(home, "factory/sample repos/copilot-worktrees/prsquad"),
-        join7(home, "Documents/prsquad"),
-        join7(home, "factory/sample repos/prsquad"),
-        join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join7(home, "Documents/gated-fix-pipeline"),
-        join7(home, "factory/sample repos/gated-fix-pipeline")
+        join8(home, "factory/sample repos/copilot-worktrees/prsquad"),
+        join8(home, "Documents/prsquad"),
+        join8(home, "factory/sample repos/prsquad"),
+        join8(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join8(home, "Documents/gated-fix-pipeline"),
+        join8(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
       let bestMtime = 0;
       let bestRepo = repoRoot2;
       for (const parent of candidates) {
-        if (existsSync7(parent)) {
+        if (existsSync9(parent)) {
           try {
             const entries = readdirSync4(parent, { withFileTypes: true });
-            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join7(parent, d.name));
+            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join8(parent, d.name));
             dirs.push(parent);
             for (const d of dirs) {
-              const stateFile = join7(d, ".gated-change", "state.json");
-              if (existsSync7(stateFile)) {
+              const stateFile = join8(d, ".gated-change", "state.json");
+              if (existsSync9(stateFile)) {
                 try {
                   const stat = statSync3(stateFile);
                   if (stat.mtimeMs > bestMtime) {
-                    const parsed = JSON.parse(readFileSync7(stateFile, "utf-8"));
+                    const parsed = JSON.parse(readFileSync8(stateFile, "utf-8"));
                     if (parsed) {
                       bestMtime = stat.mtimeMs;
                       bestState = parsed;
@@ -2465,10 +2854,10 @@ async function main() {
       }
     }
     let phases = {};
-    const dashFile = join7(repoRoot2, ".gated-change", "dashboard.json");
-    if (existsSync7(dashFile)) {
+    const dashFile = join8(repoRoot2, ".gated-change", "dashboard.json");
+    if (existsSync9(dashFile)) {
       try {
-        const parsed = JSON.parse(readFileSync7(dashFile, "utf-8"));
+        const parsed = JSON.parse(readFileSync8(dashFile, "utf-8"));
         if (parsed.phases) phases = parsed.phases;
       } catch {
       }
@@ -2502,7 +2891,7 @@ async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync7(0, "utf-8");
+      rawInput = readFileSync8(0, "utf-8");
     } catch {
     }
   }
@@ -2520,11 +2909,11 @@ async function main() {
     const state2 = loadState(repoRoot2);
     let lock2 = loadApprovalLock(repoRoot2);
     if (!lock2) {
-      const lockFilePath = join7(repoRoot2, ".gated-change", "approval.lock");
+      const lockFilePath = join8(repoRoot2, ".gated-change", "approval.lock");
       let existingLockStatus = null;
-      if (existsSync7(lockFilePath)) {
+      if (existsSync9(lockFilePath)) {
         try {
-          const raw = JSON.parse(readFileSync7(lockFilePath, "utf-8"));
+          const raw = JSON.parse(readFileSync8(lockFilePath, "utf-8"));
           existingLockStatus = raw.status || null;
         } catch {
         }
@@ -2532,10 +2921,10 @@ async function main() {
       const isExplicitlyRevokedOrExhausted = existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
       if (!isExplicitlyRevokedOrExhausted) {
         let dashData = null;
-        const dashFile = join7(repoRoot2, ".gated-change", "dashboard.json");
-        if (existsSync7(dashFile)) {
+        const dashFile = join8(repoRoot2, ".gated-change", "dashboard.json");
+        if (existsSync9(dashFile)) {
           try {
-            dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
+            dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
           } catch {
           }
         }
@@ -2682,14 +3071,14 @@ async function main() {
     let currentBranch = "main";
     try {
       try {
-        currentBranch = execSync4("git rev-parse --abbrev-ref HEAD", {
+        currentBranch = execSync5("git rev-parse --abbrev-ref HEAD", {
           cwd: repoRoot2,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"]
         }).trim();
       } catch {
         try {
-          currentBranch = execSync4("git symbolic-ref --short HEAD", {
+          currentBranch = execSync5("git symbolic-ref --short HEAD", {
             cwd: repoRoot2,
             encoding: "utf-8",
             stdio: ["ignore", "pipe", "ignore"]
@@ -2702,33 +3091,33 @@ async function main() {
       if (isBaseBranch && currentBranch !== branchName) {
         let hasCommits = false;
         try {
-          execSync4("git rev-parse HEAD", { cwd: repoRoot2, stdio: "ignore" });
+          execSync5("git rev-parse HEAD", { cwd: repoRoot2, stdio: "ignore" });
           hasCommits = true;
         } catch {
         }
         if (!hasCommits) {
           try {
-            execSync4(`git checkout -b ${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+            execSync5(`git checkout -b ${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
           } catch {
-            execSync4(`git symbolic-ref HEAD refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+            execSync5(`git symbolic-ref HEAD refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
           }
           branchStatus = `initialized_on_${branchName}`;
         } else {
           let branchExists = false;
           try {
-            execSync4(`git rev-parse --verify refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
+            execSync5(`git rev-parse --verify refs/heads/${branchName}`, { cwd: repoRoot2, stdio: "ignore" });
             branchExists = true;
           } catch {
           }
           if (branchExists) {
-            execSync4(`git checkout ${branchName}`, {
+            execSync5(`git checkout ${branchName}`, {
               cwd: repoRoot2,
               encoding: "utf-8",
               stdio: ["ignore", "pipe", "ignore"]
             });
             branchStatus = `switched_to_${branchName}`;
           } else {
-            execSync4(`git checkout -b ${branchName}`, {
+            execSync5(`git checkout -b ${branchName}`, {
               cwd: repoRoot2,
               encoding: "utf-8",
               stdio: ["ignore", "pipe", "ignore"]
@@ -2742,7 +3131,7 @@ async function main() {
         branchStatus = `retained_${currentBranch}`;
       }
       try {
-        const verifiedBranch = execSync4("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const verifiedBranch = execSync5("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
         if (verifiedBranch === "main" || verifiedBranch === "master") {
           const output2 = {
             decision: "deny",
@@ -2790,7 +3179,7 @@ async function main() {
     saveState(state2, repoRoot2);
     if (lock2.currentAttempt === 1 && lock2.baseRef && lock2.baseRef !== "HEAD") {
       try {
-        const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const currentHead = execSync5("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
         appendAuditLog({
           sessionId: state2.sessionId,
           agent: "controller",
@@ -3046,11 +3435,11 @@ ${telemetryBlock}` : sanitized;
   }
   function buildDeveloperHandoffPayload(repoPath, stateObj, fallbackPrompt, issueNum) {
     let details = {};
-    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join8(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync7(dashFile)) {
+    if (existsSync9(dashFile)) {
       try {
-        dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
+        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
         if (dashData?.phases?.developer?.details) {
           details = { ...dashData.phases.developer.details };
         }
@@ -3063,14 +3452,14 @@ ${telemetryBlock}` : sanitized;
     }
     if (!details.commitSha) {
       try {
-        details.commitSha = execSync4("git rev-parse HEAD", { cwd: repoPath, encoding: "utf-8" }).trim();
+        details.commitSha = execSync5("git rev-parse HEAD", { cwd: repoPath, encoding: "utf-8" }).trim();
       } catch {
         details.commitSha = "HEAD";
       }
     }
     if (!details.changedFiles || details.changedFiles.length === 0) {
       try {
-        const files = execSync4("git diff-tree --no-commit-id --name-only -r HEAD", { cwd: repoPath, encoding: "utf-8" }).trim().split("\n").filter(Boolean);
+        const files = execSync5("git diff-tree --no-commit-id --name-only -r HEAD", { cwd: repoPath, encoding: "utf-8" }).trim().split("\n").filter(Boolean);
         if (files.length > 0) details.changedFiles = files;
       } catch {
       }
@@ -3112,11 +3501,11 @@ ${issueBody}`);
   }
   function buildQAHandoffPayload(repoPath, stateObj, fallbackPrompt) {
     let details = {};
-    const dashFile = join7(repoPath, ".gated-change", "dashboard.json");
+    const dashFile = join8(repoPath, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync7(dashFile)) {
+    if (existsSync9(dashFile)) {
       try {
-        dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
+        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
         if (dashData?.phases?.qa?.details) {
           details = { ...dashData.phases.qa.details };
         }
@@ -3151,20 +3540,24 @@ ${issueBody}`);
       saveState(state2, repoRoot2);
     }
     if (isAgentMatch(targetAgent, "gated-change-intake")) {
-      const triageVal = validateTriage(input.toolResult);
+      const triageVal = validateTriage(input.toolResult, repoRoot2);
       const triageStatus = triageVal.valid ? triageVal.data.status : "HANDOFF_INVALID";
       const triageSummary = triageVal.valid ? triageStatus === "READY" ? "Issue requirements extracted and acceptance criteria validated" : triageStatus === "NOT_READY" ? `Definition of Ready not met (missing: ${triageVal.data.missing?.join(", ")})` : `Triage reported ${triageStatus}` : `Triage handoff validation failed: ${triageVal.errors.join("; ")}`;
-      const dashIntake = syncWorkflowDashboard(repoRoot2, {
-        owner: state2.issue?.owner || "vamsicherukuri",
-        repo: state2.issue?.repo || "prsquad",
-        issueNumber: resolvedIssue2,
-        issueTitle: state2.issue?.title || (state2.issue?.number ? `Issue #${state2.issue.number}` : "Active Pipeline Task"),
-        sessionId: input.sessionId || state2.sessionId,
-        phase: "intake",
-        status: triageStatus,
-        summary: triageSummary,
-        details: triageVal.valid ? triageVal.data : { errors: triageVal.errors }
-      });
+      if (triageVal.valid) {
+        StateController.commitIntakeVerdict(
+          repoRoot2,
+          triageVal.data,
+          input.sessionId || state2.sessionId
+        );
+      } else {
+        StateController.pauseWorkflow(
+          repoRoot2,
+          `INTAKE_HANDOFF_INVALID: ${triageVal.errors.join("; ")}`,
+          resolvedIssue2,
+          input.sessionId || state2.sessionId
+        );
+      }
+      const dashIntake = loadDashboardState(repoRoot2);
       const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.` : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction) : { decision: "allow" };
@@ -3210,10 +3603,10 @@ ${issueBody}`);
       let devStatus = devVal.valid ? devVal.data.status : "HANDOFF_INVALID";
       if (!devVal.valid && repoRoot2) {
         try {
-          const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+          const currentHead = execSync5("git rev-parse HEAD", { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
           const baseRef = resolveBaseRef(repoRoot2, state2.baseRef || lock2?.baseRef);
           if (baseRef && currentHead && currentHead !== baseRef) {
-            const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
+            const diffFiles = execSync5(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot2, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
             if (diffFiles.length > 0) {
               devStatus = "IMPLEMENTED";
               devVal = {
@@ -3231,11 +3624,11 @@ ${issueBody}`);
       }
       if (devVal.valid && devStatus === "IMPLEMENTED") {
         try {
-          const statusOut = execSync4("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
+          const statusOut = execSync5("git status --porcelain", { cwd: repoRoot2, encoding: "utf-8" }).trim();
           if (statusOut) {
-            execSync4("git add -u", { cwd: repoRoot2, stdio: "ignore" });
+            execSync5("git add -u", { cwd: repoRoot2, stdio: "ignore" });
             const commitMsg = `fix(issue-${resolvedIssue2}): implement verified changes within approved scope`;
-            execSync4(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
+            execSync5(`git commit -m "${commitMsg}"`, { cwd: repoRoot2, stdio: "ignore" });
           }
         } catch {
         }
@@ -3408,7 +3801,7 @@ ${formatControlPlaneTelemetry(chatMeter, "Intake complete. Surface this live \u{
     try {
       const tooling2 = detectRepoStack(repoRoot);
       const testCmd = tooling2.testCommand;
-      const testStdout = execSync4(testCmd, {
+      const testStdout = execSync5(testCmd, {
         cwd: repoRoot,
         encoding: "utf-8",
         timeout: 25e3,
@@ -3441,11 +3834,11 @@ ${displayFailures.join("\n")}
 \`\`\``;
     }
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
-    const dashFile = join7(repoRoot, ".gated-change", "dashboard.json");
+    const dashFile = join8(repoRoot, ".gated-change", "dashboard.json");
     let devPhaseStatus = "";
-    if (existsSync7(dashFile)) {
+    if (existsSync9(dashFile)) {
       try {
-        const d = JSON.parse(readFileSync7(dashFile, "utf-8"));
+        const d = JSON.parse(readFileSync8(dashFile, "utf-8"));
         devPhaseStatus = d?.phases?.developer?.status || "";
       } catch {
       }
@@ -3455,11 +3848,11 @@ ${displayFailures.join("\n")}
     }
     if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
       try {
-        const currentHead = execSync4("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-        const preferred = state.baseRef || lock?.baseRef || existsSync7(dashFile) && JSON.parse(readFileSync7(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
+        const currentHead = execSync5("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        const preferred = state.baseRef || lock?.baseRef || existsSync9(dashFile) && JSON.parse(readFileSync8(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
         const baseRef = resolveBaseRef(repoRoot, preferred);
         if (baseRef && currentHead && currentHead !== baseRef) {
-          const diffFiles = execSync4(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
+          const diffFiles = execSync5(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
           if (diffFiles.length > 0) {
             devPhaseStatus = "IMPLEMENTED";
             syncWorkflowDashboard(repoRoot, {
@@ -3544,11 +3937,11 @@ ${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Inc
     process.exit(0);
   } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
     ensureNodeModulesInWorktree(repoRoot);
-    const dashFile = join7(repoRoot, ".gated-change", "dashboard.json");
+    const dashFile = join8(repoRoot, ".gated-change", "dashboard.json");
     let dashData = null;
-    if (existsSync7(dashFile)) {
+    if (existsSync9(dashFile)) {
       try {
-        dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
+        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
       } catch {
       }
     }
@@ -3578,16 +3971,16 @@ ${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Inc
       const base = state.baseRef || "HEAD~1";
       let diffOutput = "";
       try {
-        diffOutput = execSync4(`git diff ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
+        diffOutput = execSync5(`git diff ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
       } catch {
-        diffOutput = execSync4(`git diff HEAD~1 HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
+        diffOutput = execSync5(`git diff HEAD~1 HEAD`, { cwd: repoRoot, encoding: "utf-8" }).trim();
       }
       let changedFiles = [];
       try {
-        changedFiles = execSync4(`git diff --name-only ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
+        changedFiles = execSync5(`git diff --name-only ${base} HEAD`, { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
       } catch {
         try {
-          changedFiles = execSync4("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
+          changedFiles = execSync5("git diff --name-only HEAD~1 HEAD", { cwd: repoRoot, encoding: "utf-8" }).split("\n").map((l) => l.trim()).filter(Boolean);
         } catch {
         }
       }

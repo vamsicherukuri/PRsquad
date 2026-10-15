@@ -2,6 +2,7 @@
 
 // scripts/guardrails/hook-intake-ingest.ts
 import { readFileSync as readFileSync5 } from "node:fs";
+import { execSync as execSync5 } from "node:child_process";
 
 // src/guardrails/ingestIssue.ts
 import { execFileSync } from "node:child_process";
@@ -1051,7 +1052,7 @@ var ALLOWED_TRANSITIONS = [
   { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" }
 ];
-var StateController = class {
+var StateController = class _StateController {
   /**
    * Validates if a proposed state transition is permissible under the State Machine.
    */
@@ -1211,6 +1212,7 @@ var StateController = class {
   static pauseWorkflow(rootDir, reason, issueNumber, sessionId) {
     const state = loadState(rootDir);
     state.phase = "PAUSED";
+    state.pauseReason = reason;
     state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     saveState(state, rootDir);
     const remoteInfo = getRepoOwnerAndName(rootDir);
@@ -1238,6 +1240,118 @@ var StateController = class {
     );
     return state;
   }
+  /**
+   * Commits the Intake specialist's verdict to the State Machine:
+   * 1. Evaluates state machine transition rules.
+   * 2. If READY:
+   *    - sets state.phase = "ARCHITECTING"
+   *    - records state.issue.declaredScope = triageData.declaredScope
+   *    - syncs derived dashboard projection: phase="intake", status="READY"
+   *    - logs audit entry: action="intake_verdict_ready"
+   * 3. If NOT_READY:
+   *    - increments intakeRound
+   *    - if intakeRound >= maxIntakeRounds: pauses workflow ("CLARIFICATION_LIMIT_EXCEEDED")
+   *    - syncs derived dashboard projection: phase="intake", status="NOT_READY"
+   *    - logs audit entry: action="intake_verdict_not_ready"
+   * 4. If invalid status: fails closed to PAUSED ("HANDOFF_INVALID")
+   */
+  static commitIntakeVerdict(rootDir, triageData, sessionId) {
+    const state = loadState(rootDir);
+    const effectiveSessionId = sessionId || state.sessionId;
+    if (triageData.status === "READY") {
+      const allowed = _StateController.validateTransition(state.phase, "READY", "ARCHITECTING");
+      if (!allowed) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `STATE_TRANSITION_VIOLATION: Cannot transition from phase '${state.phase}' to 'ARCHITECTING' on event 'READY'`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.phase = "ARCHITECTING";
+      if (triageData.declaredScope) {
+        state.issue.declaredScope = triageData.declaredScope;
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Definition-of-Ready triage verified criteria & declared scope.",
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_ready",
+          decision: "allow",
+          details: {
+            issueNumber: state.issue.number,
+            phase: "ARCHITECTING",
+            declaredScope: triageData.declaredScope,
+            acceptanceCriteriaCount: triageData.acceptanceCriteria?.length || 0
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else if (triageData.status === "NOT_READY") {
+      state.intakeRound = (state.intakeRound || 0) + 1;
+      const maxRounds = state.maxIntakeRounds || 2;
+      if (state.intakeRound >= maxRounds) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `CLARIFICATION_LIMIT_EXCEEDED: Intake triage returned NOT_READY after ${state.intakeRound} rounds. Definition of Ready not satisfied.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "NOT_READY",
+        summary: `Definition of Ready not met (missing: ${(triageData.missing || []).join(", ")})`,
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_not_ready",
+          decision: "info",
+          details: {
+            issueNumber: state.issue.number,
+            round: state.intakeRound,
+            missing: triageData.missing,
+            clarifyingQuestion: triageData.clarifyingQuestion
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `INTAKE_TRIAGE_FAILED: Triage returned status '${triageData.status}'. Pipeline halted.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    }
+  }
 };
 
 // scripts/guardrails/hook-intake-ingest.ts
@@ -1261,6 +1375,44 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
+    const explicitMatch = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
+    const explicitIssueNum = explicitMatch ? parseInt(explicitMatch[1], 10) : null;
+    if (explicitIssueNum) {
+      try {
+        const branch = execSync5("git rev-parse --abbrev-ref HEAD", {
+          cwd: repoRoot,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim();
+        const branchMatch = branch.match(/(?:issue-?|#)(\d+)/i);
+        if (branchMatch) {
+          const branchIssue = parseInt(branchMatch[1], 10);
+          if (branchIssue && explicitIssueNum !== branchIssue) {
+            const gitStatus = execSync5("git status --porcelain", {
+              cwd: repoRoot,
+              encoding: "utf-8",
+              stdio: ["ignore", "pipe", "ignore"]
+            }).trim();
+            if (gitStatus.length > 0) {
+              const reason = `WORKSPACE_MISMATCH: Prompt requests Issue #${explicitIssueNum}, but active branch is '${branch}' with uncommitted changes. Stash or commit changes before switching issues.`;
+              const output = {
+                decision: "deny",
+                permissionDecision: "deny",
+                permissionDecisionReason: reason,
+                hookSpecificOutput: {
+                  hookEventName: "PreToolUse",
+                  permissionDecision: "deny",
+                  permissionDecisionReason: reason
+                }
+              };
+              process.stdout.write(JSON.stringify(output) + "\n");
+              process.exit(0);
+            }
+          }
+        }
+      } catch {
+      }
+    }
     const resolvedNum = StateController.resolveIssueFromSession(effectiveCwd, prompt, repoRoot, state);
     const issueNum = resolvedNum && resolvedNum > 0 ? resolvedNum : 1;
     const isValidRepoPart = (s) => Boolean(s && !s.startsWith(".") && !/\.(json|js|ts|md|txt|ya?ml)$/i.test(s));
@@ -1319,8 +1471,8 @@ async function main() {
         activeBranch: `fix/issue-${issueData.number}`,
         sessionId: input.sessionId || state.sessionId,
         phase: "intake",
-        status: "IN_PROGRESS",
-        summary: `Deterministic triage in progress for issue #${issueData.number}`
+        status: "INTAKE_AUTHORIZED",
+        summary: `Deterministic triage authorized for issue #${issueData.number}`
       });
       appendAuditLog({
         sessionId: state.sessionId,

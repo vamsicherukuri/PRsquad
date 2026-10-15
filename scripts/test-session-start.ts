@@ -16,6 +16,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { getRepoRoot, loadState, saveState } from "../src/guardrails/stateStore.js";
 import { StateController, ALLOWED_TRANSITIONS } from "../src/guardrails/stateController.js";
+import { validateTriage } from "../src/guardrails/handoffValidator.js";
+import { loadDashboardState } from "../src/guardrails/issueDashboard.js";
 
 const REPO_ROOT = getRepoRoot();
 let passed = 0;
@@ -367,6 +369,216 @@ async function runSessionStartSuite() {
 
       const stateAfterClosed = loadState(REPO_ROOT);
       assert(stateAfterClosed.phase === "PAUSED", "Workflow is set to PAUSED when issue is closed");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 6: Three-Tier Definition-of-Ready Triage Validation
+    // -----------------------------------------------------------------------
+    console.log("Test 6: Three-Tier Definition-of-Ready Triage Validation");
+    {
+      // Tier 1 & 2: Empty acceptance criteria fails
+      const emptyAcVal = validateTriage({
+        status: "READY",
+        acceptanceCriteria: [],
+        declaredScope: "src/guardrails",
+      });
+      assert(!emptyAcVal.valid, "validateTriage rejects READY triage with empty acceptance criteria");
+      assert(
+        emptyAcVal.errors.some((e) => e.includes("requires at least 1 item")),
+        "Error message identifies missing acceptance criteria"
+      );
+
+      // Tier 2: Trivial acceptance criteria fails
+      const trivialAcVal1 = validateTriage({
+        status: "READY",
+        acceptanceCriteria: ["Everything works"],
+        declaredScope: "src/guardrails",
+      });
+      assert(!trivialAcVal1.valid, "validateTriage rejects trivial criterion 'Everything works'");
+      assert(
+        trivialAcVal1.errors.some((e) => e.includes("trivial placeholders")),
+        "Error message flags trivial acceptance criteria"
+      );
+
+      const trivialAcVal2 = validateTriage({
+        status: "READY",
+        acceptanceCriteria: ["Fix bugs", "done"],
+        declaredScope: "src/guardrails",
+      });
+      assert(!trivialAcVal2.valid, "validateTriage rejects trivial criteria ['Fix bugs', 'done']");
+
+      // Tier 2: Scope non-existence on disk fails when rootDir provided
+      const nonExistentScopeVal = validateTriage(
+        {
+          status: "READY",
+          acceptanceCriteria: ["All unit tests pass", "Deterministic FSM guards state transitions"],
+          declaredScope: "nonexistent/directory/path",
+        },
+        REPO_ROOT
+      );
+      assert(!nonExistentScopeVal.valid, "validateTriage rejects non-existent declared scope folder");
+      assert(
+        nonExistentScopeVal.errors.some((e) => e.includes("does not exist")),
+        "Error message flags non-existent scope folder"
+      );
+
+      // Substantive criteria with valid repository scope passes
+      const validVal = validateTriage(
+        {
+          status: "READY",
+          acceptanceCriteria: ["All unit tests pass", "Deterministic FSM guards state transitions"],
+          declaredScope: "src/guardrails",
+        },
+        REPO_ROOT
+      );
+      assert(validVal.valid, "validateTriage accepts substantive criteria and existing scope");
+      assert(validVal.data.status === "READY", "Status is preserved as READY");
+      assert(validVal.data.declaredScope === "src/guardrails", "Scope is preserved as src/guardrails");
+
+      // Functional scope (not on disk) is also permitted
+      const validFunctionalVal = validateTriage(
+        {
+          status: "READY",
+          acceptanceCriteria: ["User can log in via SSO", "Invalid credentials return 401"],
+          declaredScope: "Functional: Authentication and session management",
+        },
+        REPO_ROOT
+      );
+      assert(validFunctionalVal.valid, "validateTriage accepts functional scope format");
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 7: StateController Atomic Verdict Commit
+    // -----------------------------------------------------------------------
+    console.log("Test 7: StateController Atomic Verdict Commit");
+    {
+      const fsmDir = fs.mkdtempSync(path.join(os.tmpdir(), "fsm-commit-test-"));
+      try {
+        fs.mkdirSync(path.join(fsmDir, ".gated-change"), { recursive: true });
+
+        // A. Commit READY verdict
+        const initState = loadState(fsmDir);
+        initState.phase = "INTAKE";
+        initState.issue = { owner: "owner", repo: "repo", number: 123, title: "FSM Test Issue" };
+        saveState(initState, fsmDir);
+
+        const readyData = {
+          status: "READY" as const,
+          clarificationRound: 0,
+          issue: { owner: "owner", repo: "repo", number: 123, title: "FSM Test Issue" },
+          acceptanceCriteria: ["Substantive acceptance criterion 1", "Substantive acceptance criterion 2"],
+          declaredScope: "src/guardrails",
+        };
+
+        const updatedState = StateController.commitIntakeVerdict(fsmDir, readyData, "test-sess-fsm");
+        assert(updatedState.phase === "ARCHITECTING", "commitIntakeVerdict advances phase to ARCHITECTING on READY");
+        assert(updatedState.issue.declaredScope === "src/guardrails", "commitIntakeVerdict records declaredScope on state");
+
+        const dashState = loadDashboardState(fsmDir);
+        assert(dashState?.phases?.intake?.status === "READY", "Dashboard intake phase is recorded as READY");
+
+        const auditPath = path.join(fsmDir, ".gated-change", "audit.jsonl");
+        assert(fs.existsSync(auditPath), "Audit log exists after commitIntakeVerdict");
+        const auditLines = fs.readFileSync(auditPath, "utf-8").trim().split("\n");
+        const lastAudit = JSON.parse(auditLines[auditLines.length - 1]);
+        assert(lastAudit.action === "intake_verdict_ready", "Audit log records action 'intake_verdict_ready'");
+        assert(lastAudit.decision === "allow", "Audit log records decision 'allow'");
+
+        // B. Commit NOT_READY verdict increments round
+        const notReadyState = loadState(fsmDir);
+        notReadyState.phase = "INTAKE";
+        notReadyState.intakeRound = 0;
+        notReadyState.maxIntakeRounds = 2;
+        saveState(notReadyState, fsmDir);
+
+        const notReadyData = {
+          status: "NOT_READY" as const,
+          clarificationRound: 1,
+          issue: { owner: "owner", repo: "repo", number: 123, title: "FSM Test Issue" },
+          missing: ["reproduction steps"],
+          clarifyingQuestion: "What are the exact reproduction steps?",
+        };
+
+        const round1State = StateController.commitIntakeVerdict(fsmDir, notReadyData, "test-sess-fsm");
+        assert(round1State.intakeRound === 1, "commitIntakeVerdict increments intakeRound to 1 on NOT_READY");
+        assert(round1State.phase === "INTAKE", "Workflow phase remains INTAKE on round 1 NOT_READY");
+
+        // C. Exceeding maxIntakeRounds pauses workflow
+        const round2State = StateController.commitIntakeVerdict(fsmDir, notReadyData, "test-sess-fsm");
+        assert(round2State.phase === "PAUSED", "commitIntakeVerdict pauses workflow when max rounds exceeded");
+        assert(
+          (round2State.pauseReason || "").includes("CLARIFICATION_LIMIT_EXCEEDED"),
+          "Pause reason explains CLARIFICATION_LIMIT_EXCEEDED"
+        );
+      } finally {
+        try {
+          fs.rmSync(fsmDir, { recursive: true, force: true });
+        } catch {}
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // TEST 8: Live Bundled PostToolUse Hook (hook-verify-gate.mjs)
+    // -----------------------------------------------------------------------
+    console.log("Test 8: Live Bundled PostToolUse Hook (hook-verify-gate.mjs)");
+    {
+      const verifyHookPath = path.join(REPO_ROOT, "plugins", "prsquad", "dist", "hook-verify-gate.mjs");
+      assert(fs.existsSync(verifyHookPath), "Compiled hook bundle exists at plugins/prsquad/dist/hook-verify-gate.mjs");
+
+      const hookDir = fs.mkdtempSync(path.join(os.tmpdir(), "post-hook-test-"));
+      try {
+        fs.mkdirSync(path.join(hookDir, ".gated-change"), { recursive: true });
+        // Create dummy git repo so getRepoRoot works
+        execSync("git init", { cwd: hookDir, stdio: "ignore" });
+        execSync("git config user.name 'Test'", { cwd: hookDir, stdio: "ignore" });
+        execSync("git config user.email 'test@example.com'", { cwd: hookDir, stdio: "ignore" });
+
+        const initState = loadState(hookDir);
+        initState.phase = "INTAKE";
+        initState.issue = { owner: "testowner", repo: "testrepo", number: 55, title: "Post Hook Issue" };
+        saveState(initState, hookDir);
+
+        const triageHandoffOutput = JSON.stringify({
+          status: "READY",
+          clarificationRound: 0,
+          issue: { owner: "testowner", repo: "testrepo", number: 55, title: "Post Hook Issue" },
+          acceptanceCriteria: ["Substantive criteria A", "Substantive criteria B"],
+          declaredScope: "Functional: CLI argument parsing",
+        });
+
+        const postToolInput = JSON.stringify({
+          sessionId: "sess-post-verify",
+          cwd: hookDir,
+          toolName: "agent",
+          toolArgs: {
+            agent: "gated-change-intake",
+            prompt: "Perform triage on issue #55",
+          },
+          toolResult: triageHandoffOutput,
+        });
+
+        const postOut = execSync(`node "${verifyHookPath}"`, {
+          input: postToolInput,
+          encoding: "utf-8",
+          cwd: hookDir,
+          env: { ...process.env, NODE_ENV: "test" },
+          stdio: ["pipe", "pipe", "pipe"],
+        });
+
+        const parsedPost = JSON.parse(postOut.trim());
+        assert(parsedPost.decision === "allow", "hook-verify-gate allows valid intake handoff in postToolUse");
+
+        const stateAfterPost = loadState(hookDir);
+        assert(stateAfterPost.phase === "ARCHITECTING", "postToolUse advances state.phase to ARCHITECTING via StateController");
+        assert(
+          stateAfterPost.issue.declaredScope === "Functional: CLI argument parsing",
+          "postToolUse persists declaredScope to state.issue.declaredScope"
+        );
+      } finally {
+        try {
+          fs.rmSync(hookDir, { recursive: true, force: true });
+        } catch {}
+      }
     }
   } finally {
     // Cleanup temporary test directory

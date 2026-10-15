@@ -7,6 +7,9 @@
  * Enforces the core PRsquad invariant: "Never infer missing evidence."
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 export interface ValidationSuccess<T> {
   valid: true;
   data: T;
@@ -100,7 +103,17 @@ export interface TriageHandoff {
   fetchError?: string | null;
 }
 
-export function validateTriage(output: unknown): HandoffValidation<TriageHandoff> {
+const TRIVIAL_AC_PATTERNS = [
+  /^(everything|all)\s+works?$/i,
+  /^fix\s*(the)?\s*bugs?$/i,
+  /^done$/i,
+  /^works?$/i,
+  /^tests?\s*pass(es)?$/i,
+  /^n\/?a$/i,
+  /^todo$/i,
+];
+
+export function validateTriage(output: unknown, rootDir?: string): HandoffValidation<TriageHandoff> {
   const json = extractJsonFromOutput(output);
   if (!json || typeof json !== "object") {
     return failValidation(["Triage output contains no valid JSON object"]);
@@ -117,7 +130,20 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
   if (status === "READY") {
     if (!Array.isArray(json.acceptanceCriteria) || json.acceptanceCriteria.length === 0) {
       errors.push("READY triage requires at least 1 item in 'acceptanceCriteria'");
+    } else {
+      // Deterministic policy validation: reject trivial placeholder criteria
+      const substantiveAcs = json.acceptanceCriteria.filter((ac: any) => {
+        const str = String(ac || "").trim();
+        if (str.length < 8) return false;
+        return !TRIVIAL_AC_PATTERNS.some((p) => p.test(str));
+      });
+      if (substantiveAcs.length === 0) {
+        errors.push(
+          "Acceptance criteria are trivial placeholders (e.g. 'Everything works'). Definition of Ready requires concrete, testable conditions of satisfaction."
+        );
+      }
     }
+
     const hasValidScope =
       (typeof json.declaredScope === "string" && json.declaredScope.trim().length > 0) ||
       (typeof json.declaredScope === "object" && json.declaredScope !== null && Object.keys(json.declaredScope).length > 0) ||
@@ -135,10 +161,6 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
     }
   }
 
-  if (errors.length > 0) {
-    return failValidation(errors, json);
-  }
-
   let normalizedScope: string | null = null;
   if (typeof json.declaredScope === "string") {
     normalizedScope = json.declaredScope.trim();
@@ -150,6 +172,31 @@ export function validateTriage(output: unknown): HandoffValidation<TriageHandoff
     } else {
       normalizedScope = JSON.stringify(json.declaredScope);
     }
+  }
+
+  // Deterministic policy validation: verify declared scope exists on disk if rootDir provided
+  if (
+    rootDir &&
+    status === "READY" &&
+    normalizedScope &&
+    !normalizedScope.toLowerCase().startsWith("functional:") &&
+    !normalizedScope.includes(";")
+  ) {
+    const cleanPath = normalizedScope.replace(/^\.\//, "").replace(/\/+$/, "");
+    if (cleanPath && !cleanPath.includes("*") && !cleanPath.includes(",")) {
+      if (!existsSync(join(rootDir, cleanPath))) {
+        const topSegment = cleanPath.split("/")[0];
+        if (!existsSync(join(rootDir, topSegment))) {
+          errors.push(
+            `Declared scope '${normalizedScope}' does not exist within repository '${rootDir}'`
+          );
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    return failValidation(errors, json);
   }
 
   return {

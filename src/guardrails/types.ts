@@ -37,6 +37,7 @@ export interface WorkflowState {
   activeBranch?: string;
   currentPhase?: string;
   approvedPlan?: any;
+  pauseReason?: string;
   updatedAt: string;
 }
 
