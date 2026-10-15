@@ -44,45 +44,6 @@ async function main() {
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
     // Extract issue number accurately using StateController
-    const explicitMatch = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
-    const explicitIssueNum = explicitMatch ? parseInt(explicitMatch[1], 10) : null;
-
-    if (explicitIssueNum) {
-      try {
-        const branch = execSync("git rev-parse --abbrev-ref HEAD", {
-          cwd: repoRoot,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim();
-        const branchMatch = branch.match(/(?:issue-?|#)(\d+)/i);
-        if (branchMatch) {
-          const branchIssue = parseInt(branchMatch[1], 10);
-          if (branchIssue && explicitIssueNum !== branchIssue) {
-            const gitStatus = execSync("git status --porcelain", {
-              cwd: repoRoot,
-              encoding: "utf-8",
-              stdio: ["ignore", "pipe", "ignore"],
-            }).trim();
-            if (gitStatus.length > 0) {
-              const reason = `WORKSPACE_MISMATCH: Prompt requests Issue #${explicitIssueNum}, but active branch is '${branch}' with uncommitted changes. Stash or commit changes before switching issues.`;
-              const output = {
-                decision: "deny",
-                permissionDecision: "deny",
-                permissionDecisionReason: reason,
-                hookSpecificOutput: {
-                  hookEventName: "PreToolUse",
-                  permissionDecision: "deny",
-                  permissionDecisionReason: reason,
-                },
-              };
-              process.stdout.write(JSON.stringify(output) + "\n");
-              process.exit(0);
-            }
-          }
-        }
-      } catch {}
-    }
-
     const resolvedNum = StateController.resolveIssueFromSession(effectiveCwd, prompt, repoRoot, state);
     const issueNum = resolvedNum && resolvedNum > 0 ? resolvedNum : 1;
 

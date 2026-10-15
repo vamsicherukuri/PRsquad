@@ -2,7 +2,6 @@
 
 // scripts/guardrails/hook-intake-ingest.ts
 import { readFileSync as readFileSync5 } from "node:fs";
-import { execSync as execSync5 } from "node:child_process";
 
 // src/guardrails/ingestIssue.ts
 import { execFileSync } from "node:child_process";
@@ -1375,44 +1374,6 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
-    const explicitMatch = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
-    const explicitIssueNum = explicitMatch ? parseInt(explicitMatch[1], 10) : null;
-    if (explicitIssueNum) {
-      try {
-        const branch = execSync5("git rev-parse --abbrev-ref HEAD", {
-          cwd: repoRoot,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"]
-        }).trim();
-        const branchMatch = branch.match(/(?:issue-?|#)(\d+)/i);
-        if (branchMatch) {
-          const branchIssue = parseInt(branchMatch[1], 10);
-          if (branchIssue && explicitIssueNum !== branchIssue) {
-            const gitStatus = execSync5("git status --porcelain", {
-              cwd: repoRoot,
-              encoding: "utf-8",
-              stdio: ["ignore", "pipe", "ignore"]
-            }).trim();
-            if (gitStatus.length > 0) {
-              const reason = `WORKSPACE_MISMATCH: Prompt requests Issue #${explicitIssueNum}, but active branch is '${branch}' with uncommitted changes. Stash or commit changes before switching issues.`;
-              const output = {
-                decision: "deny",
-                permissionDecision: "deny",
-                permissionDecisionReason: reason,
-                hookSpecificOutput: {
-                  hookEventName: "PreToolUse",
-                  permissionDecision: "deny",
-                  permissionDecisionReason: reason
-                }
-              };
-              process.stdout.write(JSON.stringify(output) + "\n");
-              process.exit(0);
-            }
-          }
-        }
-      } catch {
-      }
-    }
     const resolvedNum = StateController.resolveIssueFromSession(effectiveCwd, prompt, repoRoot, state);
     const issueNum = resolvedNum && resolvedNum > 0 ? resolvedNum : 1;
     const isValidRepoPart = (s) => Boolean(s && !s.startsWith(".") && !/\.(json|js|ts|md|txt|ya?ml)$/i.test(s));
