@@ -1,6 +1,14 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "node",
+        "args": ["${PLUGIN_ROOT}/dist/run-hook.mjs", "hook-session-start"],
+        "powershell": "node \"${PLUGIN_ROOT}/dist/run-hook.mjs\" hook-session-start",
+        "timeoutSec": 20
+      }
+    ],
     "preToolUse": [
       {
         "tools": ["agent", "task"],

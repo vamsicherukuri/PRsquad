@@ -56,6 +56,7 @@ import {
 import { isCommandAllowedByTooling, detectRepoStack } from "../src/guardrails/toolingBridge.js";
 import { fetchIssueDeterministic } from "../src/guardrails/ingestIssue.js";
 import { runSymbolSweep } from "../src/guardrails/symbolSweep.js";
+import { StateController } from "../src/guardrails/stateController.js";
 
 const REPO_ROOT = getRepoRoot();
 let initialBranch = "";
@@ -1543,6 +1544,97 @@ async function runEdgeCases() {
     const currentState = loadState(REPO_ROOT);
     assert(currentState.issue?.owner !== ".gated-change", "State issue owner is strictly not poisoned with '.gated-change'");
     assert(currentState.issue?.repo !== "state.json", "State issue repo is strictly not poisoned with 'state.json'");
+  }
+
+  // -------------------------------------------------------------------------
+  // EDGE CASE 17: SessionStart Lifecycle Hook & StateController Invariants
+  // -------------------------------------------------------------------------
+  logCase(17, "SessionStart Lifecycle Hook & StateController Invariants");
+  {
+    const sessionStartHook = path.join(REPO_ROOT, "plugins", "prsquad", "dist", "hook-session-start.mjs");
+    assert(fs.existsSync(sessionStartHook), "Compiled hook-session-start.mjs exists in plugins/prsquad/dist");
+
+    // 1. Worktree Issue Resolution when prompt is just "resolve issue"
+    const resolvedNum = StateController.resolveIssueFromSession(
+      "C:/worktrees/StarReads-issue-99-perf-fix",
+      "resolve issue",
+      "C:/worktrees/StarReads-issue-99-perf-fix"
+    );
+    assert(resolvedNum === 99, "resolveIssueFromSession resolves issue 99 from worktree path when prompt is generic");
+
+    // 2. State machine transition enforcement
+    assert(
+      StateController.validateTransition("INITIAL", "INGEST_OPEN", "INTAKE_TRIAGE"),
+      "StateController permits INITIAL -> INGEST_OPEN -> INTAKE_TRIAGE"
+    );
+    assert(
+      !StateController.validateTransition("INTAKE_TRIAGE", "SKIP_TO_PR", "PR_OPEN"),
+      "StateController rejects illegal jump from INTAKE_TRIAGE to PR_OPEN"
+    );
+
+    // 3. Reset state and invoke bundled sessionStart hook
+    const cleanState = loadState(REPO_ROOT);
+    cleanState.phase = "INTAKE";
+    delete (cleanState.issue as any).number;
+    saveState(cleanState, REPO_ROOT);
+
+    const sessionInput = JSON.stringify({
+      sessionId: "test-edge-17",
+      cwd: REPO_ROOT,
+      initialPrompt: "resolve issue #1",
+      source: "new",
+    });
+
+    const hookOutput = execSync(`node "${sessionStartHook}"`, {
+      input: sessionInput,
+      encoding: "utf-8",
+      cwd: REPO_ROOT,
+      env: { ...process.env, NODE_ENV: "test", PRSQUAD_ALLOW_FIXTURES: "true" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const parsedSession = JSON.parse(hookOutput.trim());
+    assert(parsedSession.decision === "allow", "sessionStart hook allows valid session initialization");
+    assert(
+      parsedSession.additionalContext.includes("ISSUE #1 VERIFIED OPEN"),
+      "sessionStart additionalContext confirms issue #1 is verified OPEN"
+    );
+
+    // 4. Verify issue cache was created
+    const cacheFile = path.join(REPO_ROOT, ".gated-change", "issue-cache.json");
+    assert(fs.existsSync(cacheFile), ".gated-change/issue-cache.json snapshot created");
+
+    // 5. Test session resume preserving advanced phase
+    const stateToPreserve = loadState(REPO_ROOT);
+    stateToPreserve.phase = "DEVELOPING";
+    saveState(stateToPreserve, REPO_ROOT);
+
+    const resumeInput = JSON.stringify({
+      sessionId: "test-edge-17",
+      cwd: REPO_ROOT,
+      initialPrompt: "resume fix",
+      source: "resume",
+    });
+
+    const resumeOutput = execSync(`node "${sessionStartHook}"`, {
+      input: resumeInput,
+      encoding: "utf-8",
+      cwd: REPO_ROOT,
+      env: { ...process.env, NODE_ENV: "test" },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    const parsedResume = JSON.parse(resumeOutput.trim());
+    assert(parsedResume.decision === "allow", "sessionStart allows resumed session");
+    assert(
+      parsedResume.additionalContext.includes("Active Phase: DEVELOPING"),
+      "sessionStart preserves Active Phase: DEVELOPING without restarting intake"
+    );
+
+    // Clean up state
+    const restored = loadState(REPO_ROOT);
+    restored.phase = "INTAKE";
+    saveState(restored, REPO_ROOT);
   }
 
   // -------------------------------------------------------------------------

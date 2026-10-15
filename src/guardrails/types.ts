@@ -76,9 +76,14 @@ export interface AuditLogEntry {
 export interface HookInput {
   tool?: string;
   toolArgs?: Record<string, any>;
+  toolCalls?: Array<{ name: string; args: Record<string, any> }>;
   agent?: string;
   sessionId?: string;
   environment?: Record<string, string>;
+  cwd?: string;
+  initialPrompt?: string;
+  source?: string;
+  timestamp?: string;
 }
 
 export interface HookOutput {

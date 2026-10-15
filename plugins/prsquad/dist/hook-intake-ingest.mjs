@@ -5,10 +5,10 @@ import { readFileSync as readFileSync4 } from "node:fs";
 import { execSync as execSync4 } from "node:child_process";
 
 // src/guardrails/ingestIssue.ts
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd()) {
+function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd(), includeComments = false) {
   const cacheFile = join(rootDir, ".gated-change", "issue-cache.json");
   if (existsSync(cacheFile)) {
     try {
@@ -36,26 +36,33 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
   }
   try {
     let stdout = "";
+    const fields = includeComments ? "number,title,body,comments,labels,author,state" : "number,title,body,labels,author,state";
     if (owner && repo) {
       try {
-        const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
-        stdout = execSync(cmd, {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 1e4,
-          stdio: ["ignore", "pipe", "ignore"]
-        });
+        stdout = execFileSync(
+          "gh",
+          ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
+          {
+            cwd: rootDir,
+            encoding: "utf-8",
+            timeout: 1e4,
+            stdio: ["ignore", "pipe", "ignore"]
+          }
+        );
       } catch {
       }
     }
     if (!stdout.trim()) {
-      const fallbackCmd = `gh issue view ${issueNumber} --json number,title,body,comments,labels,author,state`;
-      stdout = execSync(fallbackCmd, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        timeout: 1e4,
-        stdio: ["ignore", "pipe", "ignore"]
-      });
+      stdout = execFileSync(
+        "gh",
+        ["issue", "view", String(issueNumber), "--json", fields],
+        {
+          cwd: rootDir,
+          encoding: "utf-8",
+          timeout: 1e4,
+          stdio: ["ignore", "pipe", "ignore"]
+        }
+      );
     }
     const parsed = JSON.parse(stdout);
     return {
@@ -360,7 +367,7 @@ function isAgentMatch(targetAgent, expectedName) {
 import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2, unlinkSync } from "node:fs";
 import { join as join3 } from "node:path";
 import { tmpdir, homedir as homedir2 } from "node:os";
-import { execFileSync, execSync as execSync3 } from "node:child_process";
+import { execFileSync as execFileSync2, execSync as execSync3 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 function getStatusBadge(status) {
@@ -950,7 +957,7 @@ function postOrPatchGitHubComment(state) {
     writeFileSync2(tempPath, content, "utf-8");
     if (!state.commentId) {
       try {
-        const commentsJson = execFileSync("gh", [
+        const commentsJson = execFileSync2("gh", [
           "api",
           `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
           "--jq",
@@ -971,7 +978,7 @@ function postOrPatchGitHubComment(state) {
     }
     if (state.commentId) {
       try {
-        execFileSync("gh", [
+        execFileSync2("gh", [
           "api",
           `repos/${state.owner}/${state.repo}/issues/comments/${state.commentId}`,
           "-X",
@@ -988,7 +995,7 @@ function postOrPatchGitHubComment(state) {
         state.commentId = null;
       }
     }
-    const createOut = execFileSync("gh", [
+    const createOut = execFileSync2("gh", [
       "api",
       `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
       "-F",
