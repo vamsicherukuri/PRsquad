@@ -3,13 +3,20 @@
  */
 
 export type WorkflowPhase =
+  | "INITIAL"
   | "INTAKE"
+  | "INTAKE_TRIAGE"
   | "ARCHITECTING"
+  | "PLAN_READY"
   | "AWAITING_SCOPE_APPROVAL"
   | "DEVELOPING"
+  | "IMPLEMENTED"
+  | "TESTING"
   | "QA_VALIDATING"
   | "REVIEWING"
+  | "AWAITING_PR_APPROVAL"
   | "PR_READY"
+  | "PR_OPEN"
   | "PAUSED"
   | "ESCALATED";
 
@@ -45,6 +52,7 @@ export interface WorkflowState {
   commentId?: number | null;
   phases?: Record<string, any>;
   startEventId?: number;
+  lastTransitionId?: string;
   updatedAt: string;
 }
 
@@ -74,6 +82,7 @@ export interface PRAuthorization {
 export interface AuditLogEntry {
   timestamp: string;
   sessionId: string;
+  transitionId?: string;
   agent?: string;
   tool?: string;
   action: string;
@@ -85,6 +94,7 @@ export interface HookInput {
   tool?: string;
   toolArgs?: Record<string, any>;
   toolCalls?: Array<{ name: string; args: Record<string, any> }>;
+  toolResult?: any;
   agent?: string;
   sessionId?: string;
   environment?: Record<string, string>;
@@ -95,9 +105,15 @@ export interface HookInput {
 }
 
 export interface HookOutput {
-  decision: "allow" | "deny";
+  decision: "allow" | "deny" | "ask";
+  permissionDecision?: "allow" | "deny" | "ask";
+  permissionDecisionReason?: string;
   reason?: string;
   additionalContext?: string;
+  modifiedArgs?: Record<string, any>;
+  updatedInput?: Record<string, any>;
+  modifiedResult?: Record<string, any>;
+  hookSpecificOutput?: Record<string, any>;
 }
 
 export interface FetchedIssueData {
