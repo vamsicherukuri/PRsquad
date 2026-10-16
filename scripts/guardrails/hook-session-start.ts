@@ -82,18 +82,9 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
     remoteInfo.repo = extRepo;
   }
 
-  // 4B. User chat prompt patterns (e.g. "resolve issue #42", "#42", "issue_number: 42")
+  // 4B. User chat prompt patterns, worktree directory name, git branch, or active state
   if (!issueNum) {
-    const promptMatch = initialPrompt.match(/(?:issue(?:[_\s]*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) ||
-                        initialPrompt.match(/\bissue-?(\d+)\b/i);
-    if (promptMatch) {
-      issueNum = parseInt(promptMatch[1], 10);
-    }
-  }
-
-  // Allow existing active state issue if user prompt is a generic resume/instruction
-  if (!issueNum && state.issue?.number && state.issue.number > 0) {
-    issueNum = state.issue.number;
+    issueNum = StateController.resolveIssueFromSession(effectiveCwd, initialPrompt, repoRoot, state);
   }
 
   if (!issueNum) {

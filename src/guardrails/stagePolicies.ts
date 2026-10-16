@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import type { WorkflowState, WorkflowPhase, ApprovalLock, HookInput, HookOutput } from "./types.js";
 import {
+  loadState,
   saveState,
   saveApprovalLock,
   revokeApprovalLock,
@@ -167,13 +168,18 @@ export function sanitizeSpecialistHandoff(rawText: string, agentName?: string): 
       try {
         const parsed = JSON.parse(jsonMatch[1]);
         if (parsed.status) {
+          const files = parsed.filesChanged || parsed.changedFiles || [];
           return `\`\`\`json\n${JSON.stringify({
             status: parsed.status,
-            changedFiles: parsed.changedFiles || [],
+            filesChanged: files,
+            changedFiles: files,
+            testsAddedOrChanged: parsed.testsAddedOrChanged || [],
+            validationRun: parsed.validationRun || [],
             tests: parsed.tests || { status: "PASS" },
-            commitSha: parsed.commitSha || parsed.headRef || "HEAD",
-            diffReference: parsed.diffReference || { headRef: parsed.headRef || "HEAD" },
+            commitSha: parsed.commitSha || parsed.diffReference?.headRef || parsed.headRef || "HEAD",
+            diffReference: parsed.diffReference || { baseRef: parsed.baseRef || "HEAD~1", headRef: parsed.headRef || parsed.commitSha || "HEAD" },
             scopeAmendmentRequest: parsed.scopeAmendmentRequest || null,
+            blocker: parsed.blocker || null,
             assumptions: parsed.assumptions || [],
             residualRisk: parsed.residualRisk || "Low",
           }, null, 2)}\n\`\`\``;
@@ -190,6 +196,7 @@ export function sanitizeSpecialistHandoff(rawText: string, agentName?: string): 
             scopeCompliance: parsed.scopeCompliance || "PASS",
             acceptanceCriteriaResults: parsed.acceptanceCriteriaResults || parsed.criteriaResults || parsed.criteria || [],
             testResults: parsed.testResults || { passed: true },
+            failureClassification: parsed.failureClassification || [],
             blockingFindings: parsed.blockingFindings || [],
             notes: parsed.notes || "",
           }, null, 2)}\n\`\`\``;
@@ -200,12 +207,19 @@ export function sanitizeSpecialistHandoff(rawText: string, agentName?: string): 
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[1]);
-        if (parsed.verdict) {
+        if (parsed.verdict || parsed.assessment) {
+          const verdict = parsed.assessment || parsed.verdict;
           return `\`\`\`json\n${JSON.stringify({
-            verdict: parsed.verdict,
-            findings: parsed.findings || [],
-            scopeAudit: parsed.scopeAudit || "PASS",
-            notes: parsed.notes || "",
+            assessment: verdict,
+            verdict,
+            scopeCompliance: parsed.scopeCompliance || parsed.scopeAudit || "PASS",
+            riskFlags: parsed.riskFlags || parsed.findings || [],
+            findings: parsed.findings || parsed.riskFlags || [],
+            qualityNotes: parsed.qualityNotes || [],
+            residualRisk: parsed.residualRisk || [],
+            mergeGateSummary: parsed.mergeGateSummary || parsed.notes || "",
+            scopeAudit: parsed.scopeAudit || parsed.scopeCompliance || "PASS",
+            notes: parsed.notes || parsed.mergeGateSummary || "",
           }, null, 2)}\n\`\`\``;
         }
       } catch {}
@@ -392,8 +406,14 @@ export const IntakePolicy: StagePolicy = {
 
   buildInputContext(ctx: StageContext): InputContextResult {
     let addCtx = "";
-    const cachePath = ctx.state.issueSnapshot || join(ctx.repoRoot, ".gated-change", "issue-cache.json");
-    if (existsSync(cachePath)) {
+    const snap = ctx.state.issueSnapshot;
+    const candidates = [
+      snap && existsSync(snap) ? snap : "",
+      snap ? join(ctx.repoRoot, ".gated-change", snap) : "",
+      join(ctx.repoRoot, ".gated-change", "issue-cache.json"),
+    ].filter(Boolean);
+    const cachePath = candidates.find((p) => existsSync(p));
+    if (cachePath) {
       try {
         const cached = JSON.parse(readFileSync(cachePath, "utf-8"));
         addCtx = `### 📋 Authority Issue Specification (Cached Snapshot)\n\`\`\`json\n${JSON.stringify(cached, null, 2)}\n\`\`\`\n`;
@@ -417,22 +437,25 @@ export const IntakePolicy: StagePolicy = {
 
   commitTransition(valResult: StageValidationResult, ctx: StageContext) {
     const transitionId = mintTransitionId("intake");
-    ctx.state.lastTransitionId = transitionId;
 
+    let updatedState: WorkflowState;
     if (valResult.valid) {
-      StateController.commitIntakeVerdict(
+      updatedState = StateController.commitIntakeVerdict(
         ctx.repoRoot,
         valResult.details as any,
         ctx.sessionId
       );
     } else {
-      StateController.pauseWorkflow(
+      updatedState = StateController.pauseWorkflow(
         ctx.repoRoot,
         `INTAKE_HANDOFF_INVALID: ${(valResult.errors || []).join("; ")}`,
         ctx.resolvedIssue,
         ctx.sessionId
       );
     }
+    updatedState.lastTransitionId = transitionId;
+    saveState(updatedState, ctx.repoRoot);
+    ctx.state = updatedState;
 
     const dash = loadDashboardState(ctx.repoRoot);
     let instructionText = "";
@@ -541,7 +564,18 @@ export const ArchitectPolicy: StagePolicy = {
             : `Scope amendment ${valResult.verdict}`)
       : `Architect handoff validation failed: ${(valResult.errors || []).join("; ")}`;
 
-    const dashArch = syncWorkflowDashboard(ctx.repoRoot, {
+    if (valResult.valid && (valResult.verdict === "PLAN_READY" || valResult.verdict === "SCOPE_AMENDMENT_CONFIRMED")) {
+      ctx.state.phase = "PLAN_READY";
+      ctx.state.currentPhase = "PLAN_READY";
+      ctx.state.approvedScope = proposedScope;
+      ctx.state.approvedPlan = planMarkdown || rawText;
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
+      ctx.state.pauseReason = archSummary;
+    }
+    saveState(ctx.state, ctx.repoRoot);
+
+    syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
       issueNumber: ctx.resolvedIssue,
@@ -558,16 +592,7 @@ export const ArchitectPolicy: StagePolicy = {
         errors: valResult.valid ? undefined : valResult.errors,
       },
     });
-
-    if (valResult.valid && valResult.verdict === "PLAN_READY") {
-      ctx.state.phase = "PLAN_READY";
-      ctx.state.currentPhase = "PLAN_READY";
-      ctx.state.approvedScope = proposedScope;
-      ctx.state.approvedPlan = planMarkdown || rawText;
-      saveState(ctx.state, ctx.repoRoot);
-    } else if (!valResult.valid) {
-      StateController.pauseWorkflow(ctx.repoRoot, archSummary, ctx.resolvedIssue, ctx.sessionId);
-    }
+    ctx.state = loadState(ctx.repoRoot);
 
     const instructionText = !valResult.valid
       ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${(valResult.errors || []).join("; ")}). Pause pipeline and report blocker to maintainer.`
@@ -983,8 +1008,12 @@ export const DeveloperPolicy: StagePolicy = {
       } catch {}
 
       ctx.state.phase = "IMPLEMENTED";
-      saveState(ctx.state, ctx.repoRoot);
+    } else if (valResult.valid && valResult.verdict === "SCOPE_AMENDMENT_REQUIRED") {
+      ctx.state.phase = "ARCHITECTING";
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
     }
+    saveState(ctx.state, ctx.repoRoot);
 
     const devDetails = valResult.valid
       ? extractDeveloperDetails(ctx.rawOutput || ctx.input.toolResult, ctx.repoRoot)
@@ -998,7 +1027,7 @@ export const DeveloperPolicy: StagePolicy = {
             : `Developer reported BLOCKED: ${valResult.details?.blocker?.description || "Execution halted"}`)
       : `Developer handoff validation failed: ${(valResult.errors || []).join("; ")}`;
 
-    const dashDev = syncWorkflowDashboard(ctx.repoRoot, {
+    syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
       issueNumber: ctx.resolvedIssue,
@@ -1009,6 +1038,7 @@ export const DeveloperPolicy: StagePolicy = {
       summary: devSummary,
       details: devDetails,
     });
+    ctx.state = loadState(ctx.repoRoot);
 
     const instructionText = !valResult.valid
       ? `[INSTRUCTION FOR CONTROLLER]: Developer handoff schema invalid (${(valResult.errors || []).join("; ")}). Re-prompt Developer for valid schema handoff or pause pipeline.`
@@ -1060,15 +1090,16 @@ export const QAPolicy: StagePolicy = {
             .trim().split(/\r?\n/).filter(Boolean);
           if (diffFiles.length > 0) {
             devPhaseStatus = "IMPLEMENTED";
+            ctx.state.phase = "IMPLEMENTED";
+            if (!ctx.state.baseRef) ctx.state.baseRef = baseRef;
+            saveState(ctx.state, ctx.repoRoot);
             syncWorkflowDashboard(ctx.repoRoot, {
               phase: "developer",
               status: "IMPLEMENTED",
               summary: `Fix committed in ${currentHead.slice(0, 8)}`,
               details: { commitSha: currentHead, baseRef, changedFiles: diffFiles },
             });
-            ctx.state.phase = "IMPLEMENTED";
-            if (!ctx.state.baseRef) ctx.state.baseRef = baseRef;
-            saveState(ctx.state, ctx.repoRoot);
+            ctx.state = loadState(ctx.repoRoot);
           }
         }
       } catch {}
@@ -1130,12 +1161,16 @@ export const QAPolicy: StagePolicy = {
     const tooling = detectRepoStack(ctx.repoRoot);
     const repoIntel = formatRepoIntelligenceForPrompt(ctx.repoRoot, ctx.targetAgent, ctx.state.approvedScope || undefined);
 
+    ctx.state.phase = "TESTING";
+    saveState(ctx.state, ctx.repoRoot);
+
     const dashQA = syncWorkflowDashboard(ctx.repoRoot, {
       sessionId: ctx.sessionId,
       phase: "qa",
       status: "IN_PROGRESS",
       summary: "Executing independent regression verification suite via powershell",
     });
+    ctx.state = loadState(ctx.repoRoot);
 
     const chatMeter = formatChatCreditMeter(dashQA);
 
@@ -1177,18 +1212,33 @@ export const QAPolicy: StagePolicy = {
     const transitionId = mintTransitionId("qa");
     ctx.state.lastTransitionId = transitionId;
 
+    let currentHead = "";
+    try {
+      currentHead = execSync("git rev-parse HEAD", { cwd: ctx.repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {}
+
     let retryExhausted = false;
-    if (valResult.verdict === "FAIL" && ctx.lock) {
-      ctx.lock.currentAttempt++;
-      saveApprovalLock(ctx.lock, ctx.repoRoot);
-      ctx.state.implementationAttempt = ctx.lock.currentAttempt;
-      if (ctx.lock.currentAttempt > ctx.lock.maxAttempts) {
-        retryExhausted = true;
-        ctx.state.phase = "ESCALATED";
-        ctx.state.currentPhase = "ESCALATED";
+    if (valResult.verdict === "FAIL") {
+      if (ctx.lock) {
+        ctx.lock.currentAttempt++;
+        saveApprovalLock(ctx.lock, ctx.repoRoot);
+        ctx.state.implementationAttempt = ctx.lock.currentAttempt;
+        if (ctx.lock.currentAttempt > ctx.lock.maxAttempts) {
+          retryExhausted = true;
+          ctx.state.phase = "ESCALATED";
+          ctx.state.currentPhase = "ESCALATED";
+        } else {
+          ctx.state.phase = "DEVELOPING";
+        }
+      } else {
+        ctx.state.phase = "DEVELOPING";
       }
-      saveState(ctx.state, ctx.repoRoot);
+    } else if (valResult.valid && valResult.verdict === "PASS") {
+      ctx.state.phase = "REVIEWING";
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
     }
+    saveState(ctx.state, ctx.repoRoot);
 
     const qaDetails = extractQADetails(ctx.rawOutput || ctx.input.toolResult);
     const qaSummary = valResult.valid
@@ -1210,8 +1260,15 @@ export const QAPolicy: StagePolicy = {
       phase: "qa",
       status: valResult.verdict,
       summary: qaSummary,
-      details: { ...qaDetails, verdict: valResult.verdict, errors: valResult.valid ? undefined : valResult.errors, currentAttempt: ctx.lock?.currentAttempt },
+      details: {
+        ...qaDetails,
+        verdict: valResult.verdict,
+        commitSha: qaDetails.commitSha || currentHead || undefined,
+        errors: valResult.valid ? undefined : valResult.errors,
+        currentAttempt: ctx.lock?.currentAttempt,
+      },
     });
+    ctx.state = loadState(ctx.repoRoot);
 
     const instructionText = !valResult.valid
       ? `[INSTRUCTION FOR CONTROLLER]: QA handoff failed validation (${(valResult.errors || []).join("; ")}). Re-prompt QA for valid verification report or pause pipeline.`
@@ -1320,12 +1377,16 @@ export const ReviewerPolicy: StagePolicy = {
     const devHandoff = buildDeveloperHandoffPayload(ctx.repoRoot, ctx.state, ctx.prompt, ctx.resolvedIssue);
     const qaHandoff = buildQAHandoffPayload(ctx.repoRoot, ctx.state, ctx.prompt);
 
+    ctx.state.phase = "REVIEWING";
+    saveState(ctx.state, ctx.repoRoot);
+
     const dashRev = syncWorkflowDashboard(ctx.repoRoot, {
       sessionId: ctx.sessionId,
       phase: "reviewer",
       status: "IN_PROGRESS",
       summary: "Conducting read-only security diff audit & blast radius review",
     });
+    ctx.state = loadState(ctx.repoRoot);
 
     const chatMeter = formatChatCreditMeter(dashRev);
     const partsRev = [diffReport, qaHandoff.markdown, devHandoff.markdown, ctx.prompt].filter(Boolean);
@@ -1368,6 +1429,31 @@ export const ReviewerPolicy: StagePolicy = {
     ctx.state.lastTransitionId = transitionId;
     const revDetails = extractReviewerDetails(ctx.rawOutput || ctx.input.toolResult);
 
+    let currentHead = "";
+    try {
+      currentHead = execSync("git rev-parse HEAD", { cwd: ctx.repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {}
+
+    const riskFlags: any[] = valResult.details?.riskFlags || revDetails.riskFlags || [];
+    const hasBlockingConcerns =
+      valResult.verdict === "CONCERNS" &&
+      Array.isArray(riskFlags) &&
+      riskFlags.some((f: any) => f?.blocking === true);
+
+    const isPrReady =
+      valResult.valid &&
+      (valResult.verdict === "CLEAR" || (valResult.verdict === "CONCERNS" && !hasBlockingConcerns));
+
+    if (isPrReady) {
+      ctx.state.phase = "PR_READY";
+      ctx.state.currentPhase = "WAITING_FOR_HUMAN";
+    } else if (valResult.valid && hasBlockingConcerns) {
+      ctx.state.phase = "DEVELOPING";
+    } else if (!valResult.valid) {
+      ctx.state.phase = "PAUSED";
+    }
+    saveState(ctx.state, ctx.repoRoot);
+
     syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
@@ -1378,15 +1464,13 @@ export const ReviewerPolicy: StagePolicy = {
       summary: valResult.valid
         ? `Read-only diff security audit complete: ${valResult.verdict}`
         : `Reviewer handoff validation failed: ${(valResult.errors || []).join("; ")}`,
-      details: valResult.valid ? revDetails : { errors: valResult.errors, ...revDetails },
+      details: valResult.valid
+        ? { ...revDetails, commitSha: revDetails.commitSha || currentHead || undefined }
+        : { errors: valResult.errors, ...revDetails },
     });
 
     let instructionText = "";
-    if (valResult.valid && valResult.verdict === "CLEAR") {
-      ctx.state.phase = "PR_READY";
-      ctx.state.currentPhase = "WAITING_FOR_HUMAN";
-      saveState(ctx.state, ctx.repoRoot);
-
+    if (isPrReady) {
       syncWorkflowDashboard(ctx.repoRoot, {
         sessionId: ctx.sessionId,
         phase: "mergeGate",
@@ -1404,8 +1488,9 @@ export const ReviewerPolicy: StagePolicy = {
     } else {
       instructionText = !valResult.valid
         ? `[INSTRUCTION FOR CONTROLLER]: Reviewer handoff failed validation (${(valResult.errors || []).join("; ")}). Pause pipeline and notify maintainer.`
-        : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported ${valResult.verdict}. Resolve review findings before opening Pull Request.`;
+        : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported blocking ${valResult.verdict}. Route back to Developer to resolve review findings before opening Pull Request.`;
     }
+    ctx.state = loadState(ctx.repoRoot);
 
     appendAuditLog({
       sessionId: ctx.sessionId,

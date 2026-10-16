@@ -395,12 +395,12 @@ export function validateDeveloper(output: unknown): HandoffValidation<DeveloperH
     valid: true,
     data: {
       status,
-      filesChanged: json.filesChanged || [],
+      filesChanged: filesChanged || [],
       testsAddedOrChanged: json.testsAddedOrChanged || [],
       planItemsAddressed: json.planItemsAddressed || [],
       acceptanceCriteriaCoverage: json.acceptanceCriteriaCoverage || [],
       validationRun: json.validationRun || [],
-      diffReference: json.diffReference || {},
+      diffReference: diffRef || {},
       scopeAmendmentRequest: json.scopeAmendmentRequest || null,
       blocker: json.blocker || null,
       assumptions: json.assumptions || [],
@@ -512,7 +512,7 @@ export function validateQA(output: unknown): HandoffValidation<QAHandoff> {
     data: {
       verdict,
       scopeCompliance,
-      acceptanceCriteriaResults: json.acceptanceCriteriaResults || [],
+      acceptanceCriteriaResults: criteriaList || [],
       testResults: json.testResults || [],
       failureClassification: json.failureClassification || [],
       blockingFindings: json.blockingFindings || [],

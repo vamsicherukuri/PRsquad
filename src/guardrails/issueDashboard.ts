@@ -1008,44 +1008,53 @@ export function extractPlanMarkdown(text: string): string {
   return clean.trim();
 }
 
-export function extractDeveloperDetails(promptOrText: string, repoRoot?: string): Record<string, any> {
+export function extractDeveloperDetails(promptOrText: any, repoRoot?: string): Record<string, any> {
   const details: Record<string, any> = {
     status: "IMPLEMENTED",
   };
 
   if (!promptOrText) return details;
 
-  // 1. Try parsing JSON handoff
-  const handoffIdx = promptOrText.indexOf("DEVELOPER HANDOFF");
-  if (handoffIdx !== -1) {
-    const jsonStart = promptOrText.indexOf("{", handoffIdx);
-    if (jsonStart !== -1) {
-      const jsonEnd = promptOrText.indexOf("\n}\n", jsonStart);
-      const candidateStr = jsonEnd !== -1
-        ? promptOrText.slice(jsonStart, jsonEnd + 2)
-        : promptOrText.slice(jsonStart, promptOrText.lastIndexOf("}") + 1);
+  const rawText = typeof promptOrText === "string"
+    ? promptOrText
+    : promptOrText.textResultForLlm || promptOrText.content || JSON.stringify(promptOrText);
 
-      try {
-        const parsed = JSON.parse(candidateStr);
-        if (parsed.status) details.status = parsed.status;
-        if (parsed.filesChanged) details.changedFiles = parsed.filesChanged;
-        if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
-        if (parsed.validationRun) details.validationRun = parsed.validationRun;
-        if (parsed.assumptions) details.assumptions = parsed.assumptions;
-        if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
-        if (parsed.diffReference?.headRef) details.commitSha = parsed.diffReference.headRef;
-        if (parsed.diffReference?.baseRef) details.baseRef = parsed.diffReference.baseRef;
-      } catch {}
-    }
+  // 1. Try parsing JSON handoff
+  const handoffIdx = rawText.indexOf("DEVELOPER HANDOFF");
+  const searchFrom = handoffIdx !== -1 ? handoffIdx : 0;
+  const jsonStart = rawText.indexOf("{", searchFrom);
+  if (jsonStart !== -1) {
+    const jsonEnd = handoffIdx !== -1 ? rawText.indexOf("\n}\n", jsonStart) : -1;
+    const candidateStr = jsonEnd !== -1
+      ? rawText.slice(jsonStart, jsonEnd + 2)
+      : rawText.slice(jsonStart, rawText.lastIndexOf("}") + 1);
+
+    try {
+      const parsed = JSON.parse(candidateStr);
+      if (parsed.status) details.status = parsed.status;
+      if (parsed.filesChanged || parsed.changedFiles) {
+        details.changedFiles = parsed.filesChanged || parsed.changedFiles;
+      }
+      if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
+      if (parsed.validationRun) details.validationRun = parsed.validationRun;
+      if (parsed.assumptions) details.assumptions = parsed.assumptions;
+      if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
+      if (parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef) {
+        details.commitSha = parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef;
+      }
+      if (parsed.diffReference?.baseRef || parsed.baseRef) {
+        details.baseRef = parsed.diffReference?.baseRef || parsed.baseRef;
+      }
+    } catch {}
   }
 
   // 2. Extract commit SHAs if not found in JSON
   if (!details.commitSha) {
-    const headMatch = promptOrText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
+    const headMatch = rawText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
     if (headMatch) details.commitSha = headMatch[1];
   }
   if (!details.baseRef) {
-    const baseMatch = promptOrText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
+    const baseMatch = rawText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
     if (baseMatch) details.baseRef = baseMatch[1];
   }
 

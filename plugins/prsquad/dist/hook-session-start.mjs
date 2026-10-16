@@ -1521,13 +1521,7 @@ async function runSessionStart(input = {}) {
     remoteInfo.repo = extRepo;
   }
   if (!issueNum) {
-    const promptMatch = initialPrompt.match(/(?:issue(?:[_\s]*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) || initialPrompt.match(/\bissue-?(\d+)\b/i);
-    if (promptMatch) {
-      issueNum = parseInt(promptMatch[1], 10);
-    }
-  }
-  if (!issueNum && state.issue?.number && state.issue.number > 0) {
-    issueNum = state.issue.number;
+    issueNum = StateController.resolveIssueFromSession(effectiveCwd, initialPrompt, repoRoot, state);
   }
   if (!issueNum) {
     const reason = "No explicit issue number detected in prompt. Please provide an issue number (e.g. 'resolve issue #42').";

@@ -1151,32 +1151,38 @@ function extractDeveloperDetails(promptOrText, repoRoot) {
     status: "IMPLEMENTED"
   };
   if (!promptOrText) return details;
-  const handoffIdx = promptOrText.indexOf("DEVELOPER HANDOFF");
-  if (handoffIdx !== -1) {
-    const jsonStart = promptOrText.indexOf("{", handoffIdx);
-    if (jsonStart !== -1) {
-      const jsonEnd = promptOrText.indexOf("\n}\n", jsonStart);
-      const candidateStr = jsonEnd !== -1 ? promptOrText.slice(jsonStart, jsonEnd + 2) : promptOrText.slice(jsonStart, promptOrText.lastIndexOf("}") + 1);
-      try {
-        const parsed = JSON.parse(candidateStr);
-        if (parsed.status) details.status = parsed.status;
-        if (parsed.filesChanged) details.changedFiles = parsed.filesChanged;
-        if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
-        if (parsed.validationRun) details.validationRun = parsed.validationRun;
-        if (parsed.assumptions) details.assumptions = parsed.assumptions;
-        if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
-        if (parsed.diffReference?.headRef) details.commitSha = parsed.diffReference.headRef;
-        if (parsed.diffReference?.baseRef) details.baseRef = parsed.diffReference.baseRef;
-      } catch {
+  const rawText = typeof promptOrText === "string" ? promptOrText : promptOrText.textResultForLlm || promptOrText.content || JSON.stringify(promptOrText);
+  const handoffIdx = rawText.indexOf("DEVELOPER HANDOFF");
+  const searchFrom = handoffIdx !== -1 ? handoffIdx : 0;
+  const jsonStart = rawText.indexOf("{", searchFrom);
+  if (jsonStart !== -1) {
+    const jsonEnd = handoffIdx !== -1 ? rawText.indexOf("\n}\n", jsonStart) : -1;
+    const candidateStr = jsonEnd !== -1 ? rawText.slice(jsonStart, jsonEnd + 2) : rawText.slice(jsonStart, rawText.lastIndexOf("}") + 1);
+    try {
+      const parsed = JSON.parse(candidateStr);
+      if (parsed.status) details.status = parsed.status;
+      if (parsed.filesChanged || parsed.changedFiles) {
+        details.changedFiles = parsed.filesChanged || parsed.changedFiles;
       }
+      if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
+      if (parsed.validationRun) details.validationRun = parsed.validationRun;
+      if (parsed.assumptions) details.assumptions = parsed.assumptions;
+      if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
+      if (parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef) {
+        details.commitSha = parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef;
+      }
+      if (parsed.diffReference?.baseRef || parsed.baseRef) {
+        details.baseRef = parsed.diffReference?.baseRef || parsed.baseRef;
+      }
+    } catch {
     }
   }
   if (!details.commitSha) {
-    const headMatch = promptOrText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
+    const headMatch = rawText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
     if (headMatch) details.commitSha = headMatch[1];
   }
   if (!details.baseRef) {
-    const baseMatch = promptOrText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
+    const baseMatch = rawText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
     if (baseMatch) details.baseRef = baseMatch[1];
   }
   if (repoRoot && (!details.commitSha || !details.changedFiles)) {
@@ -2610,12 +2616,12 @@ function validateDeveloper(output) {
     valid: true,
     data: {
       status,
-      filesChanged: json.filesChanged || [],
+      filesChanged: filesChanged || [],
       testsAddedOrChanged: json.testsAddedOrChanged || [],
       planItemsAddressed: json.planItemsAddressed || [],
       acceptanceCriteriaCoverage: json.acceptanceCriteriaCoverage || [],
       validationRun: json.validationRun || [],
-      diffReference: json.diffReference || {},
+      diffReference: diffRef || {},
       scopeAmendmentRequest: json.scopeAmendmentRequest || null,
       blocker: json.blocker || null,
       assumptions: json.assumptions || [],
@@ -2692,7 +2698,7 @@ function validateQA(output) {
     data: {
       verdict,
       scopeCompliance,
-      acceptanceCriteriaResults: json.acceptanceCriteriaResults || [],
+      acceptanceCriteriaResults: criteriaList || [],
       testResults: json.testResults || [],
       failureClassification: json.failureClassification || [],
       blockingFindings: json.blockingFindings || [],
@@ -2963,14 +2969,19 @@ function sanitizeSpecialistHandoff(rawText, agentName) {
       try {
         const parsed = JSON.parse(jsonMatch[1]);
         if (parsed.status) {
+          const files = parsed.filesChanged || parsed.changedFiles || [];
           return `\`\`\`json
 ${JSON.stringify({
             status: parsed.status,
-            changedFiles: parsed.changedFiles || [],
+            filesChanged: files,
+            changedFiles: files,
+            testsAddedOrChanged: parsed.testsAddedOrChanged || [],
+            validationRun: parsed.validationRun || [],
             tests: parsed.tests || { status: "PASS" },
-            commitSha: parsed.commitSha || parsed.headRef || "HEAD",
-            diffReference: parsed.diffReference || { headRef: parsed.headRef || "HEAD" },
+            commitSha: parsed.commitSha || parsed.diffReference?.headRef || parsed.headRef || "HEAD",
+            diffReference: parsed.diffReference || { baseRef: parsed.baseRef || "HEAD~1", headRef: parsed.headRef || parsed.commitSha || "HEAD" },
             scopeAmendmentRequest: parsed.scopeAmendmentRequest || null,
+            blocker: parsed.blocker || null,
             assumptions: parsed.assumptions || [],
             residualRisk: parsed.residualRisk || "Low"
           }, null, 2)}
@@ -2990,6 +3001,7 @@ ${JSON.stringify({
             scopeCompliance: parsed.scopeCompliance || "PASS",
             acceptanceCriteriaResults: parsed.acceptanceCriteriaResults || parsed.criteriaResults || parsed.criteria || [],
             testResults: parsed.testResults || { passed: true },
+            failureClassification: parsed.failureClassification || [],
             blockingFindings: parsed.blockingFindings || [],
             notes: parsed.notes || ""
           }, null, 2)}
@@ -3002,13 +3014,20 @@ ${JSON.stringify({
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[1]);
-        if (parsed.verdict) {
+        if (parsed.verdict || parsed.assessment) {
+          const verdict = parsed.assessment || parsed.verdict;
           return `\`\`\`json
 ${JSON.stringify({
-            verdict: parsed.verdict,
-            findings: parsed.findings || [],
-            scopeAudit: parsed.scopeAudit || "PASS",
-            notes: parsed.notes || ""
+            assessment: verdict,
+            verdict,
+            scopeCompliance: parsed.scopeCompliance || parsed.scopeAudit || "PASS",
+            riskFlags: parsed.riskFlags || parsed.findings || [],
+            findings: parsed.findings || parsed.riskFlags || [],
+            qualityNotes: parsed.qualityNotes || [],
+            residualRisk: parsed.residualRisk || [],
+            mergeGateSummary: parsed.mergeGateSummary || parsed.notes || "",
+            scopeAudit: parsed.scopeAudit || parsed.scopeCompliance || "PASS",
+            notes: parsed.notes || parsed.mergeGateSummary || ""
           }, null, 2)}
 \`\`\``;
         }
@@ -3171,8 +3190,14 @@ var IntakePolicy = {
   },
   buildInputContext(ctx) {
     let addCtx = "";
-    const cachePath = ctx.state.issueSnapshot || join7(ctx.repoRoot, ".gated-change", "issue-cache.json");
-    if (existsSync8(cachePath)) {
+    const snap = ctx.state.issueSnapshot;
+    const candidates = [
+      snap && existsSync8(snap) ? snap : "",
+      snap ? join7(ctx.repoRoot, ".gated-change", snap) : "",
+      join7(ctx.repoRoot, ".gated-change", "issue-cache.json")
+    ].filter(Boolean);
+    const cachePath = candidates.find((p) => existsSync8(p));
+    if (cachePath) {
       try {
         const cached = JSON.parse(readFileSync7(cachePath, "utf-8"));
         addCtx = `### \u{1F4CB} Authority Issue Specification (Cached Snapshot)
@@ -3199,21 +3224,24 @@ ${JSON.stringify(cached, null, 2)}
   },
   commitTransition(valResult, ctx) {
     const transitionId = mintTransitionId("intake");
-    ctx.state.lastTransitionId = transitionId;
+    let updatedState;
     if (valResult.valid) {
-      StateController.commitIntakeVerdict(
+      updatedState = StateController.commitIntakeVerdict(
         ctx.repoRoot,
         valResult.details,
         ctx.sessionId
       );
     } else {
-      StateController.pauseWorkflow(
+      updatedState = StateController.pauseWorkflow(
         ctx.repoRoot,
         `INTAKE_HANDOFF_INVALID: ${(valResult.errors || []).join("; ")}`,
         ctx.resolvedIssue,
         ctx.sessionId
       );
     }
+    updatedState.lastTransitionId = transitionId;
+    saveState(updatedState, ctx.repoRoot);
+    ctx.state = updatedState;
     const dash = loadDashboardState(ctx.repoRoot);
     let instructionText = "";
     if (!valResult.valid) {
@@ -3300,7 +3328,17 @@ ${ctx.prompt}` : ctx.prompt,
     const planMarkdown = extractPlanMarkdown(rawText);
     const proposedScope = valResult.valid && valResult.details?.proposedScope ? valResult.details.proposedScope : ctx.state.approvedScope || "NOT RECORDED";
     const archSummary = valResult.valid ? valResult.verdict === "PLAN_READY" ? "Technical architecture plan & scope specification generated" : valResult.verdict === "BLOCKED" ? `Architect blocked: ${valResult.details?.blockedReason || "Cannot produce confident plan"}` : `Scope amendment ${valResult.verdict}` : `Architect handoff validation failed: ${(valResult.errors || []).join("; ")}`;
-    const dashArch = syncWorkflowDashboard(ctx.repoRoot, {
+    if (valResult.valid && (valResult.verdict === "PLAN_READY" || valResult.verdict === "SCOPE_AMENDMENT_CONFIRMED")) {
+      ctx.state.phase = "PLAN_READY";
+      ctx.state.currentPhase = "PLAN_READY";
+      ctx.state.approvedScope = proposedScope;
+      ctx.state.approvedPlan = planMarkdown || rawText;
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
+      ctx.state.pauseReason = archSummary;
+    }
+    saveState(ctx.state, ctx.repoRoot);
+    syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
       issueNumber: ctx.resolvedIssue,
@@ -3317,15 +3355,7 @@ ${ctx.prompt}` : ctx.prompt,
         errors: valResult.valid ? void 0 : valResult.errors
       }
     });
-    if (valResult.valid && valResult.verdict === "PLAN_READY") {
-      ctx.state.phase = "PLAN_READY";
-      ctx.state.currentPhase = "PLAN_READY";
-      ctx.state.approvedScope = proposedScope;
-      ctx.state.approvedPlan = planMarkdown || rawText;
-      saveState(ctx.state, ctx.repoRoot);
-    } else if (!valResult.valid) {
-      StateController.pauseWorkflow(ctx.repoRoot, archSummary, ctx.resolvedIssue, ctx.sessionId);
-    }
+    ctx.state = loadState(ctx.repoRoot);
     const instructionText = !valResult.valid ? `[INSTRUCTION FOR CONTROLLER]: Architect handoff failed validation (${(valResult.errors || []).join("; ")}). Pause pipeline and report blocker to maintainer.` : valResult.verdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Architect reported BLOCKED. Pause pipeline and report blocker to maintainer." : valResult.verdict === "SCOPE_AMENDMENT_CONFIRMED" ? "[INSTRUCTION FOR CONTROLLER]: Scope amendment confirmed by Architect. Route back to Scope Approval Gate for human confirmation." : "[INSTRUCTION FOR CONTROLLER]: Include this live \u26A1 AI Credit Meter table alongside the architecture plan at the Scope Approval Gate.";
     appendAuditLog({
       sessionId: ctx.sessionId,
@@ -3655,11 +3685,15 @@ ${repoIntel}` : "");
       } catch {
       }
       ctx.state.phase = "IMPLEMENTED";
-      saveState(ctx.state, ctx.repoRoot);
+    } else if (valResult.valid && valResult.verdict === "SCOPE_AMENDMENT_REQUIRED") {
+      ctx.state.phase = "ARCHITECTING";
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
     }
+    saveState(ctx.state, ctx.repoRoot);
     const devDetails = valResult.valid ? extractDeveloperDetails(ctx.rawOutput || ctx.input.toolResult, ctx.repoRoot) : { status: "SCHEMA_INVALID", errors: valResult.errors };
     const devSummary = valResult.valid ? valResult.verdict === "IMPLEMENTED" ? devDetails.commitSha ? `Fix committed in ${devDetails.commitSha.slice(0, 8)}` : "Changes implemented and verified locally" : valResult.verdict === "SCOPE_AMENDMENT_REQUIRED" ? "Developer requested scope amendment outside approved boundary" : `Developer reported BLOCKED: ${valResult.details?.blocker?.description || "Execution halted"}` : `Developer handoff validation failed: ${(valResult.errors || []).join("; ")}`;
-    const dashDev = syncWorkflowDashboard(ctx.repoRoot, {
+    syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
       issueNumber: ctx.resolvedIssue,
@@ -3670,6 +3704,7 @@ ${repoIntel}` : "");
       summary: devSummary,
       details: devDetails
     });
+    ctx.state = loadState(ctx.repoRoot);
     const instructionText = !valResult.valid ? `[INSTRUCTION FOR CONTROLLER]: Developer handoff schema invalid (${(valResult.errors || []).join("; ")}). Re-prompt Developer for valid schema handoff or pause pipeline.` : valResult.verdict === "SCOPE_AMENDMENT_REQUIRED" ? "[INSTRUCTION FOR CONTROLLER]: Developer requested scope amendment. Route to Architect for scope review." : valResult.verdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: Developer blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: Developer implementation complete. Proceed directly to QA verification.";
     appendAuditLog({
       sessionId: ctx.sessionId,
@@ -3705,15 +3740,16 @@ var QAPolicy = {
           const diffFiles = execSync5(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: ctx.repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
           if (diffFiles.length > 0) {
             devPhaseStatus = "IMPLEMENTED";
+            ctx.state.phase = "IMPLEMENTED";
+            if (!ctx.state.baseRef) ctx.state.baseRef = baseRef;
+            saveState(ctx.state, ctx.repoRoot);
             syncWorkflowDashboard(ctx.repoRoot, {
               phase: "developer",
               status: "IMPLEMENTED",
               summary: `Fix committed in ${currentHead.slice(0, 8)}`,
               details: { commitSha: currentHead, baseRef, changedFiles: diffFiles }
             });
-            ctx.state.phase = "IMPLEMENTED";
-            if (!ctx.state.baseRef) ctx.state.baseRef = baseRef;
-            saveState(ctx.state, ctx.repoRoot);
+            ctx.state = loadState(ctx.repoRoot);
           }
         }
       } catch {
@@ -3776,12 +3812,15 @@ ${displayFailures.join("\n")}
     const devHandoff = buildDeveloperHandoffPayload(ctx.repoRoot, ctx.state, ctx.prompt, ctx.resolvedIssue);
     const tooling = detectRepoStack(ctx.repoRoot);
     const repoIntel = formatRepoIntelligenceForPrompt(ctx.repoRoot, ctx.targetAgent, ctx.state.approvedScope || void 0);
+    ctx.state.phase = "TESTING";
+    saveState(ctx.state, ctx.repoRoot);
     const dashQA = syncWorkflowDashboard(ctx.repoRoot, {
       sessionId: ctx.sessionId,
       phase: "qa",
       status: "IN_PROGRESS",
       summary: "Executing independent regression verification suite via powershell"
     });
+    ctx.state = loadState(ctx.repoRoot);
     const chatMeter = formatChatCreditMeter(dashQA);
     const partsQA = [testReport, devHandoff.markdown, ctx.prompt].filter(Boolean);
     const enrichedPrompt = partsQA.join("\n\n");
@@ -3827,18 +3866,33 @@ ${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Inc
   commitTransition(valResult, ctx) {
     const transitionId = mintTransitionId("qa");
     ctx.state.lastTransitionId = transitionId;
-    let retryExhausted = false;
-    if (valResult.verdict === "FAIL" && ctx.lock) {
-      ctx.lock.currentAttempt++;
-      saveApprovalLock(ctx.lock, ctx.repoRoot);
-      ctx.state.implementationAttempt = ctx.lock.currentAttempt;
-      if (ctx.lock.currentAttempt > ctx.lock.maxAttempts) {
-        retryExhausted = true;
-        ctx.state.phase = "ESCALATED";
-        ctx.state.currentPhase = "ESCALATED";
-      }
-      saveState(ctx.state, ctx.repoRoot);
+    let currentHead = "";
+    try {
+      currentHead = execSync5("git rev-parse HEAD", { cwd: ctx.repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
     }
+    let retryExhausted = false;
+    if (valResult.verdict === "FAIL") {
+      if (ctx.lock) {
+        ctx.lock.currentAttempt++;
+        saveApprovalLock(ctx.lock, ctx.repoRoot);
+        ctx.state.implementationAttempt = ctx.lock.currentAttempt;
+        if (ctx.lock.currentAttempt > ctx.lock.maxAttempts) {
+          retryExhausted = true;
+          ctx.state.phase = "ESCALATED";
+          ctx.state.currentPhase = "ESCALATED";
+        } else {
+          ctx.state.phase = "DEVELOPING";
+        }
+      } else {
+        ctx.state.phase = "DEVELOPING";
+      }
+    } else if (valResult.valid && valResult.verdict === "PASS") {
+      ctx.state.phase = "REVIEWING";
+    } else if (!valResult.valid || valResult.verdict === "BLOCKED") {
+      ctx.state.phase = "PAUSED";
+    }
+    saveState(ctx.state, ctx.repoRoot);
     const qaDetails = extractQADetails(ctx.rawOutput || ctx.input.toolResult);
     const qaSummary = valResult.valid ? valResult.verdict === "PASS" ? "Independent QA verification passed all acceptance criteria" : valResult.verdict === "FAIL" ? retryExhausted ? `Independent QA verification failed and retry budget exhausted (${ctx.lock?.maxAttempts || 3}/${ctx.lock?.maxAttempts || 3} attempts used)` : `Independent QA verification detected failures` : "QA verification blocked: unable to complete test suite" : `QA handoff validation failed: ${(valResult.errors || []).join("; ")}`;
     syncWorkflowDashboard(ctx.repoRoot, {
@@ -3850,8 +3904,15 @@ ${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Inc
       phase: "qa",
       status: valResult.verdict,
       summary: qaSummary,
-      details: { ...qaDetails, verdict: valResult.verdict, errors: valResult.valid ? void 0 : valResult.errors, currentAttempt: ctx.lock?.currentAttempt }
+      details: {
+        ...qaDetails,
+        verdict: valResult.verdict,
+        commitSha: qaDetails.commitSha || currentHead || void 0,
+        errors: valResult.valid ? void 0 : valResult.errors,
+        currentAttempt: ctx.lock?.currentAttempt
+      }
     });
+    ctx.state = loadState(ctx.repoRoot);
     const instructionText = !valResult.valid ? `[INSTRUCTION FOR CONTROLLER]: QA handoff failed validation (${(valResult.errors || []).join("; ")}). Re-prompt QA for valid verification report or pause pipeline.` : retryExhausted ? `[INSTRUCTION FOR CONTROLLER]: Implementation retry limit exhausted (${ctx.lock?.maxAttempts || 3}/${ctx.lock?.maxAttempts || 3} attempts used). Workflow is escalated to human maintainers. Do not delegate to Developer again.` : valResult.verdict === "FAIL" ? `[INSTRUCTION FOR CONTROLLER]: QA verification failed (Attempt ${(ctx.lock?.currentAttempt || 2) - 1}/${ctx.lock?.maxAttempts || 3} failed). Route back to Developer for rework attempt ${ctx.lock?.currentAttempt || 2}/${ctx.lock?.maxAttempts || 3}.` : valResult.verdict === "BLOCKED" ? "[INSTRUCTION FOR CONTROLLER]: QA verification blocked. Pause pipeline and report blocker to maintainer." : "[INSTRUCTION FOR CONTROLLER]: QA verification passed. Proceed directly to Reviewer security audit.";
     appendAuditLog({
       sessionId: ctx.sessionId,
@@ -3932,12 +3993,15 @@ ${truncatedDiff}
     }
     const devHandoff = buildDeveloperHandoffPayload(ctx.repoRoot, ctx.state, ctx.prompt, ctx.resolvedIssue);
     const qaHandoff = buildQAHandoffPayload(ctx.repoRoot, ctx.state, ctx.prompt);
+    ctx.state.phase = "REVIEWING";
+    saveState(ctx.state, ctx.repoRoot);
     const dashRev = syncWorkflowDashboard(ctx.repoRoot, {
       sessionId: ctx.sessionId,
       phase: "reviewer",
       status: "IN_PROGRESS",
       summary: "Conducting read-only security diff audit & blast radius review"
     });
+    ctx.state = loadState(ctx.repoRoot);
     const chatMeter = formatChatCreditMeter(dashRev);
     const partsRev = [diffReport, qaHandoff.markdown, devHandoff.markdown, ctx.prompt].filter(Boolean);
     const enrichedPrompt = partsRev.join("\n\n");
@@ -3981,6 +4045,23 @@ ${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. I
     const transitionId = mintTransitionId("reviewer");
     ctx.state.lastTransitionId = transitionId;
     const revDetails = extractReviewerDetails(ctx.rawOutput || ctx.input.toolResult);
+    let currentHead = "";
+    try {
+      currentHead = execSync5("git rev-parse HEAD", { cwd: ctx.repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+    }
+    const riskFlags = valResult.details?.riskFlags || revDetails.riskFlags || [];
+    const hasBlockingConcerns = valResult.verdict === "CONCERNS" && Array.isArray(riskFlags) && riskFlags.some((f) => f?.blocking === true);
+    const isPrReady = valResult.valid && (valResult.verdict === "CLEAR" || valResult.verdict === "CONCERNS" && !hasBlockingConcerns);
+    if (isPrReady) {
+      ctx.state.phase = "PR_READY";
+      ctx.state.currentPhase = "WAITING_FOR_HUMAN";
+    } else if (valResult.valid && hasBlockingConcerns) {
+      ctx.state.phase = "DEVELOPING";
+    } else if (!valResult.valid) {
+      ctx.state.phase = "PAUSED";
+    }
+    saveState(ctx.state, ctx.repoRoot);
     syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
       repo: ctx.state.issue?.repo || "prsquad",
@@ -3989,13 +4070,10 @@ ${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. I
       phase: "reviewer",
       status: valResult.verdict,
       summary: valResult.valid ? `Read-only diff security audit complete: ${valResult.verdict}` : `Reviewer handoff validation failed: ${(valResult.errors || []).join("; ")}`,
-      details: valResult.valid ? revDetails : { errors: valResult.errors, ...revDetails }
+      details: valResult.valid ? { ...revDetails, commitSha: revDetails.commitSha || currentHead || void 0 } : { errors: valResult.errors, ...revDetails }
     });
     let instructionText = "";
-    if (valResult.valid && valResult.verdict === "CLEAR") {
-      ctx.state.phase = "PR_READY";
-      ctx.state.currentPhase = "WAITING_FOR_HUMAN";
-      saveState(ctx.state, ctx.repoRoot);
+    if (isPrReady) {
       syncWorkflowDashboard(ctx.repoRoot, {
         sessionId: ctx.sessionId,
         phase: "mergeGate",
@@ -4010,8 +4088,9 @@ ${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. I
       });
       instructionText = "[INSTRUCTION FOR CONTROLLER]: Code review audit complete. Display this final \u26A1 AI Credit Meter table and present the PR_READY package to the maintainer at the PR Approval Gate. Prompt the human to authorize PR creation with /create-pr before executing pr-create.ts.";
     } else {
-      instructionText = !valResult.valid ? `[INSTRUCTION FOR CONTROLLER]: Reviewer handoff failed validation (${(valResult.errors || []).join("; ")}). Pause pipeline and notify maintainer.` : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported ${valResult.verdict}. Resolve review findings before opening Pull Request.`;
+      instructionText = !valResult.valid ? `[INSTRUCTION FOR CONTROLLER]: Reviewer handoff failed validation (${(valResult.errors || []).join("; ")}). Pause pipeline and notify maintainer.` : `[INSTRUCTION FOR CONTROLLER]: Reviewer reported blocking ${valResult.verdict}. Route back to Developer to resolve review findings before opening Pull Request.`;
     }
+    ctx.state = loadState(ctx.repoRoot);
     appendAuditLog({
       sessionId: ctx.sessionId,
       transitionId,
