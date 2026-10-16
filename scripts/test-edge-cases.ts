@@ -1595,9 +1595,10 @@ async function runEdgeCases() {
 
     const parsedSession = JSON.parse(hookOutput.trim());
     assert(parsedSession.decision === "allow", "sessionStart hook allows valid session initialization");
+    const sessionEnvelope = JSON.parse(parsedSession.additionalContext);
     assert(
-      parsedSession.additionalContext.includes("ISSUE #1 VERIFIED OPEN"),
-      "sessionStart additionalContext confirms issue #1 is verified OPEN"
+      sessionEnvelope.validation === "PASS" && sessionEnvelope.issue?.number === 1,
+      "sessionStart additionalContext confirms issue #1 is verified OPEN via JSON envelope"
     );
 
     // 4. Verify issue cache was created

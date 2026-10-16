@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-verify-gate.ts
-import { existsSync as existsSync9, readFileSync as readFileSync8, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync8, readFileSync as readFileSync7, readdirSync as readdirSync4, statSync as statSync3 } from "node:fs";
+import { join as join7 } from "node:path";
 import { homedir as homedir3 } from "node:os";
 import { execSync as execSync5 } from "node:child_process";
 
@@ -385,16 +385,72 @@ import { tmpdir, homedir as homedir2 } from "node:os";
 import { execFileSync, execSync as execSync2 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
+function getWorkflowDashboard(rootDir = getRepoRoot()) {
+  const state = loadState(rootDir);
+  const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
+  const phases = { ...state.phases || {} };
+  if (!phases.intake && state.issue?.number) {
+    phases.intake = {
+      status: state.intakeEligibility === "READY" ? "READY" : state.intakeEligibility === "BLOCKED" ? "BLOCKED" : "PENDING",
+      summary: state.pauseReason || (state.intakeEligibility === "READY" ? "Intake verified." : void 0)
+    };
+  }
+  if (!phases.architect && (state.approvedPlan || state.phase === "ARCHITECTING" || state.phase === "AWAITING_SCOPE_APPROVAL")) {
+    phases.architect = {
+      status: state.approvedPlan ? "PLAN_READY" : "IN_PROGRESS",
+      details: state.approvedPlan ? { plan: state.approvedPlan } : void 0
+    };
+  }
+  if (!phases.scopeGate && (state.humanApproval || state.approvedScope)) {
+    phases.scopeGate = {
+      status: state.humanApproval ? "APPROVED" : "PENDING",
+      credits: 0,
+      details: { approvedScope: state.approvedScope, baseRef: state.baseRef }
+    };
+  }
+  if (!phases.developer && state.phase === "DEVELOPING") {
+    phases.developer = {
+      status: "IN_PROGRESS"
+    };
+  }
+  return {
+    issueNumber: state.issue?.number || 0,
+    issueTitle: state.issue?.title,
+    owner: state.issue?.owner || "",
+    repo: state.issue?.repo || "",
+    activeBranch: state.activeBranch,
+    commentId: state.commentId ?? null,
+    sessionId: state.sessionId,
+    startEventId: state.startEventId || tele?.firstEventId,
+    telemetry: tele || void 0,
+    lastUpdated: state.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+    phases
+  };
+}
 function loadDashboardState(rootDir = getRepoRoot()) {
   try {
     const gatedDir = findGatedChangeDir(rootDir);
     const dashboardFile = join2(gatedDir, "dashboard.json");
+    let legacyPhases = {};
     if (existsSync2(dashboardFile)) {
+      try {
+        const legacy = JSON.parse(readFileSync2(dashboardFile, "utf-8"));
+        if (legacy.phases) legacyPhases = legacy.phases;
+      } catch {
+      }
+    }
+    const stateFile = join2(gatedDir, "state.json");
+    if (!existsSync2(stateFile) && existsSync2(dashboardFile)) {
       return JSON.parse(readFileSync2(dashboardFile, "utf-8"));
     }
+    const dash = getWorkflowDashboard(rootDir);
+    if (Object.keys(dash.phases || {}).length === 0 && Object.keys(legacyPhases).length > 0) {
+      dash.phases = legacyPhases;
+    }
+    return dash;
   } catch {
+    return null;
   }
-  return null;
 }
 function getStatusBadge(status) {
   if (!status || status === "PENDING") return "\u26AA `PENDING`";
@@ -851,56 +907,34 @@ ${revDetails.mergeGateSummary}
 }
 function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
   try {
-    const gatedDir = findGatedChangeDir(rootDir);
-    const dashboardFile = join2(gatedDir, "dashboard.json");
-    let current = {
-      issueNumber: update.issueNumber || 0,
-      issueTitle: update.issueTitle,
-      owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "prsquad",
-      activeBranch: update.activeBranch,
-      sessionId: update.sessionId,
-      lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
-      phases: {}
-    };
-    if (existsSync2(dashboardFile)) {
-      try {
-        const raw = readFileSync2(dashboardFile, "utf-8");
-        const parsed = JSON.parse(raw);
-        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
-        current = {
-          ...parsed,
-          phases: isSameIssue ? { ...parsed.phases } : {}
-        };
-      } catch {
-      }
-    }
-    if (update.owner) current.owner = update.owner;
-    if (update.repo) current.repo = update.repo;
+    const state = loadState(rootDir);
+    if (update.owner) state.issue.owner = update.owner;
+    if (update.repo) state.issue.repo = update.repo;
     if (update.issueNumber && update.issueNumber > 0 && update.issueNumber !== 999) {
-      current.issueNumber = update.issueNumber;
+      state.issue.number = update.issueNumber;
     }
     if (update.issueTitle && update.issueTitle !== "Test Billing Issue") {
-      current.issueTitle = update.issueTitle;
+      state.issue.title = update.issueTitle;
     }
     if (update.activeBranch && !update.activeBranch.includes("999")) {
-      current.activeBranch = update.activeBranch;
+      state.activeBranch = update.activeBranch;
     }
     if (update.sessionId) {
-      current.sessionId = update.sessionId;
+      state.sessionId = update.sessionId;
     }
-    current.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
-    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
     if (tele) {
-      if (!current.startEventId && tele.firstEventId) {
-        current.startEventId = tele.firstEventId;
+      if (!state.startEventId && tele.firstEventId) {
+        state.startEventId = tele.firstEventId;
       }
-      current.telemetry = tele;
+    }
+    if (!state.phases) {
+      state.phases = {};
     }
     if (update.phase) {
-      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      const existingPhase = state.phases[update.phase] || { status: "PENDING" };
       let phaseCredits = existingPhase.credits;
-      if (current.telemetry && current.telemetry.actualAiCredits !== void 0) {
+      if (tele && tele.actualAiCredits !== void 0) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0;
         } else {
@@ -912,18 +946,18 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
             reviewer: 4
           };
           const subagentIdx = subagentIdxMap[update.phase];
-          if (subagentIdx !== void 0 && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
-            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          if (subagentIdx !== void 0 && tele.subagents && tele.subagents[subagentIdx]) {
+            phaseCredits = tele.subagents[subagentIdx].credits;
           } else {
-            const recordedCredits = Object.entries(current.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            const recordedCredits = Object.entries(state.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+            const computed = Math.max(0, Math.round((tele.actualAiCredits - recordedCredits) * 100) / 100);
             if (phaseCredits === void 0 || update.status !== "IN_PROGRESS") {
               phaseCredits = computed;
             }
           }
         }
       }
-      current.phases[update.phase] = {
+      state.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
@@ -935,8 +969,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         }
       };
       if (update.phase === "scopeGate" && update.details?.plan) {
-        const existingArch = current.phases.architect || { status: "PLAN_READY" };
-        current.phases.architect = {
+        const existingArch = state.phases.architect || { status: "PLAN_READY" };
+        state.phases.architect = {
           ...existingArch,
           status: "PLAN_READY",
           summary: existingArch.summary || "Technical plan approved at Scope Approval Gate",
@@ -947,13 +981,37 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         };
       }
     }
-    writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    saveState(state, rootDir);
+    try {
+      const gatedDir = findGatedChangeDir(rootDir);
+      const legacyDash = join2(gatedDir, "dashboard.json");
+      if (existsSync2(legacyDash)) {
+        unlinkSync(legacyDash);
+      }
+    } catch {
+    }
+    const current = {
+      issueNumber: state.issue?.number || 0,
+      issueTitle: state.issue?.title,
+      owner: state.issue?.owner || update.owner || "vamsicherukuri",
+      repo: state.issue?.repo || update.repo || "prsquad",
+      activeBranch: state.activeBranch || update.activeBranch,
+      commentId: state.commentId ?? null,
+      sessionId: state.sessionId,
+      startEventId: state.startEventId,
+      telemetry: tele || void 0,
+      lastUpdated: state.updatedAt,
+      phases: state.phases
+    };
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
     const isPrPhase = update.phase === "mergeGate" || current.phases.mergeGate?.status === "PR_OPEN" || current.phases.mergeGate?.status === "PR_CREATED" || current.phases.mergeGate?.status === "READY_FOR_MERGE" || Boolean(current.commentId);
     const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && isPrPhase && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
-      writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+      if (current.commentId && current.commentId !== state.commentId) {
+        state.commentId = current.commentId;
+        saveState(state, rootDir);
+      }
     }
     if (process.env.GATED_CHANGE_WEBHOOK_URL && !isTest) {
       try {
@@ -1312,10 +1370,10 @@ var StateController = class _StateController {
     return state;
   }
   /**
-   * Performs the atomic intake authorization commit (Streamlined Fix for Redundancy A):
+   * Performs the atomic intake authorization commit:
    * 1. Records issue metadata in state.json
    * 2. Sets phase = "INTAKE_TRIAGE" and active branch
-   * 3. Syncs dashboard.json with status = "INTAKE_AUTHORIZED"
+   * 3. Syncs in-memory dashboard projection with status = "INTAKE_AUTHORIZED"
    * 4. Logs audit entry in audit.jsonl
    * All executed as a single atomic transaction.
    */
@@ -1398,7 +1456,7 @@ var StateController = class _StateController {
   }
   /**
    * Atomically authorizes the intake stage for an issue and persists
-   * state.json, dashboard.json, and audit.jsonl in one unified commit.
+   * state.json and audit.jsonl in one unified commit.
    */
   static authorizeIntake(rootDir, issue, cacheFilePath, sessionId) {
     const gatedDir = findGatedChangeDir(rootDir);
@@ -1461,7 +1519,7 @@ var StateController = class _StateController {
   }
   /**
    * Pauses the workflow due to validation failure, closed issue, or policy block.
-   * Atomically records reason in state.json, dashboard.json, and audit.jsonl.
+   * Atomically records reason in state.json and audit.jsonl.
    */
   static pauseWorkflow(rootDir, reason, issueNumber, sessionId) {
     const state = loadState(rootDir);
@@ -2683,8 +2741,6 @@ function validateReview(output) {
 }
 
 // src/guardrails/scopeApprover.ts
-import { existsSync as existsSync8, readFileSync as readFileSync7 } from "node:fs";
-import { join as join7 } from "node:path";
 import { createHash } from "node:crypto";
 import { execSync as execSync4 } from "node:child_process";
 function canonicalJsonStringify(value) {
@@ -2721,14 +2777,7 @@ function computeApprovalEnvelopeHash(envelope) {
 function approveScopeGate(options = {}) {
   const repoRoot = getRepoRoot(options.preferredDir || process.cwd());
   const state = loadState(repoRoot);
-  const dashFile = join7(repoRoot, ".gated-change", "dashboard.json");
-  let dashData = null;
-  if (existsSync8(dashFile)) {
-    try {
-      dashData = JSON.parse(readFileSync7(dashFile, "utf-8"));
-    } catch {
-    }
-  }
+  const dashData = loadDashboardState(repoRoot);
   const targetScope = options.scope || state.approvedScope || dashData?.phases?.architect?.details?.proposedScope || dashData?.phases?.scopeGate?.details?.approvedScope || state.issue?.declaredScope || dashData?.phases?.intake?.details?.declaredScope;
   if (!targetScope || typeof targetScope !== "string" || !targetScope.trim()) {
     return {
@@ -2908,9 +2957,9 @@ function resolveIssueNumber(input, toolArgs, state, lock) {
   try {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
-    const cacheFile = join8(repoRoot, ".gated-change", "issue-cache.json");
-    if (existsSync9(cacheFile)) {
-      const parsed = JSON.parse(readFileSync8(cacheFile, "utf-8"));
+    const cacheFile = join7(repoRoot, ".gated-change", "issue-cache.json");
+    if (existsSync8(cacheFile)) {
+      const parsed = JSON.parse(readFileSync7(cacheFile, "utf-8"));
       if (parsed?.number && Number(parsed.number) > 0) {
         return Number(parsed.number);
       }
@@ -2944,29 +2993,29 @@ async function main() {
     if (!state2?.sessionId) {
       const home = homedir3();
       const candidates = [
-        join8(home, "factory/sample repos/copilot-worktrees/prsquad"),
-        join8(home, "Documents/prsquad"),
-        join8(home, "factory/sample repos/prsquad"),
-        join8(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
-        join8(home, "Documents/gated-fix-pipeline"),
-        join8(home, "factory/sample repos/gated-fix-pipeline")
+        join7(home, "factory/sample repos/copilot-worktrees/prsquad"),
+        join7(home, "Documents/prsquad"),
+        join7(home, "factory/sample repos/prsquad"),
+        join7(home, "factory/sample repos/copilot-worktrees/gated-fix-pipeline"),
+        join7(home, "Documents/gated-fix-pipeline"),
+        join7(home, "factory/sample repos/gated-fix-pipeline")
       ];
       let bestState = null;
       let bestMtime = 0;
       let bestRepo = repoRoot2;
       for (const parent of candidates) {
-        if (existsSync9(parent)) {
+        if (existsSync8(parent)) {
           try {
             const entries = readdirSync4(parent, { withFileTypes: true });
-            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join8(parent, d.name));
+            const dirs = entries.filter((d) => d.isDirectory()).map((d) => join7(parent, d.name));
             dirs.push(parent);
             for (const d of dirs) {
-              const stateFile = join8(d, ".gated-change", "state.json");
-              if (existsSync9(stateFile)) {
+              const stateFile = join7(d, ".gated-change", "state.json");
+              if (existsSync8(stateFile)) {
                 try {
                   const stat = statSync3(stateFile);
                   if (stat.mtimeMs > bestMtime) {
-                    const parsed = JSON.parse(readFileSync8(stateFile, "utf-8"));
+                    const parsed = JSON.parse(readFileSync7(stateFile, "utf-8"));
                     if (parsed) {
                       bestMtime = stat.mtimeMs;
                       bestState = parsed;
@@ -2986,15 +3035,9 @@ async function main() {
         repoRoot2 = bestRepo;
       }
     }
-    let phases = {};
-    const dashFile = join8(repoRoot2, ".gated-change", "dashboard.json");
-    if (existsSync9(dashFile)) {
-      try {
-        const parsed = JSON.parse(readFileSync8(dashFile, "utf-8"));
-        if (parsed.phases) phases = parsed.phases;
-      } catch {
-      }
-    } else if (state2?.phase) {
+    const dashData = loadDashboardState(repoRoot2);
+    let phases = dashData?.phases || {};
+    if (Object.keys(phases).length === 0 && state2?.phase) {
       phases = {
         intake: { status: "READY" },
         architect: { status: "PLAN_READY" },
@@ -3024,7 +3067,7 @@ async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync8(0, "utf-8");
+      rawInput = readFileSync7(0, "utf-8");
     } catch {
     }
   }
@@ -3042,25 +3085,18 @@ async function main() {
     const state2 = loadState(repoRoot2);
     let lock2 = loadApprovalLock(repoRoot2);
     if (!lock2) {
-      const lockFilePath = join8(repoRoot2, ".gated-change", "approval.lock");
+      const lockFilePath = join7(repoRoot2, ".gated-change", "approval.lock");
       let existingLockStatus = null;
-      if (existsSync9(lockFilePath)) {
+      if (existsSync8(lockFilePath)) {
         try {
-          const raw = JSON.parse(readFileSync8(lockFilePath, "utf-8"));
+          const raw = JSON.parse(readFileSync7(lockFilePath, "utf-8"));
           existingLockStatus = raw.status || null;
         } catch {
         }
       }
       const isExplicitlyRevokedOrExhausted = existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
       if (!isExplicitlyRevokedOrExhausted) {
-        let dashData = null;
-        const dashFile = join8(repoRoot2, ".gated-change", "dashboard.json");
-        if (existsSync9(dashFile)) {
-          try {
-            dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
-          } catch {
-          }
-        }
+        const dashData = loadDashboardState(repoRoot2);
         const promptText = String(
           toolArgs.prompt || toolArgs.content || toolArgs.message || firstTool?.args?.prompt || ""
         );
@@ -3568,16 +3604,9 @@ ${telemetryBlock}` : sanitized;
   }
   function buildDeveloperHandoffPayload(repoPath, stateObj, fallbackPrompt, issueNum) {
     let details = {};
-    const dashFile = join8(repoPath, ".gated-change", "dashboard.json");
-    let dashData = null;
-    if (existsSync9(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
-        if (dashData?.phases?.developer?.details) {
-          details = { ...dashData.phases.developer.details };
-        }
-      } catch {
-      }
+    const dashData = loadDashboardState(repoPath);
+    if (dashData?.phases?.developer?.details) {
+      details = { ...dashData.phases.developer.details };
     }
     if (!details.commitSha || !details.changedFiles) {
       const fromPrompt = extractDeveloperDetails(fallbackPrompt, repoPath);
@@ -3634,16 +3663,9 @@ ${issueBody}`);
   }
   function buildQAHandoffPayload(repoPath, stateObj, fallbackPrompt) {
     let details = {};
-    const dashFile = join8(repoPath, ".gated-change", "dashboard.json");
-    let dashData = null;
-    if (existsSync9(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
-        if (dashData?.phases?.qa?.details) {
-          details = { ...dashData.phases.qa.details };
-        }
-      } catch {
-      }
+    const dashData = loadDashboardState(repoPath);
+    if (dashData?.phases?.qa?.details) {
+      details = { ...dashData.phases.qa.details };
     }
     if (!details.verdict) {
       const fromPrompt = extractQADetails(fallbackPrompt);
@@ -3967,22 +3989,15 @@ ${displayFailures.join("\n")}
 \`\`\``;
     }
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
-    const dashFile = join8(repoRoot, ".gated-change", "dashboard.json");
-    let devPhaseStatus = "";
-    if (existsSync9(dashFile)) {
-      try {
-        const d = JSON.parse(readFileSync8(dashFile, "utf-8"));
-        devPhaseStatus = d?.phases?.developer?.status || "";
-      } catch {
-      }
-    }
+    const dashData = loadDashboardState(repoRoot);
+    let devPhaseStatus = dashData?.phases?.developer?.status || "";
     if (!devPhaseStatus && state.phase === "IMPLEMENTED") {
       devPhaseStatus = "IMPLEMENTED";
     }
     if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
       try {
         const currentHead = execSync5("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-        const preferred = state.baseRef || lock?.baseRef || existsSync9(dashFile) && JSON.parse(readFileSync8(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef;
+        const preferred = state.baseRef || lock?.baseRef || dashData?.phases?.scopeGate?.details?.baseRef;
         const baseRef = resolveBaseRef(repoRoot, preferred);
         if (baseRef && currentHead && currentHead !== baseRef) {
           const diffFiles = execSync5(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim().split(/\r?\n/).filter(Boolean);
@@ -4070,14 +4085,7 @@ ${formatControlPlaneTelemetry(chatMeter, "Developer implementation complete. Inc
     process.exit(0);
   } else if (isAgentMatch(targetAgent, "gated-change-reviewer")) {
     ensureNodeModulesInWorktree(repoRoot);
-    const dashFile = join8(repoRoot, ".gated-change", "dashboard.json");
-    let dashData = null;
-    if (existsSync9(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync8(dashFile, "utf-8"));
-      } catch {
-      }
-    }
+    const dashData = loadDashboardState(repoRoot);
     const qaStatus = dashData?.phases?.qa?.status || state.phases?.qa?.status;
     const isQaInfraBlocked = qaStatus === "BLOCKED" && Array.isArray(dashData?.phases?.qa?.details?.failureClassification) && dashData.phases.qa.details.failureClassification.length > 0 && dashData.phases.qa.details.failureClassification.every(
       (f) => f.classification === "INFRASTRUCTURE"

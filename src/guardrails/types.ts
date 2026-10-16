@@ -42,6 +42,9 @@ export interface WorkflowState {
   issueValidation?: "PASS" | "FAIL" | "ISSUE_UNRESOLVED";
   issueSnapshot?: string;
   intakeEligibility?: "READY" | "BLOCKED";
+  commentId?: number | null;
+  phases?: Record<string, any>;
+  startEventId?: number;
   updatedAt: string;
 }
 

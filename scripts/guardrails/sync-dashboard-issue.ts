@@ -8,11 +8,10 @@
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { postOrPatchGitHubComment, renderDashboardMarkdown } from "../../src/guardrails/issueDashboard.js";
-import { getRepoRoot, findGatedChangeDir } from "../../src/guardrails/stateStore.js";
+import { getRepoRoot, findGatedChangeDir, loadState, saveState } from "../../src/guardrails/stateStore.js";
 
 const REPO_ROOT = getRepoRoot();
 const gatedDir = findGatedChangeDir(REPO_ROOT);
-const dashboardFile = join(gatedDir, "dashboard.json");
 
 const planText = `## Scope Approval Gate — Issue #9
 
@@ -166,11 +165,10 @@ const state = {
   },
 };
 
-console.log("Writing dashboard state to:", dashboardFile);
-writeFileSync(dashboardFile, JSON.stringify(state, null, 2), "utf-8");
-
 console.log("Synchronizing to GitHub Issue #9...");
 postOrPatchGitHubComment(state);
-writeFileSync(dashboardFile, JSON.stringify(state, null, 2), "utf-8");
+const wfState = loadState(REPO_ROOT);
+wfState.commentId = state.commentId;
+saveState(wfState, REPO_ROOT);
 
 console.log("Success! Active GitHub Issue Comment ID:", state.commentId);

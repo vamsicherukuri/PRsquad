@@ -199,14 +199,9 @@ async function main() {
       }
     }
 
-    let phases: Record<string, any> = {};
-    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
-    if (existsSync(dashFile)) {
-      try {
-        const parsed = JSON.parse(readFileSync(dashFile, "utf-8"));
-        if (parsed.phases) phases = parsed.phases;
-      } catch {}
-    } else if (state?.phase) {
+    const dashData = loadDashboardState(repoRoot);
+    let phases: Record<string, any> = dashData?.phases || {};
+    if (Object.keys(phases).length === 0 && state?.phase) {
       phases = {
         intake: { status: "READY" },
         architect: { status: "PLAN_READY" },
@@ -281,13 +276,7 @@ async function main() {
         existingLockStatus === "REVOKED" || existingLockStatus === "EXHAUSTED";
 
       if (!isExplicitlyRevokedOrExhausted) {
-        let dashData: any = null;
-        const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
-        if (existsSync(dashFile)) {
-          try {
-            dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
-          } catch {}
-        }
+        const dashData = loadDashboardState(repoRoot);
 
         const promptText = String(
           toolArgs.prompt ||
@@ -873,15 +862,9 @@ async function main() {
     issueNum: number
   ): { details: Record<string, any>; markdown: string } {
     let details: Record<string, any> = {};
-    const dashFile = join(repoPath, ".gated-change", "dashboard.json");
-    let dashData: any = null;
-    if (existsSync(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
-        if (dashData?.phases?.developer?.details) {
-          details = { ...dashData.phases.developer.details };
-        }
-      } catch {}
+    const dashData = loadDashboardState(repoPath);
+    if (dashData?.phases?.developer?.details) {
+      details = { ...dashData.phases.developer.details };
     }
 
     if (!details.commitSha || !details.changedFiles) {
@@ -946,15 +929,9 @@ async function main() {
     fallbackPrompt: string
   ): { details: Record<string, any>; markdown: string } {
     let details: Record<string, any> = {};
-    const dashFile = join(repoPath, ".gated-change", "dashboard.json");
-    let dashData: any = null;
-    if (existsSync(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
-        if (dashData?.phases?.qa?.details) {
-          details = { ...dashData.phases.qa.details };
-        }
-      } catch {}
+    const dashData = loadDashboardState(repoPath);
+    if (dashData?.phases?.qa?.details) {
+      details = { ...dashData.phases.qa.details };
     }
 
     if (!details.verdict) {
@@ -1392,14 +1369,8 @@ async function main() {
     const devHandoff = buildDeveloperHandoffPayload(repoRoot, state, prompt, resolvedIssue);
 
     // Stage Isolation Invariant: QA requires prior Developer IMPLEMENTED evidence; never manufacture it
-    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
-    let devPhaseStatus = "";
-    if (existsSync(dashFile)) {
-      try {
-        const d = JSON.parse(readFileSync(dashFile, "utf-8"));
-        devPhaseStatus = d?.phases?.developer?.status || "";
-      } catch {}
-    }
+    const dashData = loadDashboardState(repoRoot);
+    let devPhaseStatus = dashData?.phases?.developer?.status || "";
     if (!devPhaseStatus && state.phase === "IMPLEMENTED") {
       devPhaseStatus = "IMPLEMENTED";
     }
@@ -1407,7 +1378,7 @@ async function main() {
     if (devPhaseStatus !== "IMPLEMENTED" && devPhaseStatus !== "BLOCKED" && devPhaseStatus !== "SCOPE_AMENDMENT_REQUIRED") {
       try {
         const currentHead = execSync("git rev-parse HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-        const preferred = state.baseRef || lock?.baseRef || (existsSync(dashFile) && JSON.parse(readFileSync(dashFile, "utf-8"))?.phases?.scopeGate?.details?.baseRef);
+        const preferred = state.baseRef || lock?.baseRef || dashData?.phases?.scopeGate?.details?.baseRef;
         const baseRef = resolveBaseRef(repoRoot, preferred);
         if (baseRef && currentHead && currentHead !== baseRef) {
           const diffFiles = execSync(`git diff --name-only ${baseRef} ${currentHead}`, { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] })
@@ -1493,13 +1464,7 @@ async function main() {
     ensureNodeModulesInWorktree(repoRoot);
 
     // Gate check: Reviewer cannot be invoked before QA verification passes
-    const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
-    let dashData: any = null;
-    if (existsSync(dashFile)) {
-      try {
-        dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
-      } catch {}
-    }
+    const dashData = loadDashboardState(repoRoot);
     const qaStatus = dashData?.phases?.qa?.status || state.phases?.qa?.status;
     const isQaInfraBlocked =
       qaStatus === "BLOCKED" &&

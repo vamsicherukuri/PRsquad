@@ -193,12 +193,13 @@ async function runSessionStartSuite() {
       assert(updatedState.issue.number === 42, "authorizeIntake records issue number 42");
       assert(updatedState.activeBranch === "fix/issue-42", "authorizeIntake sets branch to fix/issue-42");
 
-      // Verify dashboard.json synced
+      // Verify in-memory dashboard projection synced and dashboard.json eliminated
       const dashFile = path.join(tempDir, ".gated-change", "dashboard.json");
-      assert(fs.existsSync(dashFile), "Dashboard JSON exists after authorizeIntake");
-      const dashContent = JSON.parse(fs.readFileSync(dashFile, "utf-8"));
-      assert(dashContent.phases?.intake?.status === "INTAKE_AUTHORIZED", "Dashboard intake phase status is set to INTAKE_AUTHORIZED");
-      assert(dashContent.issueNumber === 42, "Dashboard records issue number 42");
+      assert(!fs.existsSync(dashFile), "dashboard.json file is eliminated to maintain single source of truth");
+      const dashContent = loadDashboardState(tempDir);
+      assert(dashContent !== null, "Dashboard in-memory projection exists after authorizeIntake");
+      assert(dashContent?.phases?.intake?.status === "INTAKE_AUTHORIZED", "Dashboard intake phase status is set to INTAKE_AUTHORIZED");
+      assert(dashContent?.issueNumber === 42, "Dashboard records issue number 42");
 
       // Verify audit.jsonl recorded entry
       const auditFile = path.join(tempDir, ".gated-change", "audit.jsonl");

@@ -168,10 +168,10 @@ export class StateController {
   }
 
   /**
-   * Performs the atomic intake authorization commit (Streamlined Fix for Redundancy A):
+   * Performs the atomic intake authorization commit:
    * 1. Records issue metadata in state.json
    * 2. Sets phase = "INTAKE_TRIAGE" and active branch
-   * 3. Syncs dashboard.json with status = "INTAKE_AUTHORIZED"
+   * 3. Syncs in-memory dashboard projection with status = "INTAKE_AUTHORIZED"
    * 4. Logs audit entry in audit.jsonl
    * All executed as a single atomic transaction.
    */
@@ -283,7 +283,7 @@ export class StateController {
 
   /**
    * Atomically authorizes the intake stage for an issue and persists
-   * state.json, dashboard.json, and audit.jsonl in one unified commit.
+   * state.json and audit.jsonl in one unified commit.
    */
   static authorizeIntake(
     rootDir: string,
@@ -361,7 +361,7 @@ export class StateController {
 
   /**
    * Pauses the workflow due to validation failure, closed issue, or policy block.
-   * Atomically records reason in state.json, dashboard.json, and audit.jsonl.
+   * Atomically records reason in state.json and audit.jsonl.
    */
   static pauseWorkflow(
     rootDir: string,

@@ -10,10 +10,11 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { getRepoRoot } from "../../src/guardrails/stateStore.js";
 
+import { loadDashboardState } from "../../src/guardrails/issueDashboard.js";
+
 const PORT = 54321;
 const repoRoot = getRepoRoot(process.cwd());
 const visualizerPath = join(repoRoot, ".gated-change", "pipeline-visualizer.html");
-const dashboardPath = join(repoRoot, ".gated-change", "dashboard.json");
 
 const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -30,14 +31,10 @@ const server = createServer((req, res) => {
     return;
   }
 
-  if (req.url?.startsWith("/dashboard.json")) {
-    if (existsSync(dashboardPath)) {
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(readFileSync(dashboardPath, "utf-8"));
-    } else {
-      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ issueNumber: 11, phases: {} }));
-    }
+  if (req.url?.startsWith("/dashboard.json") || req.url?.startsWith("/api/dashboard")) {
+    const dash = loadDashboardState(repoRoot);
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify(dash || { issueNumber: 0, phases: {} }));
     return;
   }
 

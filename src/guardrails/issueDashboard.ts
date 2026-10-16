@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { execFileSync, execSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { findGatedChangeDir, getRepoRoot } from "./stateStore.js";
+import { findGatedChangeDir, getRepoRoot, loadState, saveState } from "./stateStore.js";
 
 export interface PhaseRecord {
   status: string;
@@ -62,17 +62,87 @@ export interface DashboardState {
 export const DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 
 /**
- * Safely loads the local dashboard state from .gated-change/dashboard.json.
+ * In-memory projection of the workflow dashboard derived directly from
+ * state.json (Single Source of Truth) + Copilot App SQLite telemetry.
+ * Does NOT write any files to disk.
+ */
+export function getWorkflowDashboard(rootDir: string = getRepoRoot()): DashboardState {
+  const state = loadState(rootDir);
+  const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
+
+  const phases: DashboardState["phases"] = { ...(state.phases || {}) };
+
+  // If phases are not yet populated in state.phases, derive default phase statuses from state machine properties
+  if (!phases.intake && state.issue?.number) {
+    phases.intake = {
+      status: state.intakeEligibility === "READY" ? "READY" : (state.intakeEligibility === "BLOCKED" ? "BLOCKED" : "PENDING"),
+      summary: state.pauseReason || (state.intakeEligibility === "READY" ? "Intake verified." : undefined),
+    };
+  }
+  if (!phases.architect && (state.approvedPlan || state.phase === "ARCHITECTING" || state.phase === "AWAITING_SCOPE_APPROVAL")) {
+    phases.architect = {
+      status: state.approvedPlan ? "PLAN_READY" : "IN_PROGRESS",
+      details: state.approvedPlan ? { plan: state.approvedPlan } : undefined,
+    };
+  }
+  if (!phases.scopeGate && (state.humanApproval || state.approvedScope)) {
+    phases.scopeGate = {
+      status: state.humanApproval ? "APPROVED" : "PENDING",
+      credits: 0.0,
+      details: { approvedScope: state.approvedScope, baseRef: state.baseRef },
+    };
+  }
+  if (!phases.developer && state.phase === "DEVELOPING") {
+    phases.developer = {
+      status: "IN_PROGRESS",
+    };
+  }
+
+  return {
+    issueNumber: state.issue?.number || 0,
+    issueTitle: state.issue?.title,
+    owner: state.issue?.owner || "",
+    repo: state.issue?.repo || "",
+    activeBranch: state.activeBranch,
+    commentId: state.commentId ?? null,
+    sessionId: state.sessionId,
+    startEventId: state.startEventId || tele?.firstEventId,
+    telemetry: tele || undefined,
+    lastUpdated: state.updatedAt || new Date().toISOString(),
+    phases,
+  };
+}
+
+/**
+ * Loads the workflow dashboard.
+ * Pure in-memory projection derived from state.json and telemetry.
+ * Safe fallback to legacy dashboard.json if state.json does not exist.
  */
 export function loadDashboardState(rootDir: string = getRepoRoot()): DashboardState | null {
   try {
     const gatedDir = findGatedChangeDir(rootDir);
     const dashboardFile = join(gatedDir, "dashboard.json");
+    let legacyPhases: Record<string, PhaseRecord> = {};
     if (existsSync(dashboardFile)) {
+      try {
+        const legacy = JSON.parse(readFileSync(dashboardFile, "utf-8"));
+        if (legacy.phases) legacyPhases = legacy.phases;
+      } catch {}
+    }
+
+    const stateFile = join(gatedDir, "state.json");
+    if (!existsSync(stateFile) && existsSync(dashboardFile)) {
       return JSON.parse(readFileSync(dashboardFile, "utf-8"));
     }
-  } catch {}
-  return null;
+
+    const dash = getWorkflowDashboard(rootDir);
+    if (Object.keys(dash.phases || {}).length === 0 && Object.keys(legacyPhases).length > 0) {
+      dash.phases = legacyPhases;
+    }
+    return dash;
+  } catch {
+    return null;
+  }
 }
 
 function getStatusBadge(status?: string): string {
@@ -642,63 +712,41 @@ export function syncWorkflowDashboard(
   }
 ): DashboardState | null {
   try {
-    const gatedDir = findGatedChangeDir(rootDir);
-    const dashboardFile = join(gatedDir, "dashboard.json");
+    const state = loadState(rootDir);
 
-    let current: DashboardState = {
-      issueNumber: update.issueNumber || 0,
-      issueTitle: update.issueTitle,
-      owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "prsquad",
-      activeBranch: update.activeBranch,
-      sessionId: update.sessionId,
-      lastUpdated: new Date().toISOString(),
-      phases: {},
-    };
-
-    if (existsSync(dashboardFile)) {
-      try {
-        const raw = readFileSync(dashboardFile, "utf-8");
-        const parsed = JSON.parse(raw);
-        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
-        current = {
-          ...parsed,
-          phases: isSameIssue ? { ...parsed.phases } : {},
-        };
-      } catch {}
-    }
-
-    if (update.owner) current.owner = update.owner;
-    if (update.repo) current.repo = update.repo;
+    if (update.owner) state.issue.owner = update.owner;
+    if (update.repo) state.issue.repo = update.repo;
     if (update.issueNumber && update.issueNumber > 0 && update.issueNumber !== 999) {
-      current.issueNumber = update.issueNumber;
+      state.issue.number = update.issueNumber;
     }
     if (update.issueTitle && update.issueTitle !== "Test Billing Issue") {
-      current.issueTitle = update.issueTitle;
+      state.issue.title = update.issueTitle;
     }
     if (update.activeBranch && !update.activeBranch.includes("999")) {
-      current.activeBranch = update.activeBranch;
+      state.activeBranch = update.activeBranch;
     }
     if (update.sessionId) {
-      current.sessionId = update.sessionId;
+      state.sessionId = update.sessionId;
     }
-    current.lastUpdated = new Date().toISOString();
 
     // Query Ground-Truth Telemetry from Copilot App session store
-    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
     if (tele) {
-      if (!current.startEventId && tele.firstEventId) {
-        current.startEventId = tele.firstEventId;
+      if (!state.startEventId && tele.firstEventId) {
+        state.startEventId = tele.firstEventId;
       }
-      current.telemetry = tele;
+    }
+
+    if (!state.phases) {
+      state.phases = {};
     }
 
     if (update.phase) {
-      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      const existingPhase = state.phases[update.phase] || { status: "PENDING" };
 
       // Calculate incremental phase credits
       let phaseCredits = existingPhase.credits;
-      if (current.telemetry && current.telemetry.actualAiCredits !== undefined) {
+      if (tele && tele.actualAiCredits !== undefined) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0.0;
         } else {
@@ -710,13 +758,13 @@ export function syncWorkflowDashboard(
             reviewer: 4,
           };
           const subagentIdx = subagentIdxMap[update.phase];
-          if (subagentIdx !== undefined && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
-            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          if (subagentIdx !== undefined && tele.subagents && tele.subagents[subagentIdx]) {
+            phaseCredits = tele.subagents[subagentIdx].credits;
           } else {
-            const recordedCredits = Object.entries(current.phases)
+            const recordedCredits = Object.entries(state.phases)
               .filter(([k]) => k !== update.phase)
               .reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            const computed = Math.max(0, Math.round((tele.actualAiCredits - recordedCredits) * 100) / 100);
             if (phaseCredits === undefined || update.status !== "IN_PROGRESS") {
               phaseCredits = computed;
             }
@@ -724,7 +772,7 @@ export function syncWorkflowDashboard(
         }
       }
 
-      current.phases[update.phase] = {
+      state.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
@@ -738,8 +786,8 @@ export function syncWorkflowDashboard(
 
       // If scopeGate carries the architect plan, mirror it into the architect phase
       if (update.phase === "scopeGate" && update.details?.plan) {
-        const existingArch = current.phases.architect || { status: "PLAN_READY" };
-        current.phases.architect = {
+        const existingArch = state.phases.architect || { status: "PLAN_READY" };
+        state.phases.architect = {
           ...existingArch,
           status: "PLAN_READY",
           summary: existingArch.summary || "Technical plan approved at Scope Approval Gate",
@@ -751,8 +799,31 @@ export function syncWorkflowDashboard(
       }
     }
 
-    // Save dashboard state to disk locally
-    writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    // Persist single source of truth in state.json
+    saveState(state, rootDir);
+
+    // If legacy dashboard.json is present, remove it to eliminate split-brain synchronization risk
+    try {
+      const gatedDir = findGatedChangeDir(rootDir);
+      const legacyDash = join(gatedDir, "dashboard.json");
+      if (existsSync(legacyDash)) {
+        unlinkSync(legacyDash);
+      }
+    } catch {}
+
+    const current: DashboardState = {
+      issueNumber: state.issue?.number || 0,
+      issueTitle: state.issue?.title,
+      owner: state.issue?.owner || update.owner || "vamsicherukuri",
+      repo: state.issue?.repo || update.repo || "prsquad",
+      activeBranch: state.activeBranch || update.activeBranch,
+      commentId: state.commentId ?? null,
+      sessionId: state.sessionId,
+      startEventId: state.startEventId,
+      telemetry: tele || undefined,
+      lastUpdated: state.updatedAt,
+      phases: state.phases as any,
+    };
 
     const isTest =
       process.env.NODE_ENV === "test" ||
@@ -780,7 +851,10 @@ export function syncWorkflowDashboard(
 
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
-      writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+      if (current.commentId && current.commentId !== state.commentId) {
+        state.commentId = current.commentId;
+        saveState(state, rootDir);
+      }
     }
 
     // Optional webhook dispatch (e.g. Slack/Teams/Datadog or custom webhook endpoint)
