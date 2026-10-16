@@ -8,8 +8,6 @@
  * Enforces the core invariant: "The model cannot approve itself."
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import {

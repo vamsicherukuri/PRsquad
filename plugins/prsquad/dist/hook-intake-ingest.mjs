@@ -1068,6 +1068,7 @@ var ALLOWED_TRANSITIONS = [
   { from: "TESTING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "REVIEWING", event: "CLEAR", to: "AWAITING_PR_APPROVAL" },
   { from: "REVIEWING", event: "CONCERNS", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "DEVELOPING" },
   { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" }
 ];
@@ -1537,8 +1538,8 @@ async function main() {
       delete state.issue.repo;
     }
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") || (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") || "ADO2GH-Migration";
-    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") || (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") || "StarReads";
+    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") || (isValidRepoPart(state.issue?.owner) ? state.issue.owner : "") || "vamsicherukuri";
+    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") || (isValidRepoPart(state.issue?.repo) ? state.issue.repo : "") || "prsquad";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo && isValidRepoPart(jsonOwner[1]) && isValidRepoPart(jsonRepo[1])) {
@@ -1553,7 +1554,7 @@ async function main() {
     }
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
-      if (issueData.state && issueData.state !== "OPEN") {
+      if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
         StateController.pauseWorkflow(repoRoot, reason, issueData.number, input.sessionId || state.sessionId);
         const output2 = {

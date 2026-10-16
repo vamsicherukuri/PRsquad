@@ -162,8 +162,7 @@ function getHtmlContent() {
 		resolve(__dirname, "../../../..", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		resolve(__dirname, "../../../..", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "Documents", "prsquad", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "Documents", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline", "vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8", ".github", "extensions", "gated-change-pipeline", "canvas.html")
+		join(userHome, "Documents", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html")
 	];
 	for (const p of candidates) {
 		if (existsSync(p)) {

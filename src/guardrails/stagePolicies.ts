@@ -39,7 +39,6 @@ import {
 } from "./handoffValidator.js";
 import {
   approveScopeGate,
-  computePlanHash,
 } from "./scopeApprover.js";
 
 export interface StageContext {
@@ -320,7 +319,7 @@ export function buildDeveloperHandoffPayload(
   }
 
   const archPlan = dashData?.phases?.architect?.details?.plan || "";
-  const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "src/scopeTool.ts, scripts/test-guardrails.ts";
+  const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "NOT RECORDED";
   const activeBranch = stateObj?.activeBranch || `fix/issue-${issueNum}`;
 
   const mdParts = [
@@ -503,7 +502,7 @@ export const ArchitectPolicy: StagePolicy = {
   },
 
   buildInputContext(ctx: StageContext): InputContextResult {
-    const declaredScope = ctx.state.approvedScope || ctx.state.issue?.declaredScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+    const declaredScope = ctx.state.approvedScope || ctx.state.issue?.declaredScope || "";
     const astMap = generateAstPreFetchMap(declaredScope, ctx.repoRoot);
 
     const dashArch = syncWorkflowDashboard(ctx.repoRoot, {
@@ -697,20 +696,10 @@ export const DeveloperPolicy: StagePolicy = {
           const issueNum = ctx.state.issue?.number || dashData?.issueNumber || "";
           const reason = `Human Scope Gate: Do you approve the technical architecture plan and authorize Developer agent to implement issue #${issueNum} within scope '${targetScope}'?`;
 
-          const approvalRes = approveScopeGate({
-            preferredDir: ctx.repoRoot,
-            approver: "Human Maintainer (UI Approval Gate)",
-          });
-          if (approvalRes.success && approvalRes.lock) {
-            lock = approvalRes.lock;
-            ctx.lock = lock;
-          }
-
           return {
             allowed: false,
             decision: "ask",
             reason,
-            lock,
           };
         }
       }
@@ -1477,7 +1466,7 @@ export const ReviewerPolicy: StagePolicy = {
         status: "WAITING_FOR_HUMAN",
         summary: `Read-only diff security audit complete: ${valResult.verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
         details: {
-          baseBranch: "copilot-app-plugin-alignment",
+          baseBranch: ctx.state.baseRef || "main",
           headBranch: ctx.state.activeBranch || `fix/issue-${ctx.resolvedIssue}`,
           prOpen: false,
           awaitingHumanApproval: true,

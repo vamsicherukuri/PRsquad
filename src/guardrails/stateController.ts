@@ -48,6 +48,7 @@ export const ALLOWED_TRANSITIONS: TransitionRule[] = [
   { from: "TESTING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "REVIEWING", event: "CLEAR", to: "AWAITING_PR_APPROVAL" },
   { from: "REVIEWING", event: "CONCERNS", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "DEVELOPING" },
   { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" },
 ];

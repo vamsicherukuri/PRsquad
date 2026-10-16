@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { validateCommandForAgent } from "../../src/guardrails/bashSandbox.js";
 import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
-import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
+import type { HookInput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";

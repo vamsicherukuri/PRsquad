@@ -8,15 +8,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
 import { fetchIssueDeterministic } from "../../src/guardrails/ingestIssue.js";
 import {
   getRepoRoot,
-  getRepoOwnerAndName,
   requireRepoIdentity,
 } from "../../src/guardrails/stateStore.js";
 import { StateController } from "../../src/guardrails/stateController.js";
-import type { HookInput, WorkflowState } from "../../src/guardrails/types.js";
+import type { HookInput } from "../../src/guardrails/types.js";
 export async function runSessionStart(input: HookInput = {}): Promise<void> {
   const effectiveCwd = input.cwd || process.cwd();
   const repoRoot = getRepoRoot(effectiveCwd);

@@ -266,14 +266,24 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         };
       }
 
-      // 4c. Verified Security & Code Review Clearance Evidence (CLEAR, APPROVED, or informational CONCERNS)
+      // 4c. Verified Security & Code Review Clearance Evidence (CLEAR, APPROVED, or non-blocking CONCERNS)
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS";
+      const revRiskFlags = revRecord?.details?.riskFlags;
+      const hasBlockingConcerns =
+        revVerdict === "CONCERNS" &&
+        Array.isArray(revRiskFlags) &&
+        revRiskFlags.some((f: any) => f?.blocking === true);
+      const isReviewPassing =
+        revVerdict === "CLEAR" ||
+        revVerdict === "APPROVED" ||
+        (revVerdict === "CONCERNS" && !hasBlockingConcerns);
       if (!revVerdict || !isReviewPassing) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or CONCERNS).`,
+          error: hasBlockingConcerns
+            ? `PR_GATE_BLOCKED (BLOCKING_REVIEW_CONCERNS): Security and code review reported blocking CONCERNS. Blocking findings must be resolved by Developer before opening PR.`
+            : `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or non-blocking CONCERNS).`,
         };
       }
 

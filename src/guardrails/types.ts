@@ -69,16 +69,6 @@ export interface ApprovalLock {
   status: "ACTIVE" | "EXHAUSTED" | "REVOKED";
 }
 
-export interface PRAuthorization {
-  issueNumber: number;
-  activeBranch: string;
-  headCommitSha: string;
-  reviewVerdict: string;
-  authorizedBy: string;
-  authorizedAt: string;
-  status: "ACTIVE" | "USED" | "REVOKED";
-}
-
 export interface AuditLogEntry {
   timestamp: string;
   sessionId: string;

@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { isEditAllowed, formatScopeDenialNudge } from "../../src/guardrails/scopeEnforcer.js";
 import { loadState, appendAuditLog, getRepoRoot } from "../../src/guardrails/stateStore.js";
-import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
+import type { HookInput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
@@ -46,7 +46,7 @@ async function main() {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
-    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot);
+    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot, state.issue?.number || 0);
 
     if (!result.allowed) {
       const nudge = formatScopeDenialNudge(

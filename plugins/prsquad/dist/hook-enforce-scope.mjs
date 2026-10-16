@@ -356,7 +356,7 @@ async function main() {
     const effectiveCwd = input.cwd || process.cwd();
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
-    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot);
+    const result = isEditAllowed(targetPath || "", state.approvedScope, repoRoot, state.issue?.number || 0);
     if (!result.allowed) {
       const nudge = formatScopeDenialNudge(
         result.normalizedPath,

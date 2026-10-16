@@ -6,12 +6,11 @@
  */
 
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch, getRepoOwnerAndName, getRepoRoot } from "../../src/guardrails/stateStore.js";
 import { StateController } from "../../src/guardrails/stateController.js";
 import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
-import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
+import type { HookInput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
@@ -61,11 +60,11 @@ async function main() {
 
     const remoteInfo = getRepoOwnerAndName(repoRoot);
     let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") ||
-                (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") ||
-                "ADO2GH-Migration";
+                (isValidRepoPart(state.issue?.owner) ? state.issue.owner : "") ||
+                "vamsicherukuri";
     let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") ||
-               (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") ||
-               "StarReads";
+               (isValidRepoPart(state.issue?.repo) ? state.issue.repo : "") ||
+               "prsquad";
 
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
@@ -84,7 +83,7 @@ async function main() {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
 
       // Deterministic lifecycle guardrail: strictly require OPEN
-      if (issueData.state && issueData.state !== "OPEN") {
+      if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
         StateController.pauseWorkflow(repoRoot, reason, issueData.number, input.sessionId || state.sessionId);
 

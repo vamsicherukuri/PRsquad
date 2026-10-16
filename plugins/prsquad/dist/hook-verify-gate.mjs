@@ -1288,6 +1288,7 @@ var ALLOWED_TRANSITIONS = [
   { from: "TESTING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "REVIEWING", event: "CLEAR", to: "AWAITING_PR_APPROVAL" },
   { from: "REVIEWING", event: "CONCERNS", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "DEVELOPING" },
   { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
   { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" }
 ];
@@ -3118,7 +3119,7 @@ function buildDeveloperHandoffPayload(repoPath, stateObj, fallbackPrompt, issueN
     }
   }
   const archPlan = dashData?.phases?.architect?.details?.plan || "";
-  const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "src/scopeTool.ts, scripts/test-guardrails.ts";
+  const approvedScope = stateObj?.approvedScope || dashData?.phases?.scopeGate?.details?.approvedScope || "NOT RECORDED";
   const activeBranch = stateObj?.activeBranch || `fix/issue-${issueNum}`;
   const mdParts = [
     `### \u{1F4E6} Deterministic Developer Phase Handoff (Injected by Hook)`,
@@ -3278,7 +3279,7 @@ var ArchitectPolicy = {
     return { allowed: true };
   },
   buildInputContext(ctx) {
-    const declaredScope = ctx.state.approvedScope || ctx.state.issue?.declaredScope || "src/guardrails/scopeEnforcer.ts, scripts/test-guardrails.ts";
+    const declaredScope = ctx.state.approvedScope || ctx.state.issue?.declaredScope || "";
     const astMap = generateAstPreFetchMap(declaredScope, ctx.repoRoot);
     const dashArch = syncWorkflowDashboard(ctx.repoRoot, {
       owner: ctx.state.issue?.owner || "vamsicherukuri",
@@ -3423,19 +3424,10 @@ var DeveloperPolicy = {
           const targetScope = ctx.state.approvedScope || dashData?.phases?.architect?.details?.proposedScope || "./";
           const issueNum = ctx.state.issue?.number || dashData?.issueNumber || "";
           const reason = `Human Scope Gate: Do you approve the technical architecture plan and authorize Developer agent to implement issue #${issueNum} within scope '${targetScope}'?`;
-          const approvalRes = approveScopeGate({
-            preferredDir: ctx.repoRoot,
-            approver: "Human Maintainer (UI Approval Gate)"
-          });
-          if (approvalRes.success && approvalRes.lock) {
-            lock = approvalRes.lock;
-            ctx.lock = lock;
-          }
           return {
             allowed: false,
             decision: "ask",
-            reason,
-            lock
+            reason
           };
         }
       }
@@ -4080,7 +4072,7 @@ ${formatControlPlaneTelemetry(chatMeter, "QA verification complete and passed. I
         status: "WAITING_FOR_HUMAN",
         summary: `Read-only diff security audit complete: ${valResult.verdict}. Verified implementation is ready for PR creation. Awaiting human maintainer authorization via /create-pr at the PR Approval Gate.`,
         details: {
-          baseBranch: "copilot-app-plugin-alignment",
+          baseBranch: ctx.state.baseRef || "main",
           headBranch: ctx.state.activeBranch || `fix/issue-${ctx.resolvedIssue}`,
           prOpen: false,
           awaitingHumanApproval: true

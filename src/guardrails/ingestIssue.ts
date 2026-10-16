@@ -196,38 +196,3 @@ export function formatIntakePayload(issueData: FetchedIssueData, round: number =
     2
   );
 }
-
-/**
- * Synchronizes human chat clarifications back to the GitHub issue comments
- * to keep the remote issue as the durable single source of truth.
- */
-export function syncClarificationToIssue(
-  owner: string,
-  repo: string,
-  issueNumber: number,
-  clarificationText: string,
-  rootDir: string = process.cwd()
-): boolean {
-  try {
-    execFileSync(
-      "gh",
-      [
-        "issue",
-        "comment",
-        String(issueNumber),
-        "--repo",
-        `${owner}/${repo}`,
-        "--body",
-        `Clarification from Copilot session: ${clarificationText}`,
-      ],
-      {
-        cwd: rootDir,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
