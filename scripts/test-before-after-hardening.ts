@@ -160,27 +160,18 @@ console.log("=======================================================\n");
   const testName = "Stale Commit Evidence Binding at PR Gate";
   console.log(`\n[TEST 4] ${testName}`);
 
-  const dashFile = join(REPO_ROOT, ".gated-change", "dashboard.json");
-  let savedDash: string | null = null;
-  if (existsSync(dashFile)) savedDash = readFileSync(dashFile, "utf-8");
-
-  // Set up dashboard with passing QA & Reviewer on commit SHA "old1111111111111111111111111111111111111"
   const staleCommit = "old1111111111111111111111111111111111111";
-  const mockDash = {
-    issueNumber: 42,
-    phases: {
-      scopeGate: { status: "APPROVED", details: { approvedScope: "src/" } },
-      qa: { status: "PASS", details: { verdict: "PASS", commitSha: staleCommit } },
-      reviewer: { status: "CLEAR", details: { assessment: "CLEAR", commitSha: staleCommit } },
-    },
-  };
   mkdirSync(join(REPO_ROOT, ".gated-change"), { recursive: true });
-  writeFileSync(dashFile, JSON.stringify(mockDash, null, 2), "utf-8");
 
   const state = loadState(REPO_ROOT);
   const savedState = JSON.parse(JSON.stringify(state));
   state.issue = { owner: "vamsicherukuri", repo: "prsquad", number: 42 };
   state.activeBranch = "fix/issue-42";
+  state.phases = {
+    scopeGate: { status: "APPROVED", details: { approvedScope: "src/" } },
+    qa: { status: "PASS", details: { verdict: "PASS", commitSha: staleCommit } },
+    reviewer: { status: "CLEAR", details: { assessment: "CLEAR", commitSha: staleCommit } },
+  };
   saveState(state, REPO_ROOT);
 
   const lockFile = join(REPO_ROOT, ".gated-change", "approval.lock");
@@ -206,7 +197,7 @@ console.log("=======================================================\n");
   assert.equal(prResult.success, false, "PR gate must fail closed when evidence is bound to stale commit");
   assert(prResult.error?.includes("STALE_EVIDENCE"), "Rejection must cite STALE_EVIDENCE");
 
-  if (savedDash) writeFileSync(dashFile, savedDash, "utf-8");
+  saveState(savedState, REPO_ROOT);
   if (savedLock) writeFileSync(lockFile, savedLock, "utf-8");
 
   results.push({
@@ -270,17 +261,13 @@ console.log("=======================================================\n");
   console.log(`\n[TEST 6] ${testName}`);
 
   // Test that when Developer status is NOT IMPLEMENTED, QA PreToolUse rejects invocation fail-closed
-  const dashFile = join(REPO_ROOT, ".gated-change", "dashboard.json");
-  let savedDash: string | null = null;
-  if (existsSync(dashFile)) savedDash = readFileSync(dashFile, "utf-8");
-
-  // Write dashboard where Developer is BLOCKED or missing
-  writeFileSync(dashFile, JSON.stringify({
-    issueNumber: 42,
-    phases: {
-      developer: { status: "BLOCKED" }
-    }
-  }), "utf-8");
+  const state = loadState(REPO_ROOT);
+  const savedState = JSON.parse(JSON.stringify(state));
+  state.phase = "DEVELOPING";
+  state.phases = {
+    developer: { status: "BLOCKED" },
+  };
+  saveState(state, REPO_ROOT);
 
   let exitCode = 0;
   let errorOutput = "";
@@ -306,7 +293,7 @@ console.log("=======================================================\n");
   assert.equal(exitCode, 1, "QA invocation must exit 1 when Developer is not IMPLEMENTED");
   assert(errorOutput.includes("Downstream stages may never manufacture upstream success") || errorOutput.includes("BLOCKED BY POLICY"), "Rejection must cite stage isolation invariant");
 
-  if (savedDash) writeFileSync(dashFile, savedDash, "utf-8");
+  saveState(savedState, REPO_ROOT);
 
   results.push({
     id: "CASE-6",

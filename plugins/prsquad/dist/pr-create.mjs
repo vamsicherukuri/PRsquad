@@ -351,7 +351,7 @@ function loadDashboardState(rootDir = getRepoRoot()) {
     }
     const dash = getWorkflowDashboard(rootDir);
     if (Object.keys(legacyPhases).length > 0) {
-      dash.phases = { ...dash.phases, ...legacyPhases };
+      dash.phases = { ...legacyPhases, ...dash.phases };
     }
     return dash;
   } catch {
@@ -1213,25 +1213,50 @@ function createPullRequest(options = {}) {
       }
       let currentHead = "";
       try {
-        currentHead = execSync3("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        currentHead = execSync3("git rev-parse --verify HEAD^{commit}", {
+          cwd: rootDir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim();
       } catch {
       }
-      if (currentHead && currentHead !== "HEAD") {
-        const isCommitRef = (val) => typeof val === "string" && val.trim().length >= 7 && val.trim() !== "HEAD";
-        const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (isCommitRef(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
-          };
+      if (!currentHead) {
+        return {
+          success: false,
+          error: "PR_GATE_BLOCKED (STALE_EVIDENCE): Unable to resolve current branch HEAD commit for evidence verification."
+        };
+      }
+      const resolveEvidenceCommit = (val) => {
+        if (typeof val !== "string") return null;
+        const trimmed = val.trim();
+        if (!/^[0-9a-f]{7,40}$/i.test(trimmed)) return null;
+        try {
+          return execSync3(`git rev-parse --verify "${trimmed}^{commit}"`, {
+            cwd: rootDir,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"]
+          }).trim();
+        } catch {
+          return null;
         }
-        const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (isCommitRef(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`
-          };
-        }
+      };
+      const qaCommitRaw = qaRecord?.details?.commitSha ?? qaRecord?.details?.headRef;
+      const qaCommitResolved = resolveEvidenceCommit(qaCommitRaw);
+      if (!qaCommitResolved || qaCommitResolved !== currentHead) {
+        const displayQa = typeof qaCommitRaw === "string" && qaCommitRaw.trim() ? qaCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${displayQa}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
+        };
+      }
+      const revCommitRaw = revRecord?.details?.commitSha ?? revRecord?.details?.headRef;
+      const revCommitResolved = resolveEvidenceCommit(revCommitRaw);
+      if (!revCommitResolved || revCommitResolved !== currentHead) {
+        const displayRev = typeof revCommitRaw === "string" && revCommitRaw.trim() ? revCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${displayRev}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`
+        };
       }
       const searchDir = findGatedChangeDir(rootDir);
       const prAuthPath = join3(searchDir, "pr-authorization.json");

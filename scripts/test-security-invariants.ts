@@ -432,63 +432,116 @@ async function runSecurityInvariants() {
 
   // INV-14: VERIFICATION_BOUND_TO_CURRENT_HEAD
   {
+    const stateFile = path.join(REPO_ROOT, ".gated-change", "state.json");
     const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
-    let savedDash: string | null = null;
-    if (fs.existsSync(dashFile)) savedDash = fs.readFileSync(dashFile, "utf-8");
+    const savedStateRaw = fs.existsSync(stateFile) ? fs.readFileSync(stateFile, "utf-8") : null;
+    const savedDash = fs.existsSync(dashFile) ? fs.readFileSync(dashFile, "utf-8") : null;
 
-    const preState = loadState(REPO_ROOT);
-    const savedBranch = preState.activeBranch;
-    let originalGitBranch = "main";
+    let originalSymbolicBranch = "";
+    let originalHeadSha = "";
     try {
-      originalGitBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+      originalSymbolicBranch = execSync("git symbolic-ref --quiet --short HEAD", {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
     } catch {}
     try {
-      execSync("git checkout -B fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
+      originalHeadSha = execSync("git rev-parse --verify HEAD^{commit}", {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
     } catch {}
-    preState.activeBranch = "fix/issue-inv-14";
-    preState.issue = { owner: "test", repo: "test", number: 14, title: "Test issue" };
-    saveState(preState, REPO_ROOT);
 
-    saveApprovalLock({
-      issueNumber: 14,
-      approvedScope: "src/",
-      approvedBy: "Maintainer",
-      approvedAt: new Date().toISOString(),
-      status: "ACTIVE",
-    }, REPO_ROOT);
+    const tempBranch = `fix/issue-inv-14-${Date.now()}-${process.pid}`;
+    let tempBranchCreated = false;
+    let passed = false;
 
-    const staleSha = "0000000000000000000000000000000000000000";
-    syncWorkflowDashboard(REPO_ROOT, {
-      issueNumber: 14,
-      phase: "qa",
-      status: "PASS",
-      details: { verdict: "PASS", commitSha: staleSha },
-    });
-    syncWorkflowDashboard(REPO_ROOT, {
-      issueNumber: 14,
-      phase: "reviewer",
-      status: "PASS",
-      details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: staleSha },
-    });
-
-    const result = createPullRequest({ preferredDir: REPO_ROOT });
-    const passed = result.success === false && (result.error?.includes("STALE_EVIDENCE") ?? false);
-
-    // Clean up
     try {
-      execSync(`git checkout ${originalGitBranch || savedBranch || "main"}`, { cwd: REPO_ROOT, stdio: "ignore" });
-      execSync("git branch -D fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
-    } catch {}
-    preState.activeBranch = savedBranch;
-    saveState(preState, REPO_ROOT);
-    revokeApprovalLock("REVOKED", REPO_ROOT);
-    if (savedDash) fs.writeFileSync(dashFile, savedDash, "utf-8");
+      try {
+        execSync(`git checkout -b "${tempBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+        tempBranchCreated = true;
+      } catch {}
+
+      const preState = loadState(REPO_ROOT);
+      preState.activeBranch = tempBranch;
+      preState.issue = { owner: "test", repo: "test", number: 14, title: "Test issue" };
+      saveState(preState, REPO_ROOT);
+
+      saveApprovalLock({
+        issueNumber: 14,
+        approvedScope: "src/",
+        approvedBy: "Maintainer",
+        approvedAt: new Date().toISOString(),
+        status: "ACTIVE",
+      }, REPO_ROOT);
+
+      // 1. Stale 40-char SHA mismatch
+      const staleSha = "0000000000000000000000000000000000000000";
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "qa",
+        status: "PASS",
+        details: { verdict: "PASS", commitSha: staleSha },
+      });
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "reviewer",
+        status: "PASS",
+        details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: staleSha },
+      });
+      const resStale = createPullRequest({ preferredDir: REPO_ROOT });
+
+      // 2. Malformed / symbolic commit evidence ("HEAD" or too-short string) must not bypass validation
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "qa",
+        status: "PASS",
+        details: { verdict: "PASS", commitSha: "HEAD" },
+      });
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "reviewer",
+        status: "PASS",
+        details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: "123" },
+      });
+      const resMalformed = createPullRequest({ preferredDir: REPO_ROOT });
+
+      passed =
+        resStale.success === false &&
+        (resStale.error?.includes("STALE_EVIDENCE") ?? false) &&
+        resMalformed.success === false &&
+        (resMalformed.error?.includes("STALE_EVIDENCE") ?? false);
+    } finally {
+      try {
+        if (originalSymbolicBranch) {
+          execSync(`git checkout "${originalSymbolicBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+        } else if (originalHeadSha) {
+          execSync(`git checkout --detach "${originalHeadSha}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+        }
+        if (tempBranchCreated) {
+          execSync(`git branch -D "${tempBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+        }
+      } catch {}
+      revokeApprovalLock("REVOKED", REPO_ROOT);
+      if (savedStateRaw !== null) {
+        fs.writeFileSync(stateFile, savedStateRaw, "utf-8");
+      }
+      if (savedDash !== null) {
+        fs.writeFileSync(dashFile, savedDash, "utf-8");
+      } else if (fs.existsSync(dashFile)) {
+        fs.unlinkSync(dashFile);
+      }
+    }
 
     recordInvariant(
       "INV-14",
-      "PR Gate strictly rejects stale tested or reviewed commit evidence",
+      "PR Gate strictly rejects stale, missing, short, or malformed commit evidence",
       passed,
-      passed ? "PR creation rejected fail-closed with STALE_EVIDENCE" : "PR created despite mismatched commits"
+      passed
+        ? "PR creation rejected fail-closed with STALE_EVIDENCE for both stale SHA and malformed commit evidence"
+        : "PR created despite stale or malformed commit evidence"
     );
   }
 
