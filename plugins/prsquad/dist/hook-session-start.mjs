@@ -5,7 +5,7 @@ import { existsSync as existsSync5, mkdirSync as mkdirSync3, readFileSync as rea
 import { join as join4 } from "node:path";
 
 // src/guardrails/ingestIssue.ts
-import { execFileSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd(), includeComments = false) {
@@ -37,32 +37,50 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
   try {
     let stdout = "";
     const fields = includeComments ? "number,title,body,comments,labels,author,state" : "number,title,body,labels,author,state";
-    if (owner && repo) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        stdout = execFileSync(
-          "gh",
-          ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
-          {
-            cwd: rootDir,
-            encoding: "utf-8",
-            timeout: 1e4,
-            stdio: ["ignore", "pipe", "ignore"]
+        if (owner && repo) {
+          try {
+            stdout = execFileSync(
+              "gh",
+              ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
+              {
+                cwd: rootDir,
+                encoding: "utf-8",
+                timeout: 1e4,
+                stdio: ["ignore", "pipe", "ignore"]
+              }
+            );
+          } catch (e) {
+            lastError = e;
           }
-        );
-      } catch {
+        }
+        if (!stdout.trim()) {
+          stdout = execFileSync(
+            "gh",
+            ["issue", "view", String(issueNumber), "--json", fields],
+            {
+              cwd: rootDir,
+              encoding: "utf-8",
+              timeout: 1e4,
+              stdio: ["ignore", "pipe", "ignore"]
+            }
+          );
+        }
+        if (stdout.trim()) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) {
+          try {
+            execSync('node -e "setTimeout(()=>{}, 300)"');
+          } catch {
+          }
+        }
       }
     }
-    if (!stdout.trim()) {
-      stdout = execFileSync(
-        "gh",
-        ["issue", "view", String(issueNumber), "--json", fields],
-        {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 1e4,
-          stdio: ["ignore", "pipe", "ignore"]
-        }
-      );
+    if (!stdout.trim() && lastError) {
+      throw lastError;
     }
     const parsed = JSON.parse(stdout);
     return {
@@ -1302,6 +1320,55 @@ var StateController = class _StateController {
         rootDir
       );
       return state;
+    } else if (triageData.status === "EMPTY") {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `LACK_OF_CONTENT: Issue body is empty or lacks substantive problem description. Definition of Ready cannot be satisfied. Workflow halted immediately without user clarification rounds.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    } else if (triageData.status === "FETCH_FAILED") {
+      const fetchRetries = state.fetchRetries || 0;
+      const maxFetchRetries = 2;
+      if (fetchRetries < maxFetchRetries) {
+        state.fetchRetries = fetchRetries + 1;
+        state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        saveState(state, rootDir);
+        syncWorkflowDashboard(rootDir, {
+          owner: state.issue?.owner,
+          repo: state.issue?.repo,
+          issueNumber: state.issue?.number,
+          issueTitle: state.issue?.title,
+          activeBranch: state.activeBranch,
+          sessionId: effectiveSessionId,
+          phase: "intake",
+          status: "FETCH_RETRY",
+          summary: `Issue fetch failed (${triageData.fetchError || "network error"}). Retrying ingestion attempt ${state.fetchRetries}/${maxFetchRetries}...`,
+          details: triageData
+        });
+        appendAuditLog(
+          {
+            sessionId: effectiveSessionId,
+            agent: "controller",
+            action: "intake_fetch_retry",
+            decision: "allow",
+            details: {
+              issueNumber: state.issue?.number,
+              attempt: state.fetchRetries,
+              error: triageData.fetchError
+            }
+          },
+          rootDir
+        );
+        return state;
+      } else {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `FETCH_FAILED_EXHAUSTED: Issue fetch failed after ${fetchRetries} retry attempts: ${triageData.fetchError || "network error"}. Pipeline halted.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
     } else {
       return _StateController.pauseWorkflow(
         rootDir,

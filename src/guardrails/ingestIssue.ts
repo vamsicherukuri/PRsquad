@@ -40,39 +40,57 @@ export function fetchIssueDeterministic(
     } catch {}
   }
 
-  // 1. Try native GitHub CLI
+  // 1. Try native GitHub CLI (with retry on transient network/CLI failure)
   try {
     let stdout = "";
     const fields = includeComments
       ? "number,title,body,comments,labels,author,state"
       : "number,title,body,labels,author,state";
 
-    if (owner && repo) {
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        stdout = execFileSync(
-          "gh",
-          ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
-          {
-            cwd: rootDir,
-            encoding: "utf-8",
-            timeout: 10000,
-            stdio: ["ignore", "pipe", "ignore"],
+        if (owner && repo) {
+          try {
+            stdout = execFileSync(
+              "gh",
+              ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
+              {
+                cwd: rootDir,
+                encoding: "utf-8",
+                timeout: 10000,
+                stdio: ["ignore", "pipe", "ignore"],
+              }
+            );
+          } catch (e) {
+            lastError = e;
           }
-        );
-      } catch {}
+        }
+
+        if (!stdout.trim()) {
+          stdout = execFileSync(
+            "gh",
+            ["issue", "view", String(issueNumber), "--json", fields],
+            {
+              cwd: rootDir,
+              encoding: "utf-8",
+              timeout: 10000,
+              stdio: ["ignore", "pipe", "ignore"],
+            }
+          );
+        }
+
+        if (stdout.trim()) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) {
+          try { execSync("node -e \"setTimeout(()=>{}, 300)\""); } catch {}
+        }
+      }
     }
 
-    if (!stdout.trim()) {
-      stdout = execFileSync(
-        "gh",
-        ["issue", "view", String(issueNumber), "--json", fields],
-        {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 10000,
-          stdio: ["ignore", "pipe", "ignore"],
-        }
-      );
+    if (!stdout.trim() && lastError) {
+      throw lastError;
     }
 
     const parsed = JSON.parse(stdout);

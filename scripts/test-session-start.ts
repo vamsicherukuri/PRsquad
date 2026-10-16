@@ -510,6 +510,58 @@ async function runSessionStartSuite() {
           (round2State.pauseReason || "").includes("CLARIFICATION_LIMIT_EXCEEDED"),
           "Pause reason explains CLARIFICATION_LIMIT_EXCEEDED"
         );
+
+        // D. EMPTY issue content triggers immediate hard fail (no user clarification round)
+        const emptyState = loadState(fsmDir);
+        emptyState.phase = "INTAKE";
+        emptyState.intakeRound = 0;
+        saveState(emptyState, fsmDir);
+
+        const emptyData = {
+          status: "EMPTY" as const,
+          clarificationRound: 0,
+          issue: { owner: "owner", repo: "repo", number: 123, title: "Empty Issue" },
+          problem: null,
+          acceptanceCriteria: [],
+          declaredScope: null,
+          missing: ["Issue body is completely empty"],
+        };
+
+        const afterEmptyState = StateController.commitIntakeVerdict(fsmDir, emptyData, "test-sess-fsm");
+        assert(afterEmptyState.phase === "PAUSED", "commitIntakeVerdict immediately halts (PAUSED) on EMPTY issue content");
+        assert(
+          (afterEmptyState.pauseReason || "").includes("LACK_OF_CONTENT"),
+          "Pause reason explicitly cites LACK_OF_CONTENT"
+        );
+        assert(afterEmptyState.intakeRound === 0, "EMPTY content does not consume clarification rounds");
+
+        // E. FETCH_FAILED triggers retry before exhaustion
+        const fetchFailState = loadState(fsmDir);
+        fetchFailState.phase = "INTAKE";
+        fetchFailState.fetchRetries = 0;
+        saveState(fetchFailState, fsmDir);
+
+        const fetchFailData = {
+          status: "FETCH_FAILED" as const,
+          clarificationRound: 0,
+          issue: { owner: "owner", repo: "repo", number: 123, title: "Fetch Fail Issue" },
+          fetchError: "GitHub API rate limit exceeded (503)",
+        };
+
+        const retry1State = StateController.commitIntakeVerdict(fsmDir, fetchFailData, "test-sess-fsm");
+        assert(retry1State.phase === "INTAKE", "First FETCH_FAILED keeps phase INTAKE for retry");
+        assert(retry1State.fetchRetries === 1, "First FETCH_FAILED increments fetchRetries to 1");
+
+        const retry2State = StateController.commitIntakeVerdict(fsmDir, fetchFailData, "test-sess-fsm");
+        assert(retry2State.phase === "INTAKE", "Second FETCH_FAILED keeps phase INTAKE for retry 2");
+        assert(retry2State.fetchRetries === 2, "Second FETCH_FAILED increments fetchRetries to 2");
+
+        const retry3State = StateController.commitIntakeVerdict(fsmDir, fetchFailData, "test-sess-fsm");
+        assert(retry3State.phase === "PAUSED", "Third FETCH_FAILED exhausts retries and halts (PAUSED)");
+        assert(
+          (retry3State.pauseReason || "").includes("FETCH_FAILED_EXHAUSTED"),
+          "Pause reason cites FETCH_FAILED_EXHAUSTED"
+        );
       } finally {
         try {
           fs.rmSync(fsmDir, { recursive: true, force: true });

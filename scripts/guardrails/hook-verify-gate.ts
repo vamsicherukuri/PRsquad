@@ -1021,9 +1021,15 @@ async function main() {
 
       const triageInstruction = !triageVal.valid
         ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.`
-        : triageStatus === "NOT_READY"
-          ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
-          : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
+        : triageStatus === "EMPTY"
+          ? "[INSTRUCTION FOR CONTROLLER]: HARD FAIL - Issue lacks substantive content/description. Do not prompt user for clarification. Pipeline halted."
+          : triageStatus === "FETCH_FAILED"
+            ? (dashIntake?.phases?.intake?.status === "FETCH_RETRY"
+                ? `[INSTRUCTION FOR CONTROLLER]: Issue fetch failed (${triageVal.data.fetchError || "network error"}). Retrying issue fetch.`
+                : "[INSTRUCTION FOR CONTROLLER]: Issue fetch failed after retries. Pipeline halted.")
+            : triageStatus === "NOT_READY"
+              ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)."
+              : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live ⚡ AI Credit Meter status in your handoff message before delegating to Architect.";
 
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter

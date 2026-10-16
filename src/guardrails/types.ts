@@ -38,6 +38,7 @@ export interface WorkflowState {
   currentPhase?: string;
   approvedPlan?: any;
   pauseReason?: string;
+  fetchRetries?: number;
   updatedAt: string;
 }
 

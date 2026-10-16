@@ -1513,6 +1513,55 @@ var StateController = class _StateController {
         rootDir
       );
       return state;
+    } else if (triageData.status === "EMPTY") {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `LACK_OF_CONTENT: Issue body is empty or lacks substantive problem description. Definition of Ready cannot be satisfied. Workflow halted immediately without user clarification rounds.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    } else if (triageData.status === "FETCH_FAILED") {
+      const fetchRetries = state.fetchRetries || 0;
+      const maxFetchRetries = 2;
+      if (fetchRetries < maxFetchRetries) {
+        state.fetchRetries = fetchRetries + 1;
+        state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        saveState(state, rootDir);
+        syncWorkflowDashboard(rootDir, {
+          owner: state.issue?.owner,
+          repo: state.issue?.repo,
+          issueNumber: state.issue?.number,
+          issueTitle: state.issue?.title,
+          activeBranch: state.activeBranch,
+          sessionId: effectiveSessionId,
+          phase: "intake",
+          status: "FETCH_RETRY",
+          summary: `Issue fetch failed (${triageData.fetchError || "network error"}). Retrying ingestion attempt ${state.fetchRetries}/${maxFetchRetries}...`,
+          details: triageData
+        });
+        appendAuditLog(
+          {
+            sessionId: effectiveSessionId,
+            agent: "controller",
+            action: "intake_fetch_retry",
+            decision: "allow",
+            details: {
+              issueNumber: state.issue?.number,
+              attempt: state.fetchRetries,
+              error: triageData.fetchError
+            }
+          },
+          rootDir
+        );
+        return state;
+      } else {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `FETCH_FAILED_EXHAUSTED: Issue fetch failed after ${fetchRetries} retry attempts: ${triageData.fetchError || "network error"}. Pipeline halted.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
     } else {
       return _StateController.pauseWorkflow(
         rootDir,
@@ -3558,7 +3607,7 @@ ${issueBody}`);
         );
       }
       const dashIntake = loadDashboardState(repoRoot2);
-      const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.` : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
+      const triageInstruction = !triageVal.valid ? `[INSTRUCTION FOR CONTROLLER]: Triage handoff failed validation (${triageVal.errors.join("; ")}). Issue one schema-correction prompt to Intake specialist or pause pipeline.` : triageStatus === "EMPTY" ? "[INSTRUCTION FOR CONTROLLER]: HARD FAIL - Issue lacks substantive content/description. Do not prompt user for clarification. Pipeline halted." : triageStatus === "FETCH_FAILED" ? dashIntake?.phases?.intake?.status === "FETCH_RETRY" ? `[INSTRUCTION FOR CONTROLLER]: Issue fetch failed (${triageVal.data.fetchError || "network error"}). Retrying issue fetch.` : "[INSTRUCTION FOR CONTROLLER]: Issue fetch failed after retries. Pipeline halted." : triageStatus === "NOT_READY" ? "[INSTRUCTION FOR CONTROLLER]: Issue is NOT_READY. Ask the maintainer the single clarifying question to satisfy Definition of Ready (round 1/2)." : "[INSTRUCTION FOR CONTROLLER]: Intake triage complete. Include this live \u26A1 AI Credit Meter status in your handoff message before delegating to Architect.";
       const chatMeter = formatChatCreditMeter(dashIntake);
       const out = chatMeter ? buildEnrichedPostToolOutput(input, chatMeter, triageInstruction) : { decision: "allow" };
       process.stdout.write(JSON.stringify(out) + "\n");

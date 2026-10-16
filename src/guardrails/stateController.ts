@@ -407,6 +407,58 @@ export class StateController {
       );
 
       return state;
+    } else if (triageData.status === "EMPTY") {
+      return StateController.pauseWorkflow(
+        rootDir,
+        `LACK_OF_CONTENT: Issue body is empty or lacks substantive problem description. Definition of Ready cannot be satisfied. Workflow halted immediately without user clarification rounds.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    } else if (triageData.status === "FETCH_FAILED") {
+      const fetchRetries = state.fetchRetries || 0;
+      const maxFetchRetries = 2;
+      if (fetchRetries < maxFetchRetries) {
+        state.fetchRetries = fetchRetries + 1;
+        state.updatedAt = new Date().toISOString();
+        saveState(state, rootDir);
+
+        syncWorkflowDashboard(rootDir, {
+          owner: state.issue?.owner,
+          repo: state.issue?.repo,
+          issueNumber: state.issue?.number,
+          issueTitle: state.issue?.title,
+          activeBranch: state.activeBranch,
+          sessionId: effectiveSessionId,
+          phase: "intake",
+          status: "FETCH_RETRY",
+          summary: `Issue fetch failed (${triageData.fetchError || "network error"}). Retrying ingestion attempt ${state.fetchRetries}/${maxFetchRetries}...`,
+          details: triageData,
+        });
+
+        appendAuditLog(
+          {
+            sessionId: effectiveSessionId,
+            agent: "controller",
+            action: "intake_fetch_retry",
+            decision: "allow",
+            details: {
+              issueNumber: state.issue?.number,
+              attempt: state.fetchRetries,
+              error: triageData.fetchError,
+            },
+          },
+          rootDir
+        );
+
+        return state;
+      } else {
+        return StateController.pauseWorkflow(
+          rootDir,
+          `FETCH_FAILED_EXHAUSTED: Issue fetch failed after ${fetchRetries} retry attempts: ${triageData.fetchError || "network error"}. Pipeline halted.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
     } else {
       return StateController.pauseWorkflow(
         rootDir,
