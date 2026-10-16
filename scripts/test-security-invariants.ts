@@ -13,7 +13,7 @@
  *   5. Hostile Multi-Vector Agent Drift Containment Scenario
  */
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -434,20 +434,30 @@ async function runSecurityInvariants() {
   {
     const stateFile = path.join(REPO_ROOT, ".gated-change", "state.json");
     const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
+    const prAuthFile = path.join(REPO_ROOT, ".gated-change", "pr-authorization.json");
     const savedStateRaw = fs.existsSync(stateFile) ? fs.readFileSync(stateFile, "utf-8") : null;
     const savedDash = fs.existsSync(dashFile) ? fs.readFileSync(dashFile, "utf-8") : null;
+    const savedPrAuth = fs.existsSync(prAuthFile) ? fs.readFileSync(prAuthFile, "utf-8") : null;
 
     let originalSymbolicBranch = "";
     let originalHeadSha = "";
+    let parentHeadSha = "0000000000000000000000000000000000000000";
     try {
-      originalSymbolicBranch = execSync("git symbolic-ref --quiet --short HEAD", {
+      originalSymbolicBranch = execFileSync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], {
         cwd: REPO_ROOT,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "ignore"],
       }).trim();
     } catch {}
     try {
-      originalHeadSha = execSync("git rev-parse --verify HEAD^{commit}", {
+      originalHeadSha = execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "ignore"],
+      }).trim();
+    } catch {}
+    try {
+      parentHeadSha = execFileSync("git", ["rev-parse", "--verify", "HEAD~1^{commit}"], {
         cwd: REPO_ROOT,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "ignore"],
@@ -460,7 +470,7 @@ async function runSecurityInvariants() {
 
     try {
       try {
-        execSync(`git checkout -b "${tempBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+        execFileSync("git", ["checkout", "-b", tempBranch], { cwd: REPO_ROOT, stdio: "ignore" });
         tempBranchCreated = true;
       } catch {}
 
@@ -477,23 +487,22 @@ async function runSecurityInvariants() {
         status: "ACTIVE",
       }, REPO_ROOT);
 
-      // 1. Stale 40-char SHA mismatch
-      const staleSha = "0000000000000000000000000000000000000000";
+      // 1. Stale commit SHA (HEAD~1) mismatch must be rejected at step 4d
       syncWorkflowDashboard(REPO_ROOT, {
         issueNumber: 14,
         phase: "qa",
         status: "PASS",
-        details: { verdict: "PASS", commitSha: staleSha },
+        details: { verdict: "PASS", commitSha: parentHeadSha },
       });
       syncWorkflowDashboard(REPO_ROOT, {
         issueNumber: 14,
         phase: "reviewer",
         status: "PASS",
-        details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: staleSha },
+        details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: parentHeadSha },
       });
       const resStale = createPullRequest({ preferredDir: REPO_ROOT });
 
-      // 2. Malformed / symbolic commit evidence ("HEAD" or too-short string) must not bypass validation
+      // 2. Malformed / symbolic commit evidence ("HEAD" or too-short string) must be rejected at step 4d
       syncWorkflowDashboard(REPO_ROOT, {
         issueNumber: 14,
         phase: "qa",
@@ -508,20 +517,49 @@ async function runSecurityInvariants() {
       });
       const resMalformed = createPullRequest({ preferredDir: REPO_ROOT });
 
-      passed =
+      // 3. Positive case: Valid current-HEAD commit evidence (short SHA + full SHA) must pass step 4d
+      // Use a revoked pr-authorization.json sentinel at step 4e so createPullRequest halts after passing 4d without network git push
+      fs.writeFileSync(prAuthFile, JSON.stringify({ issueNumber: 14, status: "REVOKED" }), "utf-8");
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "qa",
+        status: "PASS",
+        details: { verdict: "PASS", commitSha: originalHeadSha.slice(0, 8) },
+      });
+      syncWorkflowDashboard(REPO_ROOT, {
+        issueNumber: 14,
+        phase: "reviewer",
+        status: "PASS",
+        details: { verdict: "CLEAR", assessment: "APPROVED", commitSha: originalHeadSha },
+      });
+      const resValidEvidence = createPullRequest({ preferredDir: REPO_ROOT });
+
+      const staleRejectedProperly =
         resStale.success === false &&
         (resStale.error?.includes("STALE_EVIDENCE") ?? false) &&
+        (resStale.error?.includes("QA verification was executed against commit") ?? false);
+
+      const malformedRejectedProperly =
         resMalformed.success === false &&
-        (resMalformed.error?.includes("STALE_EVIDENCE") ?? false);
+        (resMalformed.error?.includes("STALE_EVIDENCE") ?? false) &&
+        (resMalformed.error?.includes("QA verification was executed against commit") ?? false);
+
+      const validAcceptedPast4d =
+        Boolean(originalHeadSha) &&
+        !resValidEvidence.error?.includes("STALE_EVIDENCE") &&
+        !resValidEvidence.error?.includes("COMMIT_RESOLUTION_FAILED") &&
+        (resValidEvidence.error?.includes("PR authorization token has been revoked") ?? false);
+
+      passed = staleRejectedProperly && malformedRejectedProperly && validAcceptedPast4d;
     } finally {
       try {
         if (originalSymbolicBranch) {
-          execSync(`git checkout "${originalSymbolicBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+          execFileSync("git", ["checkout", originalSymbolicBranch], { cwd: REPO_ROOT, stdio: "ignore" });
         } else if (originalHeadSha) {
-          execSync(`git checkout --detach "${originalHeadSha}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+          execFileSync("git", ["checkout", "--detach", originalHeadSha], { cwd: REPO_ROOT, stdio: "ignore" });
         }
         if (tempBranchCreated) {
-          execSync(`git branch -D "${tempBranch}"`, { cwd: REPO_ROOT, stdio: "ignore" });
+          execFileSync("git", ["branch", "-D", tempBranch], { cwd: REPO_ROOT, stdio: "ignore" });
         }
       } catch {}
       revokeApprovalLock("REVOKED", REPO_ROOT);
@@ -533,15 +571,20 @@ async function runSecurityInvariants() {
       } else if (fs.existsSync(dashFile)) {
         fs.unlinkSync(dashFile);
       }
+      if (savedPrAuth !== null) {
+        fs.writeFileSync(prAuthFile, savedPrAuth, "utf-8");
+      } else if (fs.existsSync(prAuthFile)) {
+        fs.unlinkSync(prAuthFile);
+      }
     }
 
     recordInvariant(
       "INV-14",
-      "PR Gate strictly rejects stale, missing, short, or malformed commit evidence",
+      "PR Gate strictly rejects stale/malformed commit evidence and accepts valid current-HEAD commit evidence",
       passed,
       passed
-        ? "PR creation rejected fail-closed with STALE_EVIDENCE for both stale SHA and malformed commit evidence"
-        : "PR created despite stale or malformed commit evidence"
+        ? "PR gate rejected stale/malformed evidence with STALE_EVIDENCE and accepted valid current-HEAD evidence"
+        : "PR gate commit evidence verification or positive HEAD resolution failed"
     );
   }
 

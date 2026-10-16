@@ -1263,7 +1263,7 @@ function extractReviewerDetails(toolResultOrText) {
 // src/guardrails/stagePolicies.ts
 import { existsSync as existsSync8, readFileSync as readFileSync7 } from "node:fs";
 import { join as join7 } from "node:path";
-import { execSync as execSync5 } from "node:child_process";
+import { execSync as execSync5, execFileSync as execFileSync2 } from "node:child_process";
 
 // src/guardrails/stateController.ts
 import { existsSync as existsSync3, mkdirSync as mkdirSync2 } from "node:fs";
@@ -2909,7 +2909,7 @@ function approveScopeGate(options = {}) {
 function resolveBaseRef(rootDir, preferredRef) {
   if (preferredRef) {
     try {
-      return execSync5(`git rev-parse --verify "${preferredRef}^{commit}"`, {
+      return execFileSync2("git", ["rev-parse", "--verify", `${preferredRef}^{commit}`], {
         cwd: rootDir,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]
@@ -2919,7 +2919,7 @@ function resolveBaseRef(rootDir, preferredRef) {
   }
   for (const candidate of ["HEAD~1", "origin/master", "origin/main", "master", "main"]) {
     try {
-      return execSync5(`git rev-parse --verify "${candidate}^{commit}"`, {
+      return execFileSync2("git", ["rev-parse", "--verify", `${candidate}^{commit}`], {
         cwd: rootDir,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"]

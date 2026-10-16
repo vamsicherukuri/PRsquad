@@ -26,7 +26,7 @@
  *   R20: Multi-Commit AST Symbol Sweep Diff Range Truncation
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -454,7 +454,14 @@ async function runReproSuite() {
       status: "ACTIVE",
     }, REPO_ROOT);
 
-    const staleSha = "0000000000000000000000000000000000000000";
+    let staleSha = "0000000000000000000000000000000000000000";
+    try {
+      staleSha = execFileSync("git", ["rev-parse", "--verify", "HEAD~1^{commit}"], {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {}
     syncWorkflowDashboard(REPO_ROOT, {
       issueNumber: 42,
       phase: "qa",
@@ -469,7 +476,10 @@ async function runReproSuite() {
     });
 
     const prResult = createPullRequest({ preferredDir: REPO_ROOT });
-    const isVulnerable = prResult.success === true || !prResult.error?.includes("STALE_EVIDENCE");
+    const isVulnerable =
+      prResult.success === true ||
+      !prResult.error?.includes("STALE_EVIDENCE") ||
+      !prResult.error?.includes("QA verification was executed against commit");
 
     // Restore
     revokeApprovalLock("REVOKED", REPO_ROOT);

@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import type { WorkflowState, WorkflowPhase, ApprovalLock, HookInput, HookOutput } from "./types.js";
 import {
   loadState,
@@ -101,7 +101,7 @@ export interface StagePolicy {
 export function resolveBaseRef(rootDir: string, preferredRef?: string | null): string {
   if (preferredRef) {
     try {
-      return execSync(`git rev-parse --verify "${preferredRef}^{commit}"`, {
+      return execFileSync("git", ["rev-parse", "--verify", `${preferredRef}^{commit}`], {
         cwd: rootDir,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],
@@ -110,7 +110,7 @@ export function resolveBaseRef(rootDir: string, preferredRef?: string | null): s
   }
   for (const candidate of ["HEAD~1", "origin/master", "origin/main", "master", "main"]) {
     try {
-      return execSync(`git rev-parse --verify "${candidate}^{commit}"`, {
+      return execFileSync("git", ["rev-parse", "--verify", `${candidate}^{commit}`], {
         cwd: rootDir,
         encoding: "utf-8",
         stdio: ["ignore", "pipe", "ignore"],

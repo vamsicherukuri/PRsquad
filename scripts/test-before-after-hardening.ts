@@ -6,7 +6,7 @@
  */
 
 import { strict as assert } from "node:assert";
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, writeFileSync, unlinkSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -160,7 +160,14 @@ console.log("=======================================================\n");
   const testName = "Stale Commit Evidence Binding at PR Gate";
   console.log(`\n[TEST 4] ${testName}`);
 
-  const staleCommit = "old1111111111111111111111111111111111111";
+  let staleCommit = "0000000000000000000000000000000000000000";
+  try {
+    staleCommit = execFileSync("git", ["rev-parse", "--verify", "HEAD~1^{commit}"], {
+      cwd: REPO_ROOT,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {}
   mkdirSync(join(REPO_ROOT, ".gated-change"), { recursive: true });
 
   const state = loadState(REPO_ROOT);
@@ -195,10 +202,14 @@ console.log("=======================================================\n");
   console.log(`  • Error message: ${prResult.error}`);
 
   assert.equal(prResult.success, false, "PR gate must fail closed when evidence is bound to stale commit");
-  assert(prResult.error?.includes("STALE_EVIDENCE"), "Rejection must cite STALE_EVIDENCE");
+  assert(
+    prResult.error?.includes("STALE_EVIDENCE") && prResult.error?.includes("QA verification was executed against commit"),
+    "Rejection must cite STALE_EVIDENCE for QA commit mismatch"
+  );
 
   saveState(savedState, REPO_ROOT);
   if (savedLock) writeFileSync(lockFile, savedLock, "utf-8");
+  else if (existsSync(lockFile)) unlinkSync(lockFile);
 
   results.push({
     id: "CASE-4",

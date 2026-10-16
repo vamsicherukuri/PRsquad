@@ -1215,7 +1215,7 @@ function createPullRequest(options = {}) {
       }
       let currentHead = "";
       try {
-        currentHead = execSync3("git rev-parse --verify HEAD^{commit}", {
+        currentHead = execFileSync2("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
           cwd: rootDir,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"]
@@ -1225,7 +1225,7 @@ function createPullRequest(options = {}) {
       if (!currentHead) {
         return {
           success: false,
-          error: "PR_GATE_BLOCKED (STALE_EVIDENCE): Unable to resolve current branch HEAD commit for evidence verification."
+          error: "PR_GATE_BLOCKED (COMMIT_RESOLUTION_FAILED): Unable to resolve current branch HEAD commit for evidence verification."
         };
       }
       const resolveEvidenceCommit = (val) => {
@@ -1233,7 +1233,7 @@ function createPullRequest(options = {}) {
         const trimmed = val.trim();
         if (!/^[0-9a-f]{7,40}$/i.test(trimmed)) return null;
         try {
-          return execSync3(`git rev-parse --verify "${trimmed}^{commit}"`, {
+          return execFileSync2("git", ["rev-parse", "--verify", `${trimmed}^{commit}`], {
             cwd: rootDir,
             encoding: "utf-8",
             stdio: ["ignore", "pipe", "ignore"]
