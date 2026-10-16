@@ -70,31 +70,49 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
     return;
   }
 
-  // 4. Resolve issue number from session context (worktree path, branch, prompt)
-  const issueNum = StateController.resolveIssueFromSession(effectiveCwd, initialPrompt, repoRoot, state);
+  // 4. Extract issue number explicitly in sessionStart.ts (avoid silent branch/worktree fallback)
+  const promptMatch = initialPrompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) ||
+                      initialPrompt.match(/\bissue-?(\d+)\b/i);
+  let issueNum = promptMatch ? parseInt(promptMatch[1], 10) : null;
+
+  // Allow existing active state issue if user prompt is a generic resume/instruction
+  if (!issueNum && state.issue?.number && state.issue.number > 0) {
+    issueNum = state.issue.number;
+  }
 
   if (!issueNum) {
-    const idleContext = [
-      `[PRSQUAD SESSION INITIALIZED - NO ISSUE DETECTED]`,
-      `Repository: ${remoteInfo.owner}/${remoteInfo.repo}`,
-      `Worktree: ${effectiveCwd}`,
-      `No specific issue number was detected from the session worktree, branch, or initial prompt.`,
-      `To start a gated fix workflow, please reference an issue number (e.g. "resolve issue #42") or open an issue worktree.`,
-    ].join("\n");
+    const reason = "No explicit issue number detected in prompt. Please provide an issue number (e.g. 'resolve issue #42').";
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "ISSUE_UNRESOLVED",
+        intake: "BLOCKED",
+        reason,
+      },
+      sessionId
+    );
+
+    const unresolvedEnvelope = {
+      runId: sessionId,
+      validation: "ISSUE_UNRESOLVED",
+      intake: "BLOCKED",
+      message: reason,
+    };
+    const additionalContext = JSON.stringify(unresolvedEnvelope, null, 2);
 
     const output = {
       decision: "allow",
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: idleContext,
+        additionalContext,
       },
-      additionalContext: idleContext,
+      additionalContext,
     };
     process.stdout.write(JSON.stringify(output) + "\n");
     return;
   }
 
-  // 5. Fetch issue info deterministically (comments omitted)
+  // 5. Fetch issue info deterministically (comments omitted to prevent prompt bloat)
   let issueData;
   try {
     issueData = fetchIssueDeterministic(
@@ -106,7 +124,29 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
     );
   } catch (err: any) {
     const reason = `INTAKE_FETCH_FAILED: Could not retrieve issue #${issueNum} from repository ${remoteInfo.owner}/${remoteInfo.repo}: ${err?.message || err}`;
-    StateController.pauseWorkflow(repoRoot, reason, issueNum, sessionId);
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "FAIL",
+        issue: { owner: remoteInfo.owner, repo: remoteInfo.repo, number: issueNum, state: "UNKNOWN" },
+        intake: "BLOCKED",
+        reason,
+      },
+      sessionId
+    );
+
+    const failEnvelope = {
+      runId: sessionId,
+      issue: {
+        repository: `${remoteInfo.owner}/${remoteInfo.repo}`,
+        number: issueNum,
+        state: "UNKNOWN",
+      },
+      validation: "FAIL",
+      intake: "BLOCKED",
+      error: reason,
+    };
+    const additionalContext = JSON.stringify(failEnvelope, null, 2);
 
     const output = {
       decision: "deny",
@@ -114,18 +154,40 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
       permissionDecisionReason: reason,
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: reason,
+        additionalContext,
       },
-      additionalContext: reason,
+      additionalContext,
     };
     process.stdout.write(JSON.stringify(output) + "\n");
     return;
   }
 
-  // 6. Validate issue is OPEN
+  // 6. Validate issue is OPEN (block CLOSED issues)
   if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
     const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} is ${issueData.state.toUpperCase()} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
-    StateController.pauseWorkflow(repoRoot, reason, issueData.number, sessionId);
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "FAIL",
+        issue: issueData,
+        intake: "BLOCKED",
+        reason,
+      },
+      sessionId
+    );
+
+    const closedEnvelope = {
+      runId: sessionId,
+      issue: {
+        repository: `${issueData.owner}/${issueData.repo}`,
+        number: issueData.number,
+        state: issueData.state.toUpperCase(),
+      },
+      validation: "FAIL",
+      intake: "BLOCKED",
+      reason,
+    };
+    const additionalContext = JSON.stringify(closedEnvelope, null, 2);
 
     const output = {
       decision: "deny",
@@ -133,9 +195,9 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
       permissionDecisionReason: reason,
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: reason,
+        additionalContext,
       },
-      additionalContext: reason,
+      additionalContext,
     };
     process.stdout.write(JSON.stringify(output) + "\n");
     return;
@@ -154,21 +216,33 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
   };
   writeFileSync(cacheFile, JSON.stringify(cacheContent, null, 2), "utf-8");
 
-  // 8. Atomic state transition via StateController
-  StateController.authorizeIntake(repoRoot, issueData, cacheFile, sessionId);
+  // 8. Explicitly record validation in Workflow State via StateController
+  StateController.recordIssueValidation(
+    repoRoot,
+    {
+      validation: "PASS",
+      issue: issueData,
+      intake: "READY",
+      issueSnapshot: "issue-cache.json",
+      nextStage: "INTAKE",
+    },
+    sessionId
+  );
 
-  // 9. Prepare structured context to prime the Orchestrator agent
-  const additionalContext = [
-    `[PRSQUAD SESSION INITIALIZED - ISSUE #${issueData.number} VERIFIED OPEN]`,
-    `Repository: ${issueData.owner}/${issueData.repo}`,
-    `Issue: #${issueData.number} - "${issueData.title}"`,
-    `Author: @${issueData.author}`,
-    `Labels: ${issueData.labels.length > 0 ? issueData.labels.join(", ") : "none"}`,
-    `Status: ${issueData.state}`,
-    `Structured snapshot cached at: .gated-change/issue-cache.json`,
-    `Workflow State: Phase=INTAKE, Status=INTAKE_AUTHORIZED, Branch=fix/issue-${issueData.number}`,
-    `Next Step: Delegate immediately to @gated-change-intake for Definition-of-Ready evaluation (reproduction steps, acceptance criteria, declared scope).`,
-  ].join("\n");
+  // 9. Inject compact JSON envelope as deterministic handoff context
+  const handoffEnvelope = {
+    runId: sessionId,
+    issue: {
+      repository: `${issueData.owner}/${issueData.repo}`,
+      number: issueData.number,
+      state: "OPEN",
+    },
+    validation: "PASS",
+    intake: "READY",
+    issueSnapshot: "issue-cache.json",
+    nextStage: "INTAKE",
+  };
+  const additionalContext = JSON.stringify(handoffEnvelope, null, 2);
 
   const output = {
     decision: "allow",

@@ -39,6 +39,9 @@ export interface WorkflowState {
   approvedPlan?: any;
   pauseReason?: string;
   fetchRetries?: number;
+  issueValidation?: "PASS" | "FAIL" | "ISSUE_UNRESOLVED";
+  issueSnapshot?: string;
+  intakeEligibility?: "READY" | "BLOCKED";
   updatedAt: string;
 }
 

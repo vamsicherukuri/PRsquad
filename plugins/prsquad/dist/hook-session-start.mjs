@@ -1126,6 +1126,87 @@ var StateController = class _StateController {
    * 4. Logs audit entry in audit.jsonl
    * All executed as a single atomic transaction.
    */
+  /**
+   * Records issue validation results, identity, snapshot reference, and intake eligibility
+   * into the Workflow State before context injection.
+   */
+  static recordIssueValidation(rootDir, record, sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync4(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+    state.issueValidation = record.validation;
+    state.intakeEligibility = record.intake;
+    if (record.issueSnapshot) {
+      state.issueSnapshot = record.issueSnapshot;
+    }
+    if (record.issue) {
+      state.issue = {
+        owner: record.issue.owner,
+        repo: record.issue.repo,
+        number: record.issue.number,
+        title: record.issue.title,
+        body: record.issue.body
+      };
+      state.activeBranch = `fix/issue-${record.issue.number}`;
+    }
+    if (record.intake === "READY") {
+      state.phase = "INTAKE";
+    } else {
+      state.phase = "PAUSED";
+      if (record.reason) {
+        state.pauseReason = record.reason;
+      }
+    }
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = record.issue?.owner || remoteInfo.owner;
+    const repo = record.issue?.repo || remoteInfo.repo;
+    const issueNum = record.issue?.number || state.issue?.number || 0;
+    syncWorkflowDashboard(rootDir, {
+      owner,
+      repo,
+      issueNumber: issueNum,
+      issueTitle: record.issue?.title || state.issue?.title,
+      activeBranch: state.activeBranch,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: record.intake === "READY" ? "INTAKE_AUTHORIZED" : "BLOCKED",
+      summary: record.reason || (record.intake === "READY" ? `Issue #${issueNum} verified OPEN. Authorized for Intake.` : "Intake blocked."),
+      details: {
+        validation: record.validation,
+        intake: record.intake,
+        snapshot: record.issueSnapshot,
+        reason: record.reason
+      }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "issue_validation_recorded",
+        decision: record.intake === "READY" ? "allow" : "deny",
+        details: {
+          validation: record.validation,
+          intake: record.intake,
+          issueNumber: issueNum,
+          snapshot: record.issueSnapshot,
+          reason: record.reason
+        }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Atomically authorizes the intake stage for an issue and persists
+   * state.json, dashboard.json, and audit.jsonl in one unified commit.
+   */
   static authorizeIntake(rootDir, issue, cacheFilePath, sessionId) {
     const gatedDir = findGatedChangeDir(rootDir);
     if (!existsSync4(gatedDir)) {
@@ -1135,6 +1216,9 @@ var StateController = class _StateController {
     if (sessionId) {
       state.sessionId = sessionId;
     }
+    state.issueValidation = "PASS";
+    state.intakeEligibility = "READY";
+    state.issueSnapshot = cacheFilePath;
     state.issue = {
       owner: issue.owner,
       repo: issue.repo,
@@ -1426,22 +1510,36 @@ async function runSessionStart(input = {}) {
     process.stdout.write(JSON.stringify(output2) + "\n");
     return;
   }
-  const issueNum = StateController.resolveIssueFromSession(effectiveCwd, initialPrompt, repoRoot, state);
+  const promptMatch = initialPrompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) || initialPrompt.match(/\bissue-?(\d+)\b/i);
+  let issueNum = promptMatch ? parseInt(promptMatch[1], 10) : null;
+  if (!issueNum && state.issue?.number && state.issue.number > 0) {
+    issueNum = state.issue.number;
+  }
   if (!issueNum) {
-    const idleContext = [
-      `[PRSQUAD SESSION INITIALIZED - NO ISSUE DETECTED]`,
-      `Repository: ${remoteInfo.owner}/${remoteInfo.repo}`,
-      `Worktree: ${effectiveCwd}`,
-      `No specific issue number was detected from the session worktree, branch, or initial prompt.`,
-      `To start a gated fix workflow, please reference an issue number (e.g. "resolve issue #42") or open an issue worktree.`
-    ].join("\n");
+    const reason = "No explicit issue number detected in prompt. Please provide an issue number (e.g. 'resolve issue #42').";
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "ISSUE_UNRESOLVED",
+        intake: "BLOCKED",
+        reason
+      },
+      sessionId
+    );
+    const unresolvedEnvelope = {
+      runId: sessionId,
+      validation: "ISSUE_UNRESOLVED",
+      intake: "BLOCKED",
+      message: reason
+    };
+    const additionalContext2 = JSON.stringify(unresolvedEnvelope, null, 2);
     const output2 = {
       decision: "allow",
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: idleContext
+        additionalContext: additionalContext2
       },
-      additionalContext: idleContext
+      additionalContext: additionalContext2
     };
     process.stdout.write(JSON.stringify(output2) + "\n");
     return;
@@ -1458,32 +1556,74 @@ async function runSessionStart(input = {}) {
     );
   } catch (err) {
     const reason = `INTAKE_FETCH_FAILED: Could not retrieve issue #${issueNum} from repository ${remoteInfo.owner}/${remoteInfo.repo}: ${err?.message || err}`;
-    StateController.pauseWorkflow(repoRoot, reason, issueNum, sessionId);
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "FAIL",
+        issue: { owner: remoteInfo.owner, repo: remoteInfo.repo, number: issueNum, state: "UNKNOWN" },
+        intake: "BLOCKED",
+        reason
+      },
+      sessionId
+    );
+    const failEnvelope = {
+      runId: sessionId,
+      issue: {
+        repository: `${remoteInfo.owner}/${remoteInfo.repo}`,
+        number: issueNum,
+        state: "UNKNOWN"
+      },
+      validation: "FAIL",
+      intake: "BLOCKED",
+      error: reason
+    };
+    const additionalContext2 = JSON.stringify(failEnvelope, null, 2);
     const output2 = {
       decision: "deny",
       permissionDecision: "deny",
       permissionDecisionReason: reason,
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: reason
+        additionalContext: additionalContext2
       },
-      additionalContext: reason
+      additionalContext: additionalContext2
     };
     process.stdout.write(JSON.stringify(output2) + "\n");
     return;
   }
   if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
     const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} is ${issueData.state.toUpperCase()} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
-    StateController.pauseWorkflow(repoRoot, reason, issueData.number, sessionId);
+    StateController.recordIssueValidation(
+      repoRoot,
+      {
+        validation: "FAIL",
+        issue: issueData,
+        intake: "BLOCKED",
+        reason
+      },
+      sessionId
+    );
+    const closedEnvelope = {
+      runId: sessionId,
+      issue: {
+        repository: `${issueData.owner}/${issueData.repo}`,
+        number: issueData.number,
+        state: issueData.state.toUpperCase()
+      },
+      validation: "FAIL",
+      intake: "BLOCKED",
+      reason
+    };
+    const additionalContext2 = JSON.stringify(closedEnvelope, null, 2);
     const output2 = {
       decision: "deny",
       permissionDecision: "deny",
       permissionDecisionReason: reason,
       hookSpecificOutput: {
         hookEventName: "SessionStart",
-        additionalContext: reason
+        additionalContext: additionalContext2
       },
-      additionalContext: reason
+      additionalContext: additionalContext2
     };
     process.stdout.write(JSON.stringify(output2) + "\n");
     return;
@@ -1499,18 +1639,30 @@ async function runSessionStart(input = {}) {
     source: "sessionStart"
   };
   writeFileSync4(cacheFile, JSON.stringify(cacheContent, null, 2), "utf-8");
-  StateController.authorizeIntake(repoRoot, issueData, cacheFile, sessionId);
-  const additionalContext = [
-    `[PRSQUAD SESSION INITIALIZED - ISSUE #${issueData.number} VERIFIED OPEN]`,
-    `Repository: ${issueData.owner}/${issueData.repo}`,
-    `Issue: #${issueData.number} - "${issueData.title}"`,
-    `Author: @${issueData.author}`,
-    `Labels: ${issueData.labels.length > 0 ? issueData.labels.join(", ") : "none"}`,
-    `Status: ${issueData.state}`,
-    `Structured snapshot cached at: .gated-change/issue-cache.json`,
-    `Workflow State: Phase=INTAKE, Status=INTAKE_AUTHORIZED, Branch=fix/issue-${issueData.number}`,
-    `Next Step: Delegate immediately to @gated-change-intake for Definition-of-Ready evaluation (reproduction steps, acceptance criteria, declared scope).`
-  ].join("\n");
+  StateController.recordIssueValidation(
+    repoRoot,
+    {
+      validation: "PASS",
+      issue: issueData,
+      intake: "READY",
+      issueSnapshot: "issue-cache.json",
+      nextStage: "INTAKE"
+    },
+    sessionId
+  );
+  const handoffEnvelope = {
+    runId: sessionId,
+    issue: {
+      repository: `${issueData.owner}/${issueData.repo}`,
+      number: issueData.number,
+      state: "OPEN"
+    },
+    validation: "PASS",
+    intake: "READY",
+    issueSnapshot: "issue-cache.json",
+    nextStage: "INTAKE"
+  };
+  const additionalContext = JSON.stringify(handoffEnvelope, null, 2);
   const output = {
     decision: "allow",
     hookSpecificOutput: {

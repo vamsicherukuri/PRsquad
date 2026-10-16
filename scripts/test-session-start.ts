@@ -240,14 +240,19 @@ async function runSessionStartSuite() {
 
       const parsedNormal = JSON.parse(outNormal.trim());
       assert(parsedNormal.decision === "allow", "sessionStart allows valid session for OPEN issue");
-      assert(
-        parsedNormal.additionalContext.includes("ISSUE #1 VERIFIED OPEN"),
-        "additionalContext indicates issue #1 is verified OPEN"
-      );
-      assert(
-        parsedNormal.additionalContext.includes("@gated-change-intake"),
-        "additionalContext directs Orchestrator to delegate to @gated-change-intake"
-      );
+
+      // Verify compact JSON envelope format
+      const normalEnvelope = JSON.parse(parsedNormal.additionalContext);
+      assert(normalEnvelope.validation === "PASS", "additionalContext JSON envelope has validation: PASS");
+      assert(normalEnvelope.intake === "READY", "additionalContext JSON envelope has intake: READY");
+      assert(normalEnvelope.issue?.number === 1, "additionalContext JSON envelope references issue #1");
+      assert(normalEnvelope.nextStage === "INTAKE", "additionalContext JSON envelope directs nextStage: INTAKE");
+
+      // Verify Workflow State was explicitly updated via StateController
+      const stateAfterNormal = loadState(REPO_ROOT);
+      assert(stateAfterNormal.issueValidation === "PASS", "StateController recorded issueValidation: PASS");
+      assert(stateAfterNormal.intakeEligibility === "READY", "StateController recorded intakeEligibility: READY");
+      assert(stateAfterNormal.issueSnapshot === "issue-cache.json", "StateController recorded issueSnapshot reference");
 
       // Verify .gated-change/issue-cache.json created in REPO_ROOT
       const cachePath = path.join(REPO_ROOT, ".gated-change", "issue-cache.json");
@@ -296,7 +301,7 @@ async function runSessionStartSuite() {
         "Resumed session strictly preserves ARCHITECTING phase without resetting to INTAKE"
       );
 
-      // 4C: Generic session with NO issue detected
+      // 4C: Generic session with NO issue detected (ISSUE_UNRESOLVED)
       // Reset state to clean
       preservedState.phase = "INTAKE";
       delete (preservedState.issue as any).number;
@@ -319,9 +324,14 @@ async function runSessionStartSuite() {
 
       const parsedNoIssue = JSON.parse(outNoIssue.trim());
       assert(parsedNoIssue.decision === "allow", "sessionStart allows session without issue gracefully");
+      const noIssueEnvelope = JSON.parse(parsedNoIssue.additionalContext);
       assert(
-        parsedNoIssue.additionalContext.includes("NO ISSUE DETECTED"),
-        "additionalContext explains NO ISSUE DETECTED without erroring"
+        noIssueEnvelope.validation === "ISSUE_UNRESOLVED",
+        "additionalContext JSON envelope flags validation: ISSUE_UNRESOLVED"
+      );
+      assert(
+        noIssueEnvelope.intake === "BLOCKED",
+        "additionalContext JSON envelope flags intake: BLOCKED"
       );
     }
 

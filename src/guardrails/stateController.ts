@@ -175,6 +175,116 @@ export class StateController {
    * 4. Logs audit entry in audit.jsonl
    * All executed as a single atomic transaction.
    */
+  /**
+   * Records issue validation results, identity, snapshot reference, and intake eligibility
+   * into the Workflow State before context injection.
+   */
+  static recordIssueValidation(
+    rootDir: string,
+    record: {
+      validation: "PASS" | "FAIL" | "ISSUE_UNRESOLVED";
+      issue?: {
+        owner: string;
+        repo: string;
+        number: number;
+        title?: string;
+        body?: string;
+        author?: string;
+        state?: string;
+      };
+      intake: "READY" | "BLOCKED";
+      issueSnapshot?: string;
+      nextStage?: string;
+      reason?: string;
+    },
+    sessionId?: string
+  ): WorkflowState {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync(gatedDir)) {
+      mkdirSync(gatedDir, { recursive: true });
+    }
+
+    const state = loadState(rootDir);
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+
+    state.issueValidation = record.validation;
+    state.intakeEligibility = record.intake;
+    if (record.issueSnapshot) {
+      state.issueSnapshot = record.issueSnapshot;
+    }
+
+    if (record.issue) {
+      state.issue = {
+        owner: record.issue.owner,
+        repo: record.issue.repo,
+        number: record.issue.number,
+        title: record.issue.title,
+        body: record.issue.body,
+      };
+      state.activeBranch = `fix/issue-${record.issue.number}`;
+    }
+
+    if (record.intake === "READY") {
+      state.phase = "INTAKE";
+    } else {
+      state.phase = "PAUSED";
+      if (record.reason) {
+        state.pauseReason = record.reason;
+      }
+    }
+
+    state.updatedAt = new Date().toISOString();
+    saveState(state, rootDir);
+
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = record.issue?.owner || remoteInfo.owner;
+    const repo = record.issue?.repo || remoteInfo.repo;
+    const issueNum = record.issue?.number || state.issue?.number || 0;
+
+    syncWorkflowDashboard(rootDir, {
+      owner,
+      repo,
+      issueNumber: issueNum,
+      issueTitle: record.issue?.title || state.issue?.title,
+      activeBranch: state.activeBranch,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: record.intake === "READY" ? "INTAKE_AUTHORIZED" : "BLOCKED",
+      summary: record.reason || (record.intake === "READY" ? `Issue #${issueNum} verified OPEN. Authorized for Intake.` : "Intake blocked."),
+      details: {
+        validation: record.validation,
+        intake: record.intake,
+        snapshot: record.issueSnapshot,
+        reason: record.reason,
+      },
+    });
+
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "issue_validation_recorded",
+        decision: record.intake === "READY" ? "allow" : "deny",
+        details: {
+          validation: record.validation,
+          intake: record.intake,
+          issueNumber: issueNum,
+          snapshot: record.issueSnapshot,
+          reason: record.reason,
+        },
+      },
+      rootDir
+    );
+
+    return state;
+  }
+
+  /**
+   * Atomically authorizes the intake stage for an issue and persists
+   * state.json, dashboard.json, and audit.jsonl in one unified commit.
+   */
   static authorizeIntake(
     rootDir: string,
     issue: FetchedIssueData,
@@ -193,6 +303,9 @@ export class StateController {
     }
 
     // 1. Update state.json
+    state.issueValidation = "PASS";
+    state.intakeEligibility = "READY";
+    state.issueSnapshot = cacheFilePath;
     state.issue = {
       owner: issue.owner,
       repo: issue.repo,
