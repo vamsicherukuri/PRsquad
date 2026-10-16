@@ -26,7 +26,7 @@
  *   R20: Multi-Commit AST Symbol Sweep Diff Range Truncation
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -436,12 +436,12 @@ async function runReproSuite() {
   // R14: Stale QA & Reviewer Evidence Rejection at PR Gate
   // -------------------------------------------------------------------------
   {
+    const stateFile = path.join(REPO_ROOT, ".gated-change", "state.json");
     const dashFile = path.join(REPO_ROOT, ".gated-change", "dashboard.json");
-    let savedDash: string | null = null;
-    if (fs.existsSync(dashFile)) savedDash = fs.readFileSync(dashFile, "utf-8");
+    const savedStateRaw = fs.existsSync(stateFile) ? fs.readFileSync(stateFile, "utf-8") : null;
+    const savedDash = fs.existsSync(dashFile) ? fs.readFileSync(dashFile, "utf-8") : null;
 
     const preState = loadState(REPO_ROOT);
-    const savedBranch = preState.activeBranch;
     preState.activeBranch = "fix/issue-42";
     preState.issue = { owner: "test", repo: "test", number: 42, title: "Test issue" };
     saveState(preState, REPO_ROOT);
@@ -454,7 +454,14 @@ async function runReproSuite() {
       status: "ACTIVE",
     }, REPO_ROOT);
 
-    const staleSha = "0000000000000000000000000000000000000000";
+    let staleSha = "0000000000000000000000000000000000000000";
+    try {
+      staleSha = execFileSync("git", ["rev-parse", "--verify", "HEAD~1^{commit}"], {
+        cwd: REPO_ROOT,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+    } catch {}
     syncWorkflowDashboard(REPO_ROOT, {
       issueNumber: 42,
       phase: "qa",
@@ -469,13 +476,21 @@ async function runReproSuite() {
     });
 
     const prResult = createPullRequest({ preferredDir: REPO_ROOT });
-    const isVulnerable = prResult.success === true || !prResult.error?.includes("STALE_EVIDENCE");
+    const isVulnerable =
+      prResult.success === true ||
+      !prResult.error?.includes("STALE_EVIDENCE") ||
+      !prResult.error?.includes("QA verification was executed against commit");
 
     // Restore
-    preState.activeBranch = savedBranch;
-    saveState(preState, REPO_ROOT);
     revokeApprovalLock("REVOKED", REPO_ROOT);
-    if (savedDash) fs.writeFileSync(dashFile, savedDash, "utf-8");
+    if (savedStateRaw !== null) {
+      fs.writeFileSync(stateFile, savedStateRaw, "utf-8");
+    }
+    if (savedDash !== null) {
+      fs.writeFileSync(dashFile, savedDash, "utf-8");
+    } else if (fs.existsSync(dashFile)) {
+      fs.unlinkSync(dashFile);
+    }
 
     recordRepro(
       "R14",

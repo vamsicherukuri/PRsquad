@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir, homedir } from "node:os";
 import { execFileSync, execSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { findGatedChangeDir, getRepoRoot } from "./stateStore.js";
+import { findGatedChangeDir, getRepoRoot, loadState, saveState } from "./stateStore.js";
 
 export interface PhaseRecord {
   status: string;
@@ -62,17 +62,87 @@ export interface DashboardState {
 export const DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 
 /**
- * Safely loads the local dashboard state from .gated-change/dashboard.json.
+ * In-memory projection of the workflow dashboard derived directly from
+ * state.json (Single Source of Truth) + Copilot App SQLite telemetry.
+ * Does NOT write any files to disk.
+ */
+export function getWorkflowDashboard(rootDir: string = getRepoRoot()): DashboardState {
+  const state = loadState(rootDir);
+  const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
+
+  const phases: DashboardState["phases"] = { ...(state.phases || {}) };
+
+  // If phases are not yet populated in state.phases, derive default phase statuses from state machine properties
+  if (!phases.intake && state.issue?.number) {
+    phases.intake = {
+      status: state.intakeEligibility === "READY" ? "READY" : (state.intakeEligibility === "BLOCKED" ? "BLOCKED" : "PENDING"),
+      summary: state.pauseReason || (state.intakeEligibility === "READY" ? "Intake verified." : undefined),
+    };
+  }
+  if (!phases.architect && (state.approvedPlan || state.phase === "ARCHITECTING" || state.phase === "AWAITING_SCOPE_APPROVAL")) {
+    phases.architect = {
+      status: state.approvedPlan ? "PLAN_READY" : "IN_PROGRESS",
+      details: state.approvedPlan ? { plan: state.approvedPlan } : undefined,
+    };
+  }
+  if (!phases.scopeGate && (state.humanApproval || state.approvedScope)) {
+    phases.scopeGate = {
+      status: state.humanApproval ? "APPROVED" : "PENDING",
+      credits: 0.0,
+      details: { approvedScope: state.approvedScope, baseRef: state.baseRef },
+    };
+  }
+  if (!phases.developer && state.phase === "DEVELOPING") {
+    phases.developer = {
+      status: "IN_PROGRESS",
+    };
+  }
+
+  return {
+    issueNumber: state.issue?.number || 0,
+    issueTitle: state.issue?.title,
+    owner: state.issue?.owner || "",
+    repo: state.issue?.repo || "",
+    activeBranch: state.activeBranch,
+    commentId: state.commentId ?? null,
+    sessionId: state.sessionId,
+    startEventId: state.startEventId || tele?.firstEventId,
+    telemetry: tele || undefined,
+    lastUpdated: state.updatedAt || new Date().toISOString(),
+    phases,
+  };
+}
+
+/**
+ * Loads the workflow dashboard.
+ * Pure in-memory projection derived from state.json and telemetry.
+ * Safe fallback to legacy dashboard.json if state.json does not exist.
  */
 export function loadDashboardState(rootDir: string = getRepoRoot()): DashboardState | null {
   try {
     const gatedDir = findGatedChangeDir(rootDir);
     const dashboardFile = join(gatedDir, "dashboard.json");
+    let legacyPhases: Record<string, PhaseRecord> = {};
     if (existsSync(dashboardFile)) {
+      try {
+        const legacy = JSON.parse(readFileSync(dashboardFile, "utf-8"));
+        if (legacy.phases) legacyPhases = legacy.phases;
+      } catch {}
+    }
+
+    const stateFile = join(gatedDir, "state.json");
+    if (!existsSync(stateFile) && existsSync(dashboardFile)) {
       return JSON.parse(readFileSync(dashboardFile, "utf-8"));
     }
-  } catch {}
-  return null;
+
+    const dash = getWorkflowDashboard(rootDir);
+    if (Object.keys(legacyPhases).length > 0) {
+      dash.phases = { ...legacyPhases, ...dash.phases };
+    }
+    return dash;
+  } catch {
+    return null;
+  }
 }
 
 function getStatusBadge(status?: string): string {
@@ -95,119 +165,6 @@ function renderCredits(credits?: number): string {
   return `**${credits.toFixed(2)} AIU**`;
 }
 
-export function renderPipelineMermaid(data?: DashboardState | null): string {
-  const p = data?.phases || {};
-  const t = data?.telemetry;
-  const subagents = t?.subagents || [];
-
-  const intakeCredits = p.intake?.credits !== undefined ? p.intake.credits : subagents[0]?.credits;
-  const architectCredits = p.architect?.credits !== undefined ? p.architect.credits : subagents[1]?.credits;
-  const devCredits = p.developer?.credits !== undefined ? p.developer.credits : subagents[2]?.credits;
-  const qaCredits = p.qa?.credits !== undefined ? p.qa.credits : subagents[3]?.credits;
-  const reviewerCredits = p.reviewer?.credits !== undefined ? p.reviewer.credits : subagents[4]?.credits;
-
-  // Determine linear stage index (0 to 7) based on validated phase statuses
-  let stageIdx = 0;
-  if (p.mergeGate?.status === "PR_CREATED" || p.mergeGate?.status === "PR_OPEN" || p.mergeGate?.status === "READY_FOR_MERGE") {
-    stageIdx = 7;
-  } else if (p.reviewer?.status === "CLEAR" || p.reviewer?.status === "APPROVED") {
-    stageIdx = 6;
-  } else if (p.qa?.status === "PASS") {
-    stageIdx = 5;
-  } else if (p.developer?.status === "IMPLEMENTED") {
-    stageIdx = 4;
-  } else if (p.scopeGate?.status === "APPROVED") {
-    stageIdx = 3;
-  } else if (p.architect?.status === "PLAN_READY") {
-    stageIdx = 2;
-  } else if (p.intake?.status === "READY") {
-    stageIdx = 1;
-  }
-
-  // Node 1: Triage
-  const n1Text = stageIdx > 0
-    ? `1. Triage${intakeCredits !== undefined ? `<br/>✅ ${intakeCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
-    : `1. Triage<br/>⏳ RUNNING`;
-  const n1Class = stageIdx > 0 ? "done" : "active";
-
-  // Node 2: Architect
-  const n2Text = stageIdx > 1
-    ? `2. Architect${architectCredits !== undefined ? `<br/>✅ ${architectCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
-    : stageIdx === 1
-    ? `2. Architect<br/>⏳ RUNNING`
-    : `2. Architect<br/>⚪ QUEUED`;
-  const n2Class = stageIdx > 1 ? "done" : stageIdx === 1 ? "active" : "queued";
-
-  // Node 3: Scope Gate (Hexagon)
-  const n3Text = stageIdx >= 3
-    ? `3. Scope Gate<br/>✅ APPROVED`
-    : stageIdx === 2
-    ? `3. Scope Gate<br/>🔒 AWAITING APPROVAL`
-    : `3. Scope Gate<br/>⚪ QUEUED`;
-  const n3Class = stageIdx >= 3 ? "gateDone" : stageIdx === 2 ? "gateActive" : "gatePending";
-
-  // Node 4: Developer
-  const n4Text = stageIdx > 3
-    ? `4. Developer${devCredits !== undefined ? `<br/>✅ ${devCredits.toFixed(2)} AIU` : "<br/>✅ DONE"}`
-    : stageIdx === 3
-    ? `4. Developer<br/>⏳ RUNNING`
-    : `4. Developer<br/>⚪ QUEUED`;
-  const n4Class = stageIdx > 3 ? "done" : stageIdx === 3 ? "active" : "queued";
-
-  // Node 5: QA Test
-  const isQaFail = p.qa?.status === "FAIL";
-  const n5Text = stageIdx > 4
-    ? `5. QA Test${qaCredits !== undefined ? `<br/>✅ ${qaCredits.toFixed(2)} AIU` : "<br/>✅ PASS"}`
-    : isQaFail
-    ? `5. QA Test<br/>❌ FAILED`
-    : stageIdx === 4
-    ? `5. QA Test<br/>⏳ RUNNING`
-    : `5. QA Test<br/>⚪ QUEUED`;
-  const n5Class = stageIdx > 4 ? "done" : isQaFail ? "failed" : stageIdx === 4 ? "active" : "queued";
-
-  // Node 6: Code Review
-  const isRevConcerns = p.reviewer?.status === "CONCERNS";
-  const n6Text = stageIdx > 5
-    ? `6. Code Review${reviewerCredits !== undefined ? `<br/>✅ ${reviewerCredits.toFixed(2)} AIU` : "<br/>✅ CLEAR"}`
-    : isRevConcerns
-    ? `6. Code Review<br/>⚠️ CONCERNS`
-    : stageIdx === 5
-    ? `6. Code Review<br/>⏳ RUNNING`
-    : `6. Code Review<br/>⚪ QUEUED`;
-  const n6Class = stageIdx > 5 ? "done" : isRevConcerns ? "concerns" : stageIdx === 5 ? "active" : "queued";
-
-  // Node 7: PR (Hexagon)
-  const n7Text = stageIdx === 7
-    ? `7. PR<br/>✅ PR OPEN`
-    : stageIdx === 6
-    ? `7. PR<br/>🚀 READY FOR PR`
-    : `7. PR<br/>⚪ QUEUED`;
-  const n7Class = stageIdx === 7 ? "prDone" : stageIdx === 6 ? "prReady" : "gatePending";
-
-  let out = "```mermaid\n";
-  out += "flowchart LR\n";
-  out += "    classDef done fill:#00b862,stroke:#009e54,color:#ffffff;\n";
-  out += "    classDef gateDone fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
-  out += "    classDef gateActive fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
-  out += "    classDef gatePending fill:#272f3d,stroke:#3b4556,color:#94a3b8;\n";
-  out += "    classDef active fill:#2563eb,stroke:#1d4ed8,color:#ffffff;\n";
-  out += "    classDef queued fill:#272f3d,stroke:#3b4556,color:#94a3b8;\n";
-  out += "    classDef failed fill:#ef4444,stroke:#dc2626,color:#ffffff;\n";
-  out += "    classDef concerns fill:#f59e0b,stroke:#d97706,color:#ffffff;\n";
-  out += "    classDef prReady fill:#00b862,stroke:#009e54,color:#ffffff;\n";
-  out += "    classDef prDone fill:#00b862,stroke:#009e54,color:#ffffff;\n\n";
-
-  out += `    N1["${n1Text}"]:::${n1Class} --> N2["${n2Text}"]:::${n2Class}\n`;
-  out += `    N2 --> N3{{"${n3Text}"}}:::${n3Class}\n`;
-  out += `    N3 --> N4["${n4Text}"]:::${n4Class}\n`;
-  out += `    N4 --> N5["${n5Text}"]:::${n5Class}\n`;
-  out += `    N5 --> N6["${n6Text}"]:::${n6Class}\n`;
-  out += `    N6 --> N7{{"${n7Text}"}}:::${n7Class}\n`;
-  out += "```\n";
-
-  return out;
-}
-
 export function formatChatCreditMeter(data?: DashboardState | null): string {
   if (!data) return "";
   const t = data.telemetry;
@@ -216,61 +173,6 @@ export function formatChatCreditMeter(data?: DashboardState | null): string {
     : "0.00 AIU";
   const branch = data.activeBranch || (data.issueNumber ? `fix/issue-${data.issueNumber}` : "main");
   return `> ⚡ **Live AI Credit Burn:** **${credits}** · **Branch:** \`${branch}\` · *(Visual Pipeline: [Canvas Panel](http://localhost:54321))*\n`;
-}
-
-export function formatChatCreditMeterTable(data?: DashboardState | null): string {
-  if (!data) return "";
-  const t = data.telemetry;
-  if (!t || t.turns === 0) return "";
-  const p = data.phases || {};
-  const subagents = t.subagents || [];
-
-  const intakeCredits = p.intake?.credits !== undefined ? p.intake.credits : subagents[0]?.credits;
-  const architectCredits = p.architect?.credits !== undefined ? p.architect.credits : subagents[1]?.credits;
-  const devCredits = p.developer?.credits !== undefined ? p.developer.credits : subagents[2]?.credits;
-  const qaCredits = p.qa?.credits !== undefined ? p.qa.credits : subagents[3]?.credits;
-  const reviewerCredits = p.reviewer?.credits !== undefined ? p.reviewer.credits : subagents[4]?.credits;
-
-  const intakeStatus = p.intake?.status || "PENDING";
-  const architectStatus = p.architect?.status || "PENDING";
-  const devStatus = p.developer?.status || "PENDING";
-  const qaStatus = p.qa?.status || "PENDING";
-  const reviewerStatus = p.reviewer?.status || "PENDING";
-
-  let out = `### ⚡ Actual AI Credit & Token Consumption (Ground-Truth Meter)\n\n`;
-  out += `> **Billing Model:** \`${t.model}\`  \n`;
-  out += `> **Total AI Credits Consumed:** **${t.actualAiCredits.toFixed(2)} AIU** *(Official Copilot AI Units)*  \n`;
-  out += `> **Prompt Cache Hit Rate:** **${t.cacheHitRatePercent}%** *(Saved ${t.cacheReadTokens.toLocaleString()} cold input tokens)*  \n`;
-  out += `> **Model Interaction Turns:** ${t.turns} turns recorded across active specialists  \n`;
-  out += `> **Mechanical Guardrails:** **0.00 AIU / 0 Tokens** *(Deterministic)*  \n\n`;
-
-  out += `| Ground-Truth Token Metric | Actual Count | Notes / Billing Weight |\n`;
-  out += `|:---|:---:|:---|\n`;
-  out += `| **Raw Input Tokens** | ${t.inputTokens.toLocaleString()} | Cumulative prompt context evaluated across turns |\n`;
-  out += `| ↳ *Cache Read (Hit)* | ${t.cacheReadTokens.toLocaleString()} | Billed at ~90% prompt-cache discount |\n`;
-  out += `| ↳ *Cache Write (Miss)* | ${t.cacheWriteTokens.toLocaleString()} | Initial prompt cache population |\n`;
-  out += `| **Output Tokens** | ${t.outputTokens.toLocaleString()} | Completion tokens generated across ${t.turns} turns |\n`;
-  if (t.reasoningTokens > 0) {
-    out += `| **Reasoning Tokens** | ${t.reasoningTokens.toLocaleString()} | Extended thinking / reasoning capacity |\n`;
-  }
-  out += `| **Mechanical Guardrails** | **0 tokens / 0 AIU** | Scope Gate, Sandbox, PR Creator, Dashboard Sync (Deterministic) |\n`;
-  out += `| **Total Billed AI Credits** | **${t.actualAiCredits.toFixed(2)} AIU** | Ground-truth measurement via Copilot App session store |\n\n`;
-
-  out += `#### 📊 Specialist Phase Breakdown\n\n`;
-  out += `| Phase | Specialist / Actor | Status | Actual AI Credits |\n`;
-  out += `|:---|:---|:---:|:---:|\n`;
-  if (t.controllerCredits !== undefined && t.controllerCredits > 0) {
-    out += `| **0. PRSquad Orchestrator** | \`@prsquad\` | ⏳ \`IN_PROGRESS\` | **${t.controllerCredits.toFixed(2)} AIU** |\n`;
-  }
-  out += `| **1. Issue Triage** | \`@prsquad-triage\` | ${getStatusBadge(intakeStatus)} | ${renderCredits(intakeCredits)} |\n`;
-  out += `| **2. Architecture Plan** | \`@prsquad-architect\` | ${getStatusBadge(architectStatus)} | ${renderCredits(architectCredits)} |\n`;
-  out += `| **3. Scope Approval Gate** | **Human Approver** | ${getStatusBadge(p.scopeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
-  out += `| **4. Implementation** | \`@prsquad-dev\` | ${getStatusBadge(devStatus)} | ${renderCredits(devCredits)} |\n`;
-  out += `| **5. QA Verification** | \`@prsquad-qa\` | ${getStatusBadge(qaStatus)} | ${renderCredits(qaCredits)} |\n`;
-  out += `| **6. Security & Code Review** | \`@prsquad-review\` | ${getStatusBadge(reviewerStatus)} | ${renderCredits(reviewerCredits)} |\n`;
-  out += `| **7. Pull Request** | **Human Approver** | ${getStatusBadge(p.mergeGate?.status || "PENDING")} | **0.00 AIU** *(Deterministic)* |\n`;
-
-  return out;
 }
 
 export function getGroundTruthTelemetry(sessionId?: string, startEventId: number = 0): SessionTelemetry | null {
@@ -642,63 +544,41 @@ export function syncWorkflowDashboard(
   }
 ): DashboardState | null {
   try {
-    const gatedDir = findGatedChangeDir(rootDir);
-    const dashboardFile = join(gatedDir, "dashboard.json");
+    const state = loadState(rootDir);
 
-    let current: DashboardState = {
-      issueNumber: update.issueNumber || 0,
-      issueTitle: update.issueTitle,
-      owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "prsquad",
-      activeBranch: update.activeBranch,
-      sessionId: update.sessionId,
-      lastUpdated: new Date().toISOString(),
-      phases: {},
-    };
-
-    if (existsSync(dashboardFile)) {
-      try {
-        const raw = readFileSync(dashboardFile, "utf-8");
-        const parsed = JSON.parse(raw);
-        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
-        current = {
-          ...parsed,
-          phases: isSameIssue ? { ...parsed.phases } : {},
-        };
-      } catch {}
-    }
-
-    if (update.owner) current.owner = update.owner;
-    if (update.repo) current.repo = update.repo;
+    if (update.owner) state.issue.owner = update.owner;
+    if (update.repo) state.issue.repo = update.repo;
     if (update.issueNumber && update.issueNumber > 0 && update.issueNumber !== 999) {
-      current.issueNumber = update.issueNumber;
+      state.issue.number = update.issueNumber;
     }
     if (update.issueTitle && update.issueTitle !== "Test Billing Issue") {
-      current.issueTitle = update.issueTitle;
+      state.issue.title = update.issueTitle;
     }
     if (update.activeBranch && !update.activeBranch.includes("999")) {
-      current.activeBranch = update.activeBranch;
+      state.activeBranch = update.activeBranch;
     }
     if (update.sessionId) {
-      current.sessionId = update.sessionId;
+      state.sessionId = update.sessionId;
     }
-    current.lastUpdated = new Date().toISOString();
 
     // Query Ground-Truth Telemetry from Copilot App session store
-    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
     if (tele) {
-      if (!current.startEventId && tele.firstEventId) {
-        current.startEventId = tele.firstEventId;
+      if (!state.startEventId && tele.firstEventId) {
+        state.startEventId = tele.firstEventId;
       }
-      current.telemetry = tele;
+    }
+
+    if (!state.phases) {
+      state.phases = {};
     }
 
     if (update.phase) {
-      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      const existingPhase = state.phases[update.phase] || { status: "PENDING" };
 
       // Calculate incremental phase credits
       let phaseCredits = existingPhase.credits;
-      if (current.telemetry && current.telemetry.actualAiCredits !== undefined) {
+      if (tele && tele.actualAiCredits !== undefined) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0.0;
         } else {
@@ -710,13 +590,13 @@ export function syncWorkflowDashboard(
             reviewer: 4,
           };
           const subagentIdx = subagentIdxMap[update.phase];
-          if (subagentIdx !== undefined && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
-            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          if (subagentIdx !== undefined && tele.subagents && tele.subagents[subagentIdx]) {
+            phaseCredits = tele.subagents[subagentIdx].credits;
           } else {
-            const recordedCredits = Object.entries(current.phases)
+            const recordedCredits = Object.entries(state.phases)
               .filter(([k]) => k !== update.phase)
               .reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            const computed = Math.max(0, Math.round((tele.actualAiCredits - recordedCredits) * 100) / 100);
             if (phaseCredits === undefined || update.status !== "IN_PROGRESS") {
               phaseCredits = computed;
             }
@@ -724,7 +604,7 @@ export function syncWorkflowDashboard(
         }
       }
 
-      current.phases[update.phase] = {
+      state.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
@@ -738,8 +618,8 @@ export function syncWorkflowDashboard(
 
       // If scopeGate carries the architect plan, mirror it into the architect phase
       if (update.phase === "scopeGate" && update.details?.plan) {
-        const existingArch = current.phases.architect || { status: "PLAN_READY" };
-        current.phases.architect = {
+        const existingArch = state.phases.architect || { status: "PLAN_READY" };
+        state.phases.architect = {
           ...existingArch,
           status: "PLAN_READY",
           summary: existingArch.summary || "Technical plan approved at Scope Approval Gate",
@@ -751,8 +631,31 @@ export function syncWorkflowDashboard(
       }
     }
 
-    // Save dashboard state to disk locally
-    writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    // Persist single source of truth in state.json
+    saveState(state, rootDir);
+
+    // If legacy dashboard.json is present, remove it to eliminate split-brain synchronization risk
+    try {
+      const gatedDir = findGatedChangeDir(rootDir);
+      const legacyDash = join(gatedDir, "dashboard.json");
+      if (existsSync(legacyDash)) {
+        unlinkSync(legacyDash);
+      }
+    } catch {}
+
+    const current: DashboardState = {
+      issueNumber: state.issue?.number || 0,
+      issueTitle: state.issue?.title,
+      owner: state.issue?.owner || update.owner || "vamsicherukuri",
+      repo: state.issue?.repo || update.repo || "prsquad",
+      activeBranch: state.activeBranch || update.activeBranch,
+      commentId: state.commentId ?? null,
+      sessionId: state.sessionId,
+      startEventId: state.startEventId,
+      telemetry: tele || undefined,
+      lastUpdated: state.updatedAt,
+      phases: state.phases as any,
+    };
 
     const isTest =
       process.env.NODE_ENV === "test" ||
@@ -780,7 +683,10 @@ export function syncWorkflowDashboard(
 
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
-      writeFileSync(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+      if (current.commentId && current.commentId !== state.commentId) {
+        state.commentId = current.commentId;
+        saveState(state, rootDir);
+      }
     }
 
     // Optional webhook dispatch (e.g. Slack/Teams/Datadog or custom webhook endpoint)
@@ -934,44 +840,53 @@ export function extractPlanMarkdown(text: string): string {
   return clean.trim();
 }
 
-export function extractDeveloperDetails(promptOrText: string, repoRoot?: string): Record<string, any> {
+export function extractDeveloperDetails(promptOrText: any, repoRoot?: string): Record<string, any> {
   const details: Record<string, any> = {
     status: "IMPLEMENTED",
   };
 
   if (!promptOrText) return details;
 
-  // 1. Try parsing JSON handoff
-  const handoffIdx = promptOrText.indexOf("DEVELOPER HANDOFF");
-  if (handoffIdx !== -1) {
-    const jsonStart = promptOrText.indexOf("{", handoffIdx);
-    if (jsonStart !== -1) {
-      const jsonEnd = promptOrText.indexOf("\n}\n", jsonStart);
-      const candidateStr = jsonEnd !== -1
-        ? promptOrText.slice(jsonStart, jsonEnd + 2)
-        : promptOrText.slice(jsonStart, promptOrText.lastIndexOf("}") + 1);
+  const rawText = typeof promptOrText === "string"
+    ? promptOrText
+    : promptOrText.textResultForLlm || promptOrText.content || JSON.stringify(promptOrText);
 
-      try {
-        const parsed = JSON.parse(candidateStr);
-        if (parsed.status) details.status = parsed.status;
-        if (parsed.filesChanged) details.changedFiles = parsed.filesChanged;
-        if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
-        if (parsed.validationRun) details.validationRun = parsed.validationRun;
-        if (parsed.assumptions) details.assumptions = parsed.assumptions;
-        if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
-        if (parsed.diffReference?.headRef) details.commitSha = parsed.diffReference.headRef;
-        if (parsed.diffReference?.baseRef) details.baseRef = parsed.diffReference.baseRef;
-      } catch {}
-    }
+  // 1. Try parsing JSON handoff
+  const handoffIdx = rawText.indexOf("DEVELOPER HANDOFF");
+  const searchFrom = handoffIdx !== -1 ? handoffIdx : 0;
+  const jsonStart = rawText.indexOf("{", searchFrom);
+  if (jsonStart !== -1) {
+    const jsonEnd = handoffIdx !== -1 ? rawText.indexOf("\n}\n", jsonStart) : -1;
+    const candidateStr = jsonEnd !== -1
+      ? rawText.slice(jsonStart, jsonEnd + 2)
+      : rawText.slice(jsonStart, rawText.lastIndexOf("}") + 1);
+
+    try {
+      const parsed = JSON.parse(candidateStr);
+      if (parsed.status) details.status = parsed.status;
+      if (parsed.filesChanged || parsed.changedFiles) {
+        details.changedFiles = parsed.filesChanged || parsed.changedFiles;
+      }
+      if (parsed.testsAddedOrChanged) details.testsAddedOrChanged = parsed.testsAddedOrChanged;
+      if (parsed.validationRun) details.validationRun = parsed.validationRun;
+      if (parsed.assumptions) details.assumptions = parsed.assumptions;
+      if (parsed.residualRisk) details.residualRisk = parsed.residualRisk;
+      if (parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef) {
+        details.commitSha = parsed.diffReference?.headRef || parsed.commitSha || parsed.headRef;
+      }
+      if (parsed.diffReference?.baseRef || parsed.baseRef) {
+        details.baseRef = parsed.diffReference?.baseRef || parsed.baseRef;
+      }
+    } catch {}
   }
 
   // 2. Extract commit SHAs if not found in JSON
   if (!details.commitSha) {
-    const headMatch = promptOrText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
+    const headMatch = rawText.match(/HEAD REF:\s*([0-9a-f]{7,40})/i);
     if (headMatch) details.commitSha = headMatch[1];
   }
   if (!details.baseRef) {
-    const baseMatch = promptOrText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
+    const baseMatch = rawText.match(/BASE REF:\s*([0-9a-f]{7,40})/i);
     if (baseMatch) details.baseRef = baseMatch[1];
   }
 

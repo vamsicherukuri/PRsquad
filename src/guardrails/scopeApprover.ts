@@ -8,8 +8,6 @@
  * Enforces the core invariant: "The model cannot approve itself."
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { execSync } from "node:child_process";
 import {
@@ -19,7 +17,7 @@ import {
   saveApprovalLock,
   appendAuditLog,
 } from "./stateStore.js";
-import { syncWorkflowDashboard } from "./issueDashboard.js";
+import { syncWorkflowDashboard, loadDashboardState } from "./issueDashboard.js";
 import type { ApprovalLock } from "./types.js";
 
 export interface ScopeApprovalOptions {
@@ -92,13 +90,7 @@ export function approveScopeGate(options: ScopeApprovalOptions = {}): ScopeAppro
   const repoRoot = getRepoRoot(options.preferredDir || process.cwd());
   const state = loadState(repoRoot);
 
-  const dashFile = join(repoRoot, ".gated-change", "dashboard.json");
-  let dashData: any = null;
-  if (existsSync(dashFile)) {
-    try {
-      dashData = JSON.parse(readFileSync(dashFile, "utf-8"));
-    } catch {}
-  }
+  const dashData = loadDashboardState(repoRoot);
 
   // 1. Resolve target scope: CLI option -> state -> architect plan -> intake declared scope
   const targetScope =

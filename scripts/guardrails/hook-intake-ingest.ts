@@ -6,11 +6,11 @@
  */
 
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { fetchIssueDeterministic, formatIntakePayload } from "../../src/guardrails/ingestIssue.js";
 import { loadState, saveState, appendAuditLog, isAgentMatch, getRepoOwnerAndName, getRepoRoot } from "../../src/guardrails/stateStore.js";
+import { StateController } from "../../src/guardrails/stateController.js";
 import { syncWorkflowDashboard } from "../../src/guardrails/issueDashboard.js";
-import type { HookInput, HookOutput } from "../../src/guardrails/types.js";
+import type { HookInput } from "../../src/guardrails/types.js";
 
 async function main() {
   let rawInput = "";
@@ -42,34 +42,9 @@ async function main() {
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
 
-    // Extract issue number accurately
-    let issueNum = 1;
-    const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
-    const textNum = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
-    const nameNum = String(toolArgs.name || "").match(/(?:issue-?|#)(\d+)/i);
-    if (jsonNum) {
-      issueNum = parseInt(jsonNum[1], 10);
-    } else if (textNum) {
-      issueNum = parseInt(textNum[1], 10);
-    } else if (nameNum) {
-      issueNum = parseInt(nameNum[1], 10);
-    } else if (state.issue?.number && state.issue.number > 0) {
-      issueNum = state.issue.number;
-    } else {
-      // Fallback: extract from repoRoot path or active git branch
-      const pathNum = repoRoot.match(/(?:issue-?|#)(\d+)/i);
-      if (pathNum) {
-        issueNum = parseInt(pathNum[1], 10);
-      } else {
-        try {
-          const branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-          const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
-          if (branchNum) {
-            issueNum = parseInt(branchNum[1], 10);
-          }
-        } catch {}
-      }
-    }
+    // Extract issue number accurately using StateController
+    const resolvedNum = StateController.resolveIssueFromSession(effectiveCwd, prompt, repoRoot, state);
+    const issueNum = resolvedNum && resolvedNum > 0 ? resolvedNum : 1;
 
     // Extract owner and repo dynamically from remote origin or prompt
     const isValidRepoPart = (s?: string) =>
@@ -85,11 +60,11 @@ async function main() {
 
     const remoteInfo = getRepoOwnerAndName(repoRoot);
     let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") ||
-                (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") ||
-                "ADO2GH-Migration";
+                (isValidRepoPart(state.issue?.owner) ? state.issue.owner : "") ||
+                "vamsicherukuri";
     let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") ||
-               (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") ||
-               "StarReads";
+               (isValidRepoPart(state.issue?.repo) ? state.issue.repo : "") ||
+               "prsquad";
 
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
@@ -108,25 +83,10 @@ async function main() {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
 
       // Deterministic lifecycle guardrail: strictly require OPEN
-      if (issueData.state && issueData.state !== "OPEN") {
-        state.issue = { owner, repo, number: issueData.number, title: issueData.title };
-        state.phase = "PAUSED";
-        saveState(state, repoRoot);
-
-        appendAuditLog({
-          sessionId: state.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "deterministic_closed_issue_block",
-          decision: "deny",
-          details: {
-            issueNumber: issueData.number,
-            title: issueData.title,
-            state: issueData.state,
-          },
-        }, repoRoot);
-
+      if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
+        StateController.pauseWorkflow(repoRoot, reason, issueData.number, input.sessionId || state.sessionId);
+
         const output = {
           decision: "deny",
           permissionDecision: "deny",
@@ -160,8 +120,8 @@ async function main() {
         activeBranch: `fix/issue-${issueData.number}`,
         sessionId: input.sessionId || state.sessionId,
         phase: "intake",
-        status: "READY",
-        summary: `Deterministic triage verified OPEN status with verified criteria`,
+        status: "INTAKE_AUTHORIZED",
+        summary: `Deterministic triage authorized for issue #${issueData.number}`,
       });
 
       appendAuditLog({

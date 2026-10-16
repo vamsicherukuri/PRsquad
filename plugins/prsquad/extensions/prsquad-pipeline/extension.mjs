@@ -79,6 +79,14 @@ function getLatestWorktreeDir() {
 function findDashboardJson() {
 	const latestWorktree = getLatestWorktreeDir();
 	const candidates = [
+		latestWorktree ? join(latestWorktree, ".gated-change", "state.json") : null,
+		resolve(__dirname, "../../../..", ".gated-change", "state.json"),
+		resolve(process.cwd(), ".gated-change", "state.json"),
+		resolve(process.cwd(), "..", ".gated-change", "state.json"),
+		join(userHome, "factory", "sample repos", "prsquad", ".gated-change", "state.json"),
+		join(userHome, "Documents", "prsquad", ".gated-change", "state.json"),
+		join(userHome, "factory", "sample repos", "gated-fix-pipeline", ".gated-change", "state.json"),
+		join(userHome, "Documents", "gated-fix-pipeline", ".gated-change", "state.json"),
 		latestWorktree ? join(latestWorktree, ".gated-change", "dashboard.json") : null,
 		resolve(__dirname, "../../../..", ".gated-change", "dashboard.json"),
 		resolve(process.cwd(), ".gated-change", "dashboard.json"),
@@ -96,7 +104,18 @@ function findDashboardJson() {
 				if (cachedDashboard.path === p && cachedDashboard.mtime === stat.mtimeMs && cachedDashboard.data) {
 					return cachedDashboard.data;
 				}
-				const data = JSON.parse(readFileSync(p, "utf-8"));
+				const raw = JSON.parse(readFileSync(p, "utf-8"));
+				const data = p.endsWith("state.json") ? {
+					issueNumber: raw.issue?.number || 0,
+					issueTitle: raw.issue?.title,
+					owner: raw.issue?.owner || "",
+					repo: raw.issue?.repo || "",
+					activeBranch: raw.activeBranch,
+					commentId: raw.commentId ?? null,
+					sessionId: raw.sessionId,
+					lastUpdated: raw.updatedAt,
+					phases: raw.phases || {},
+				} : raw;
 				cachedDashboard = { path: p, mtime: stat.mtimeMs, data };
 				return data;
 			} catch (_) {}
@@ -143,8 +162,7 @@ function getHtmlContent() {
 		resolve(__dirname, "../../../..", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
 		resolve(__dirname, "../../../..", ".github", "extensions", "gated-change-pipeline", "canvas.html"),
 		join(userHome, "Documents", "prsquad", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "Documents", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html"),
-		join(userHome, "factory", "sample repos", "copilot-worktrees", "gated-fix-pipeline", "vamsicherukuri-issue-11-scoped-read-tool-fails-to-match-multi-pa-6375d8", ".github", "extensions", "gated-change-pipeline", "canvas.html")
+		join(userHome, "Documents", "gated-fix-pipeline", ".github", "extensions", "prsquad-pipeline", "canvas.html")
 	];
 	for (const p of candidates) {
 		if (existsSync(p)) {

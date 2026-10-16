@@ -61,6 +61,27 @@ export function getRepoOwnerAndName(rootDir: string = getRepoRoot()): { owner: s
 }
 
 /**
+ * Resolves repository identity fail-closed.
+ * Throws an explicit error if neither remote origin nor state provides repository identity.
+ */
+export function requireRepoIdentity(
+  rootDir: string = getRepoRoot(),
+  state?: WorkflowState
+): { owner: string; repo: string } {
+  const remote = getRepoOwnerAndName(rootDir);
+  const owner = state?.issue?.owner || remote.owner;
+  const repo = state?.issue?.repo || remote.repo;
+
+  if (!owner || !repo) {
+    throw new Error(
+      "MISSING_REPOSITORY_CONTEXT: Unable to determine GitHub owner/repository from Git remote origin or issue state. Execution halted fail-closed."
+    );
+  }
+
+  return { owner, repo };
+}
+
+/**
  * Normalizes any Windows or POSIX path into a clean, relative POSIX path
  * from the repository root (e.g. "src/auth/service.ts").
  */

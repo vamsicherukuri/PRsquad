@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 
 // scripts/guardrails/hook-intake-ingest.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-import { execSync as execSync4 } from "node:child_process";
+import { readFileSync as readFileSync5 } from "node:fs";
 
 // src/guardrails/ingestIssue.ts
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd()) {
+function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd(), includeComments = false) {
   const cacheFile = join(rootDir, ".gated-change", "issue-cache.json");
   if (existsSync(cacheFile)) {
     try {
@@ -36,26 +35,51 @@ function fetchIssueDeterministic(owner, repo, issueNumber, rootDir = process.cwd
   }
   try {
     let stdout = "";
-    if (owner && repo) {
+    const fields = includeComments ? "number,title,body,comments,labels,author,state" : "number,title,body,labels,author,state";
+    let lastError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
-        stdout = execSync(cmd, {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 1e4,
-          stdio: ["ignore", "pipe", "ignore"]
-        });
-      } catch {
+        if (owner && repo) {
+          try {
+            stdout = execFileSync(
+              "gh",
+              ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
+              {
+                cwd: rootDir,
+                encoding: "utf-8",
+                timeout: 1e4,
+                stdio: ["ignore", "pipe", "ignore"]
+              }
+            );
+          } catch (e) {
+            lastError = e;
+          }
+        }
+        if (!stdout.trim()) {
+          stdout = execFileSync(
+            "gh",
+            ["issue", "view", String(issueNumber), "--json", fields],
+            {
+              cwd: rootDir,
+              encoding: "utf-8",
+              timeout: 1e4,
+              stdio: ["ignore", "pipe", "ignore"]
+            }
+          );
+        }
+        if (stdout.trim()) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) {
+          try {
+            execSync('node -e "setTimeout(()=>{}, 300)"');
+          } catch {
+          }
+        }
       }
     }
-    if (!stdout.trim()) {
-      const fallbackCmd = `gh issue view ${issueNumber} --json number,title,body,comments,labels,author,state`;
-      stdout = execSync(fallbackCmd, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        timeout: 1e4,
-        stdio: ["ignore", "pipe", "ignore"]
-      });
+    if (!stdout.trim() && lastError) {
+      throw lastError;
     }
     const parsed = JSON.parse(stdout);
     return {
@@ -356,11 +380,15 @@ function isAgentMatch(targetAgent, expectedName) {
   return targetAgent === expectedName || targetAgent.endsWith(`:${expectedName}`) || targetAgent.endsWith(`/${expectedName}`);
 }
 
+// src/guardrails/stateController.ts
+import { existsSync as existsSync4, mkdirSync as mkdirSync2 } from "node:fs";
+import { execSync as execSync4 } from "node:child_process";
+
 // src/guardrails/issueDashboard.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3, writeFileSync as writeFileSync2, unlinkSync } from "node:fs";
 import { join as join3 } from "node:path";
 import { tmpdir, homedir as homedir2 } from "node:os";
-import { execFileSync, execSync as execSync3 } from "node:child_process";
+import { execFileSync as execFileSync2, execSync as execSync3 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
 function getStatusBadge(status) {
@@ -810,56 +838,34 @@ ${revDetails.mergeGateSummary}
 }
 function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
   try {
-    const gatedDir = findGatedChangeDir(rootDir);
-    const dashboardFile = join3(gatedDir, "dashboard.json");
-    let current = {
-      issueNumber: update.issueNumber || 0,
-      issueTitle: update.issueTitle,
-      owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "prsquad",
-      activeBranch: update.activeBranch,
-      sessionId: update.sessionId,
-      lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
-      phases: {}
-    };
-    if (existsSync3(dashboardFile)) {
-      try {
-        const raw = readFileSync3(dashboardFile, "utf-8");
-        const parsed = JSON.parse(raw);
-        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
-        current = {
-          ...parsed,
-          phases: isSameIssue ? { ...parsed.phases } : {}
-        };
-      } catch {
-      }
-    }
-    if (update.owner) current.owner = update.owner;
-    if (update.repo) current.repo = update.repo;
+    const state = loadState(rootDir);
+    if (update.owner) state.issue.owner = update.owner;
+    if (update.repo) state.issue.repo = update.repo;
     if (update.issueNumber && update.issueNumber > 0 && update.issueNumber !== 999) {
-      current.issueNumber = update.issueNumber;
+      state.issue.number = update.issueNumber;
     }
     if (update.issueTitle && update.issueTitle !== "Test Billing Issue") {
-      current.issueTitle = update.issueTitle;
+      state.issue.title = update.issueTitle;
     }
     if (update.activeBranch && !update.activeBranch.includes("999")) {
-      current.activeBranch = update.activeBranch;
+      state.activeBranch = update.activeBranch;
     }
     if (update.sessionId) {
-      current.sessionId = update.sessionId;
+      state.sessionId = update.sessionId;
     }
-    current.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
-    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
     if (tele) {
-      if (!current.startEventId && tele.firstEventId) {
-        current.startEventId = tele.firstEventId;
+      if (!state.startEventId && tele.firstEventId) {
+        state.startEventId = tele.firstEventId;
       }
-      current.telemetry = tele;
+    }
+    if (!state.phases) {
+      state.phases = {};
     }
     if (update.phase) {
-      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      const existingPhase = state.phases[update.phase] || { status: "PENDING" };
       let phaseCredits = existingPhase.credits;
-      if (current.telemetry && current.telemetry.actualAiCredits !== void 0) {
+      if (tele && tele.actualAiCredits !== void 0) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0;
         } else {
@@ -871,18 +877,18 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
             reviewer: 4
           };
           const subagentIdx = subagentIdxMap[update.phase];
-          if (subagentIdx !== void 0 && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
-            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          if (subagentIdx !== void 0 && tele.subagents && tele.subagents[subagentIdx]) {
+            phaseCredits = tele.subagents[subagentIdx].credits;
           } else {
-            const recordedCredits = Object.entries(current.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            const recordedCredits = Object.entries(state.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+            const computed = Math.max(0, Math.round((tele.actualAiCredits - recordedCredits) * 100) / 100);
             if (phaseCredits === void 0 || update.status !== "IN_PROGRESS") {
               phaseCredits = computed;
             }
           }
         }
       }
-      current.phases[update.phase] = {
+      state.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
@@ -894,8 +900,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         }
       };
       if (update.phase === "scopeGate" && update.details?.plan) {
-        const existingArch = current.phases.architect || { status: "PLAN_READY" };
-        current.phases.architect = {
+        const existingArch = state.phases.architect || { status: "PLAN_READY" };
+        state.phases.architect = {
           ...existingArch,
           status: "PLAN_READY",
           summary: existingArch.summary || "Technical plan approved at Scope Approval Gate",
@@ -906,13 +912,37 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         };
       }
     }
-    writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    saveState(state, rootDir);
+    try {
+      const gatedDir = findGatedChangeDir(rootDir);
+      const legacyDash = join3(gatedDir, "dashboard.json");
+      if (existsSync3(legacyDash)) {
+        unlinkSync(legacyDash);
+      }
+    } catch {
+    }
+    const current = {
+      issueNumber: state.issue?.number || 0,
+      issueTitle: state.issue?.title,
+      owner: state.issue?.owner || update.owner || "vamsicherukuri",
+      repo: state.issue?.repo || update.repo || "prsquad",
+      activeBranch: state.activeBranch || update.activeBranch,
+      commentId: state.commentId ?? null,
+      sessionId: state.sessionId,
+      startEventId: state.startEventId,
+      telemetry: tele || void 0,
+      lastUpdated: state.updatedAt,
+      phases: state.phases
+    };
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
     const isPrPhase = update.phase === "mergeGate" || current.phases.mergeGate?.status === "PR_OPEN" || current.phases.mergeGate?.status === "PR_CREATED" || current.phases.mergeGate?.status === "READY_FOR_MERGE" || Boolean(current.commentId);
     const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && isPrPhase && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
-      writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+      if (current.commentId && current.commentId !== state.commentId) {
+        state.commentId = current.commentId;
+        saveState(state, rootDir);
+      }
     }
     if (process.env.GATED_CHANGE_WEBHOOK_URL && !isTest) {
       try {
@@ -950,7 +980,7 @@ function postOrPatchGitHubComment(state) {
     writeFileSync2(tempPath, content, "utf-8");
     if (!state.commentId) {
       try {
-        const commentsJson = execFileSync("gh", [
+        const commentsJson = execFileSync2("gh", [
           "api",
           `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
           "--jq",
@@ -971,7 +1001,7 @@ function postOrPatchGitHubComment(state) {
     }
     if (state.commentId) {
       try {
-        execFileSync("gh", [
+        execFileSync2("gh", [
           "api",
           `repos/${state.owner}/${state.repo}/issues/comments/${state.commentId}`,
           "-X",
@@ -988,7 +1018,7 @@ function postOrPatchGitHubComment(state) {
         state.commentId = null;
       }
     }
-    const createOut = execFileSync("gh", [
+    const createOut = execFileSync2("gh", [
       "api",
       `repos/${state.owner}/${state.repo}/issues/${state.issueNumber}/comments`,
       "-F",
@@ -1017,12 +1047,472 @@ function postOrPatchGitHubComment(state) {
   }
 }
 
+// src/guardrails/stateController.ts
+var ALLOWED_TRANSITIONS = [
+  { from: "INITIAL", event: "INGEST_OPEN", to: "INTAKE_TRIAGE" },
+  { from: "INTAKE_TRIAGE", event: "READY", to: "ARCHITECTING" },
+  { from: "INTAKE_TRIAGE", event: "NOT_READY", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "EMPTY", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "FETCH_FAILED", to: "PAUSED" },
+  { from: "INTAKE_TRIAGE", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "ARCHITECTING", event: "PLAN_READY", to: "AWAITING_SCOPE_APPROVAL" },
+  { from: "ARCHITECTING", event: "BLOCKED", to: "PAUSED" },
+  { from: "ARCHITECTING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "AWAITING_SCOPE_APPROVAL", event: "HUMAN_APPROVE", to: "DEVELOPING" },
+  { from: "AWAITING_SCOPE_APPROVAL", event: "HUMAN_REJECT", to: "PAUSED" },
+  { from: "DEVELOPING", event: "IMPLEMENTED", to: "TESTING" },
+  { from: "DEVELOPING", event: "SCOPE_AMENDMENT", to: "ARCHITECTING" },
+  { from: "DEVELOPING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "TESTING", event: "PASS", to: "REVIEWING" },
+  { from: "TESTING", event: "FAIL", to: "DEVELOPING" },
+  { from: "TESTING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "REVIEWING", event: "CLEAR", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "AWAITING_PR_APPROVAL" },
+  { from: "REVIEWING", event: "CONCERNS", to: "DEVELOPING" },
+  { from: "REVIEWING", event: "HANDOFF_INVALID", to: "PAUSED" },
+  { from: "AWAITING_PR_APPROVAL", event: "HUMAN_PR_APPROVE", to: "PR_OPEN" }
+];
+var StateController = class _StateController {
+  /**
+   * Validates if a proposed state transition is permissible under the State Machine.
+   */
+  static validateTransition(fromPhase, event, toPhase) {
+    const normalizedFrom = fromPhase.toUpperCase();
+    const normalizedTo = toPhase.toUpperCase();
+    const normalizedEvent = event.toUpperCase();
+    const effectiveFrom = normalizedFrom === "INTAKE" ? "INTAKE_TRIAGE" : normalizedFrom;
+    const effectiveTo = normalizedTo === "INTAKE" ? "INTAKE_TRIAGE" : normalizedTo;
+    return ALLOWED_TRANSITIONS.some(
+      (t) => t.from === effectiveFrom && t.event === normalizedEvent && t.to === effectiveTo
+    );
+  }
+  /**
+   * Checks whether the current workflow phase represents an advanced, in-flight pipeline stage
+   * that must be preserved on session resume rather than reset to intake.
+   */
+  static isAdvancedPhase(phase) {
+    const p = String(phase || "").toUpperCase();
+    return [
+      "ARCHITECTING",
+      "AWAITING_SCOPE_APPROVAL",
+      "DEVELOPING",
+      "TESTING",
+      "QA_VALIDATING",
+      "REVIEWING",
+      "AWAITING_PR_APPROVAL",
+      "PR_READY",
+      "PR_OPEN"
+    ].includes(p);
+  }
+  /**
+   * Resolves the issue number from session context:
+   * 1. Initial user prompt
+   * 2. Cwd path (e.g. Copilot App worktree named StarReads-issue-42-slug)
+   * 3. Active git branch (e.g. fix/issue-42)
+   * 4. Existing workflow state
+   */
+  static resolveIssueFromSession(cwd, prompt, repoRoot, state) {
+    if (prompt) {
+      const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
+      if (jsonNum) return parseInt(jsonNum[1], 10);
+      const explicitNum = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
+      if (explicitNum) return parseInt(explicitNum[1], 10);
+      const wordNum = prompt.match(/\bissue-?(\d+)\b/i);
+      if (wordNum) return parseInt(wordNum[1], 10);
+    }
+    const cwdMatch = cwd.match(/(?:issue-?|#)(\d+)/i);
+    if (cwdMatch) {
+      return parseInt(cwdMatch[1], 10);
+    }
+    const rootMatch = repoRoot.match(/(?:issue-?|#)(\d+)/i);
+    if (rootMatch) {
+      return parseInt(rootMatch[1], 10);
+    }
+    try {
+      const branch = execSync4("git rev-parse --abbrev-ref HEAD", {
+        cwd,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+      const branchMatch = branch.match(/(?:issue-?|#)(\d+)/i);
+      if (branchMatch) {
+        return parseInt(branchMatch[1], 10);
+      }
+    } catch {
+    }
+    if (state?.issue?.number && state.issue.number > 0) {
+      return state.issue.number;
+    }
+    return null;
+  }
+  /**
+   * Initializes or loads the workflow state for the session safely.
+   * Guarantees the .gated-change directory exists on disk.
+   */
+  static loadOrCreateState(rootDir = getRepoRoot(), sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync4(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId && (!state.sessionId || state.sessionId !== sessionId)) {
+      state.sessionId = sessionId;
+      saveState(state, rootDir);
+    }
+    return state;
+  }
+  /**
+   * Performs the atomic intake authorization commit:
+   * 1. Records issue metadata in state.json
+   * 2. Sets phase = "INTAKE_TRIAGE" and active branch
+   * 3. Syncs in-memory dashboard projection with status = "INTAKE_AUTHORIZED"
+   * 4. Logs audit entry in audit.jsonl
+   * All executed as a single atomic transaction.
+   */
+  /**
+   * Records issue validation results, identity, snapshot reference, and intake eligibility
+   * into the Workflow State before context injection.
+   */
+  static recordIssueValidation(rootDir, record, sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync4(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+    state.issueValidation = record.validation;
+    state.intakeEligibility = record.intake;
+    if (record.issueSnapshot) {
+      state.issueSnapshot = record.issueSnapshot;
+    }
+    if (record.issue) {
+      state.issue = {
+        owner: record.issue.owner,
+        repo: record.issue.repo,
+        number: record.issue.number,
+        title: record.issue.title,
+        body: record.issue.body
+      };
+      state.activeBranch = `fix/issue-${record.issue.number}`;
+    }
+    if (record.intake === "READY") {
+      state.phase = "INTAKE";
+    } else {
+      state.phase = "PAUSED";
+      if (record.reason) {
+        state.pauseReason = record.reason;
+      }
+    }
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = record.issue?.owner || remoteInfo.owner;
+    const repo = record.issue?.repo || remoteInfo.repo;
+    const issueNum = record.issue?.number || state.issue?.number || 0;
+    syncWorkflowDashboard(rootDir, {
+      owner,
+      repo,
+      issueNumber: issueNum,
+      issueTitle: record.issue?.title || state.issue?.title,
+      activeBranch: state.activeBranch,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: record.intake === "READY" ? "INTAKE_AUTHORIZED" : "BLOCKED",
+      summary: record.reason || (record.intake === "READY" ? `Issue #${issueNum} verified OPEN. Authorized for Intake.` : "Intake blocked."),
+      details: {
+        validation: record.validation,
+        intake: record.intake,
+        snapshot: record.issueSnapshot,
+        reason: record.reason
+      }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "issue_validation_recorded",
+        decision: record.intake === "READY" ? "allow" : "deny",
+        details: {
+          validation: record.validation,
+          intake: record.intake,
+          issueNumber: issueNum,
+          snapshot: record.issueSnapshot,
+          reason: record.reason
+        }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Atomically authorizes the intake stage for an issue and persists
+   * state.json and audit.jsonl in one unified commit.
+   */
+  static authorizeIntake(rootDir, issue, cacheFilePath, sessionId) {
+    const gatedDir = findGatedChangeDir(rootDir);
+    if (!existsSync4(gatedDir)) {
+      mkdirSync2(gatedDir, { recursive: true });
+    }
+    const state = loadState(rootDir);
+    if (sessionId) {
+      state.sessionId = sessionId;
+    }
+    state.issueValidation = "PASS";
+    state.intakeEligibility = "READY";
+    state.issueSnapshot = cacheFilePath;
+    state.issue = {
+      owner: issue.owner,
+      repo: issue.repo,
+      number: issue.number,
+      title: issue.title,
+      body: issue.body
+    };
+    state.phase = "INTAKE";
+    state.activeBranch = `fix/issue-${issue.number}`;
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    syncWorkflowDashboard(rootDir, {
+      owner: issue.owner,
+      repo: issue.repo,
+      issueNumber: issue.number,
+      issueTitle: issue.title,
+      activeBranch: `fix/issue-${issue.number}`,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: "INTAKE_AUTHORIZED",
+      summary: `Session initialized & issue #${issue.number} verified OPEN. Authorized for Intake triage.`,
+      details: {
+        issueNumber: issue.number,
+        title: issue.title,
+        author: issue.author,
+        state: issue.state,
+        cacheFile: cacheFilePath
+      }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "intake_stage_authorized",
+        decision: "allow",
+        details: {
+          issueNumber: issue.number,
+          title: issue.title,
+          phase: "INTAKE_TRIAGE",
+          status: "INTAKE_AUTHORIZED",
+          cacheFile: cacheFilePath
+        }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Pauses the workflow due to validation failure, closed issue, or policy block.
+   * Atomically records reason in state.json and audit.jsonl.
+   */
+  static pauseWorkflow(rootDir, reason, issueNumber, sessionId) {
+    const state = loadState(rootDir);
+    state.phase = "PAUSED";
+    state.pauseReason = reason;
+    state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    saveState(state, rootDir);
+    const remoteInfo = getRepoOwnerAndName(rootDir);
+    const owner = state.issue?.owner || remoteInfo.owner;
+    const repo = state.issue?.repo || remoteInfo.repo;
+    syncWorkflowDashboard(rootDir, {
+      owner,
+      repo,
+      issueNumber: issueNumber || state.issue?.number || 0,
+      sessionId: sessionId || state.sessionId,
+      phase: "intake",
+      status: "BLOCKED",
+      summary: reason,
+      details: { reason }
+    });
+    appendAuditLog(
+      {
+        sessionId: sessionId || state.sessionId,
+        agent: "controller",
+        action: "workflow_paused",
+        decision: "deny",
+        details: { reason, issueNumber: issueNumber || state.issue?.number }
+      },
+      rootDir
+    );
+    return state;
+  }
+  /**
+   * Commits the Intake specialist's verdict to the State Machine:
+   * 1. Evaluates state machine transition rules.
+   * 2. If READY:
+   *    - sets state.phase = "ARCHITECTING"
+   *    - records state.issue.declaredScope = triageData.declaredScope
+   *    - syncs derived dashboard projection: phase="intake", status="READY"
+   *    - logs audit entry: action="intake_verdict_ready"
+   * 3. If NOT_READY:
+   *    - increments intakeRound
+   *    - if intakeRound >= maxIntakeRounds: pauses workflow ("CLARIFICATION_LIMIT_EXCEEDED")
+   *    - syncs derived dashboard projection: phase="intake", status="NOT_READY"
+   *    - logs audit entry: action="intake_verdict_not_ready"
+   * 4. If invalid status: fails closed to PAUSED ("HANDOFF_INVALID")
+   */
+  static commitIntakeVerdict(rootDir, triageData, sessionId) {
+    const state = loadState(rootDir);
+    const effectiveSessionId = sessionId || state.sessionId;
+    if (triageData.status === "READY") {
+      const allowed = _StateController.validateTransition(state.phase, "READY", "ARCHITECTING");
+      if (!allowed) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `STATE_TRANSITION_VIOLATION: Cannot transition from phase '${state.phase}' to 'ARCHITECTING' on event 'READY'`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.phase = "ARCHITECTING";
+      if (triageData.declaredScope) {
+        state.issue.declaredScope = triageData.declaredScope;
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "READY",
+        summary: "Definition-of-Ready triage verified criteria & declared scope.",
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_ready",
+          decision: "allow",
+          details: {
+            issueNumber: state.issue.number,
+            phase: "ARCHITECTING",
+            declaredScope: triageData.declaredScope,
+            acceptanceCriteriaCount: triageData.acceptanceCriteria?.length || 0
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else if (triageData.status === "NOT_READY") {
+      state.intakeRound = (state.intakeRound || 0) + 1;
+      const maxRounds = state.maxIntakeRounds || 2;
+      if (state.intakeRound >= maxRounds) {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `CLARIFICATION_LIMIT_EXCEEDED: Intake triage returned NOT_READY after ${state.intakeRound} rounds. Definition of Ready not satisfied.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+      state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      saveState(state, rootDir);
+      syncWorkflowDashboard(rootDir, {
+        owner: state.issue.owner,
+        repo: state.issue.repo,
+        issueNumber: state.issue.number,
+        issueTitle: state.issue.title,
+        activeBranch: state.activeBranch,
+        sessionId: effectiveSessionId,
+        phase: "intake",
+        status: "NOT_READY",
+        summary: `Definition of Ready not met (missing: ${(triageData.missing || []).join(", ")})`,
+        details: triageData
+      });
+      appendAuditLog(
+        {
+          sessionId: effectiveSessionId,
+          agent: "controller",
+          action: "intake_verdict_not_ready",
+          decision: "info",
+          details: {
+            issueNumber: state.issue.number,
+            round: state.intakeRound,
+            missing: triageData.missing,
+            clarifyingQuestion: triageData.clarifyingQuestion
+          }
+        },
+        rootDir
+      );
+      return state;
+    } else if (triageData.status === "EMPTY") {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `LACK_OF_CONTENT: Issue body is empty or lacks substantive problem description. Definition of Ready cannot be satisfied. Workflow halted immediately without user clarification rounds.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    } else if (triageData.status === "FETCH_FAILED") {
+      const fetchRetries = state.fetchRetries || 0;
+      const maxFetchRetries = 2;
+      if (fetchRetries < maxFetchRetries) {
+        state.fetchRetries = fetchRetries + 1;
+        state.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        saveState(state, rootDir);
+        syncWorkflowDashboard(rootDir, {
+          owner: state.issue?.owner,
+          repo: state.issue?.repo,
+          issueNumber: state.issue?.number,
+          issueTitle: state.issue?.title,
+          activeBranch: state.activeBranch,
+          sessionId: effectiveSessionId,
+          phase: "intake",
+          status: "FETCH_RETRY",
+          summary: `Issue fetch failed (${triageData.fetchError || "network error"}). Retrying ingestion attempt ${state.fetchRetries}/${maxFetchRetries}...`,
+          details: triageData
+        });
+        appendAuditLog(
+          {
+            sessionId: effectiveSessionId,
+            agent: "controller",
+            action: "intake_fetch_retry",
+            decision: "allow",
+            details: {
+              issueNumber: state.issue?.number,
+              attempt: state.fetchRetries,
+              error: triageData.fetchError
+            }
+          },
+          rootDir
+        );
+        return state;
+      } else {
+        return _StateController.pauseWorkflow(
+          rootDir,
+          `FETCH_FAILED_EXHAUSTED: Issue fetch failed after ${fetchRetries} retry attempts: ${triageData.fetchError || "network error"}. Pipeline halted.`,
+          state.issue?.number,
+          effectiveSessionId
+        );
+      }
+    } else {
+      return _StateController.pauseWorkflow(
+        rootDir,
+        `INTAKE_TRIAGE_FAILED: Triage returned status '${triageData.status}'. Pipeline halted.`,
+        state.issue?.number,
+        effectiveSessionId
+      );
+    }
+  }
+};
+
 // scripts/guardrails/hook-intake-ingest.ts
 async function main() {
   let rawInput = "";
   if (!process.stdin.isTTY) {
     try {
-      rawInput = readFileSync4(0, "utf-8");
+      rawInput = readFileSync5(0, "utf-8");
     } catch {
     }
   }
@@ -1038,33 +1528,8 @@ async function main() {
     const repoRoot = getRepoRoot(effectiveCwd);
     const state = loadState(repoRoot);
     const prompt = toolArgs.prompt || input.toolArgs?.prompt || "";
-    let issueNum = 1;
-    const jsonNum = prompt.match(/"number"\s*:\s*(\d+)/);
-    const textNum = prompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i);
-    const nameNum = String(toolArgs.name || "").match(/(?:issue-?|#)(\d+)/i);
-    if (jsonNum) {
-      issueNum = parseInt(jsonNum[1], 10);
-    } else if (textNum) {
-      issueNum = parseInt(textNum[1], 10);
-    } else if (nameNum) {
-      issueNum = parseInt(nameNum[1], 10);
-    } else if (state.issue?.number && state.issue.number > 0) {
-      issueNum = state.issue.number;
-    } else {
-      const pathNum = repoRoot.match(/(?:issue-?|#)(\d+)/i);
-      if (pathNum) {
-        issueNum = parseInt(pathNum[1], 10);
-      } else {
-        try {
-          const branch = execSync4("git rev-parse --abbrev-ref HEAD", { cwd: repoRoot, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-          const branchNum = branch.match(/(?:issue-?|#)(\d+)/i);
-          if (branchNum) {
-            issueNum = parseInt(branchNum[1], 10);
-          }
-        } catch {
-        }
-      }
-    }
+    const resolvedNum = StateController.resolveIssueFromSession(effectiveCwd, prompt, repoRoot, state);
+    const issueNum = resolvedNum && resolvedNum > 0 ? resolvedNum : 1;
     const isValidRepoPart = (s) => Boolean(s && !s.startsWith(".") && !/\.(json|js|ts|md|txt|ya?ml)$/i.test(s));
     if (state.issue?.owner && !isValidRepoPart(state.issue.owner)) {
       delete state.issue.owner;
@@ -1073,8 +1538,8 @@ async function main() {
       delete state.issue.repo;
     }
     const remoteInfo = getRepoOwnerAndName(repoRoot);
-    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") || (isValidRepoPart(state.issue?.owner) ? state.issue?.owner : "") || "ADO2GH-Migration";
-    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") || (isValidRepoPart(state.issue?.repo) ? state.issue?.repo : "") || "StarReads";
+    let owner = (isValidRepoPart(remoteInfo.owner) ? remoteInfo.owner : "") || (isValidRepoPart(state.issue?.owner) ? state.issue.owner : "") || "vamsicherukuri";
+    let repo = (isValidRepoPart(remoteInfo.repo) ? remoteInfo.repo : "") || (isValidRepoPart(state.issue?.repo) ? state.issue.repo : "") || "prsquad";
     const jsonOwner = prompt.match(/"owner"\s*:\s*"([^"]+)"/);
     const jsonRepo = prompt.match(/"repo"\s*:\s*"([^"]+)"/);
     if (jsonOwner && jsonRepo && isValidRepoPart(jsonOwner[1]) && isValidRepoPart(jsonRepo[1])) {
@@ -1089,23 +1554,9 @@ async function main() {
     }
     try {
       const issueData = fetchIssueDeterministic(owner, repo, issueNum, repoRoot);
-      if (issueData.state && issueData.state !== "OPEN") {
-        state.issue = { owner, repo, number: issueData.number, title: issueData.title };
-        state.phase = "PAUSED";
-        saveState(state, repoRoot);
-        appendAuditLog({
-          sessionId: state.sessionId,
-          agent: "controller",
-          tool: "agent",
-          action: "deterministic_closed_issue_block",
-          decision: "deny",
-          details: {
-            issueNumber: issueData.number,
-            title: issueData.title,
-            state: issueData.state
-          }
-        }, repoRoot);
+      if (issueData.state && issueData.state.toUpperCase() !== "OPEN") {
         const reason = `DETERMINISTIC_POLICY_BLOCK: Issue #${issueData.number} has lifecycle status ${issueData.state} on GitHub. Gated Change workflows can only be initiated on OPEN issues. Pipeline halted.`;
+        StateController.pauseWorkflow(repoRoot, reason, issueData.number, input.sessionId || state.sessionId);
         const output2 = {
           decision: "deny",
           permissionDecision: "deny",
@@ -1135,8 +1586,8 @@ async function main() {
         activeBranch: `fix/issue-${issueData.number}`,
         sessionId: input.sessionId || state.sessionId,
         phase: "intake",
-        status: "READY",
-        summary: `Deterministic triage verified OPEN status with verified criteria`
+        status: "INTAKE_AUTHORIZED",
+        summary: `Deterministic triage authorized for issue #${issueData.number}`
       });
       appendAuditLog({
         sessionId: state.sessionId,

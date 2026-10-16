@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FetchedIssueData } from "./types.js";
@@ -11,7 +11,8 @@ export function fetchIssueDeterministic(
   owner: string,
   repo: string,
   issueNumber: number,
-  rootDir: string = process.cwd()
+  rootDir: string = process.cwd(),
+  includeComments: boolean = false
 ): FetchedIssueData {
   // 0. Check local issue cache in .gated-change/issue-cache.json
   const cacheFile = join(rootDir, ".gated-change", "issue-cache.json");
@@ -39,29 +40,57 @@ export function fetchIssueDeterministic(
     } catch {}
   }
 
-  // 1. Try native GitHub CLI
+  // 1. Try native GitHub CLI (with retry on transient network/CLI failure)
   try {
     let stdout = "";
-    if (owner && repo) {
+    const fields = includeComments
+      ? "number,title,body,comments,labels,author,state"
+      : "number,title,body,labels,author,state";
+
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        const cmd = `gh issue view ${issueNumber} --repo ${owner}/${repo} --json number,title,body,comments,labels,author,state`;
-        stdout = execSync(cmd, {
-          cwd: rootDir,
-          encoding: "utf-8",
-          timeout: 10000,
-          stdio: ["ignore", "pipe", "ignore"],
-        });
-      } catch {}
+        if (owner && repo) {
+          try {
+            stdout = execFileSync(
+              "gh",
+              ["issue", "view", String(issueNumber), "--repo", `${owner}/${repo}`, "--json", fields],
+              {
+                cwd: rootDir,
+                encoding: "utf-8",
+                timeout: 10000,
+                stdio: ["ignore", "pipe", "ignore"],
+              }
+            );
+          } catch (e) {
+            lastError = e;
+          }
+        }
+
+        if (!stdout.trim()) {
+          stdout = execFileSync(
+            "gh",
+            ["issue", "view", String(issueNumber), "--json", fields],
+            {
+              cwd: rootDir,
+              encoding: "utf-8",
+              timeout: 10000,
+              stdio: ["ignore", "pipe", "ignore"],
+            }
+          );
+        }
+
+        if (stdout.trim()) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt < 2) {
+          try { execSync("node -e \"setTimeout(()=>{}, 300)\""); } catch {}
+        }
+      }
     }
 
-    if (!stdout.trim()) {
-      const fallbackCmd = `gh issue view ${issueNumber} --json number,title,body,comments,labels,author,state`;
-      stdout = execSync(fallbackCmd, {
-        cwd: rootDir,
-        encoding: "utf-8",
-        timeout: 10000,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
+    if (!stdout.trim() && lastError) {
+      throw lastError;
     }
 
     const parsed = JSON.parse(stdout);
@@ -166,28 +195,4 @@ export function formatIntakePayload(issueData: FetchedIssueData, round: number =
     null,
     2
   );
-}
-
-/**
- * Synchronizes human chat clarifications back to the GitHub issue comments
- * to keep the remote issue as the durable single source of truth.
- */
-export function syncClarificationToIssue(
-  owner: string,
-  repo: string,
-  issueNumber: number,
-  clarificationText: string,
-  rootDir: string = process.cwd()
-): boolean {
-  try {
-    const escaped = clarificationText.replace(/"/g, '\\"');
-    execSync(`gh issue comment ${issueNumber} --repo ${owner}/${repo} --body "Clarification from Copilot session: ${escaped}"`, {
-      cwd: rootDir,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }

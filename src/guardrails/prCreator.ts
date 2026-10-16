@@ -266,42 +266,77 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         };
       }
 
-      // 4c. Verified Security & Code Review Clearance Evidence (CLEAR, APPROVED, or informational CONCERNS)
+      // 4c. Verified Security & Code Review Clearance Evidence (CLEAR, APPROVED, or non-blocking CONCERNS)
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS";
+      const revRiskFlags = revRecord?.details?.riskFlags;
+      const hasBlockingConcerns =
+        revVerdict === "CONCERNS" &&
+        Array.isArray(revRiskFlags) &&
+        revRiskFlags.some((f: any) => f?.blocking === true);
+      const isReviewPassing =
+        revVerdict === "CLEAR" ||
+        revVerdict === "APPROVED" ||
+        (revVerdict === "CONCERNS" && !hasBlockingConcerns);
       if (!revVerdict || !isReviewPassing) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or CONCERNS).`,
+          error: hasBlockingConcerns
+            ? `PR_GATE_BLOCKED (BLOCKING_REVIEW_CONCERNS): Security and code review reported blocking CONCERNS. Blocking findings must be resolved by Developer before opening PR.`
+            : `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or non-blocking CONCERNS).`,
         };
       }
 
-      // 4d. Anti-Stale Evidence Binding: Tested/Reviewed commits must match current HEAD
+      // 4d. Anti-Stale Evidence Binding: Resolve tested/reviewed commit evidence to real commits and compare with current HEAD
       let currentHead = "";
       try {
-        currentHead = execSync("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        currentHead = execFileSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
+          cwd: rootDir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
       } catch {}
 
-      if (currentHead && currentHead !== "HEAD") {
-        const isHexSha = (val: unknown): boolean =>
-          typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
+      if (!currentHead) {
+        return {
+          success: false,
+          error: "PR_GATE_BLOCKED (COMMIT_RESOLUTION_FAILED): Unable to resolve current branch HEAD commit for evidence verification.",
+        };
+      }
 
-        const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`,
-          };
+      const resolveEvidenceCommit = (val: unknown): string | null => {
+        if (typeof val !== "string") return null;
+        const trimmed = val.trim();
+        if (!/^[0-9a-f]{7,40}$/i.test(trimmed)) return null;
+        try {
+          return execFileSync("git", ["rev-parse", "--verify", `${trimmed}^{commit}`], {
+            cwd: rootDir,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"],
+          }).trim();
+        } catch {
+          return null;
         }
+      };
 
-        const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`,
-          };
-        }
+      const qaCommitRaw = qaRecord?.details?.commitSha ?? qaRecord?.details?.headRef;
+      const qaCommitResolved = resolveEvidenceCommit(qaCommitRaw);
+      if (!qaCommitResolved || qaCommitResolved !== currentHead) {
+        const displayQa = typeof qaCommitRaw === "string" && qaCommitRaw.trim() ? qaCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${displayQa}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`,
+        };
+      }
+
+      const revCommitRaw = revRecord?.details?.commitSha ?? revRecord?.details?.headRef;
+      const revCommitResolved = resolveEvidenceCommit(revCommitRaw);
+      if (!revCommitResolved || revCommitResolved !== currentHead) {
+        const displayRev = typeof revCommitRaw === "string" && revCommitRaw.trim() ? revCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${displayRev}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`,
+        };
       }
 
       // 4e. Human PR Authorization Token Inspection

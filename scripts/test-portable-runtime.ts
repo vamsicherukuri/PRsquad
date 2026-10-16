@@ -135,11 +135,15 @@ try {
   console.log("  [✓ PASS] Human gate CLIs provisioned directly to .gated-change/bin/");
 
   // 4. Set up mock architectural state for Human Scope Gate test
-  const dashboardState = {
-    issueNumber: 101,
-    issueTitle: "Add MFA flow",
-    owner: "vamsicherukuri",
-    repo: "prsquad",
+  const workflowState = {
+    sessionId: "portable-test-session",
+    phase: "ARCHITECT_COMPLETE",
+    issue: { number: 101, title: "Add MFA flow", owner: "vamsicherukuri", repo: "prsquad" },
+    approvedPlan: {
+      title: "MFA Authentication",
+      files: ["src/auth/mfa.js"],
+      approach: "Add TOTP validation",
+    },
     phases: {
       architect: {
         status: "PLAN_READY",
@@ -153,18 +157,6 @@ try {
         },
       },
       scopeGate: { status: "AWAITING_APPROVAL" },
-    },
-  };
-  writeFileSync(join(scratchDir, ".gated-change", "dashboard.json"), JSON.stringify(dashboardState, null, 2));
-
-  const workflowState = {
-    sessionId: "portable-test-session",
-    phase: "ARCHITECT_COMPLETE",
-    issue: { number: 101, title: "Add MFA flow" },
-    approvedPlan: {
-      title: "MFA Authentication",
-      files: ["src/auth/mfa.js"],
-      approach: "Add TOTP validation",
     },
     scopeRevisionCount: 0,
     maxScopeRevisions: 3,
@@ -222,13 +214,9 @@ try {
   );
   execSync('git add src/auth/mfa.ts && git commit -m "feat: add MFA service"', { cwd: scratchDir, stdio: "ignore" });
 
-  const updatedDashboard = JSON.parse(readFileSync(join(scratchDir, ".gated-change", "dashboard.json"), "utf-8"));
-  updatedDashboard.phases.qa = { status: "PASS", summary: "MFA unit test suite 100% green" };
-  writeFileSync(join(scratchDir, ".gated-change", "dashboard.json"), JSON.stringify(updatedDashboard, null, 2));
-
   const updatedState = JSON.parse(readFileSync(join(scratchDir, ".gated-change", "state.json"), "utf-8"));
   updatedState.phase = "QA_COMPLETE";
-  updatedState.phases = { qa: { status: "PASS" } };
+  updatedState.phases = { qa: { status: "PASS", summary: "MFA unit test suite 100% green" } };
   updatedState.approvedScope = "src/auth/";
   writeFileSync(join(scratchDir, ".gated-change", "state.json"), JSON.stringify(updatedState, null, 2));
 

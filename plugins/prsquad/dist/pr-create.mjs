@@ -291,16 +291,72 @@ import { tmpdir, homedir as homedir2 } from "node:os";
 import { execFileSync, execSync as execSync2 } from "node:child_process";
 import { createRequire } from "node:module";
 var DASHBOARD_ANCHOR = "<!-- gated-change:workflow-dashboard -->";
+function getWorkflowDashboard(rootDir = getRepoRoot()) {
+  const state = loadState(rootDir);
+  const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
+  const phases = { ...state.phases || {} };
+  if (!phases.intake && state.issue?.number) {
+    phases.intake = {
+      status: state.intakeEligibility === "READY" ? "READY" : state.intakeEligibility === "BLOCKED" ? "BLOCKED" : "PENDING",
+      summary: state.pauseReason || (state.intakeEligibility === "READY" ? "Intake verified." : void 0)
+    };
+  }
+  if (!phases.architect && (state.approvedPlan || state.phase === "ARCHITECTING" || state.phase === "AWAITING_SCOPE_APPROVAL")) {
+    phases.architect = {
+      status: state.approvedPlan ? "PLAN_READY" : "IN_PROGRESS",
+      details: state.approvedPlan ? { plan: state.approvedPlan } : void 0
+    };
+  }
+  if (!phases.scopeGate && (state.humanApproval || state.approvedScope)) {
+    phases.scopeGate = {
+      status: state.humanApproval ? "APPROVED" : "PENDING",
+      credits: 0,
+      details: { approvedScope: state.approvedScope, baseRef: state.baseRef }
+    };
+  }
+  if (!phases.developer && state.phase === "DEVELOPING") {
+    phases.developer = {
+      status: "IN_PROGRESS"
+    };
+  }
+  return {
+    issueNumber: state.issue?.number || 0,
+    issueTitle: state.issue?.title,
+    owner: state.issue?.owner || "",
+    repo: state.issue?.repo || "",
+    activeBranch: state.activeBranch,
+    commentId: state.commentId ?? null,
+    sessionId: state.sessionId,
+    startEventId: state.startEventId || tele?.firstEventId,
+    telemetry: tele || void 0,
+    lastUpdated: state.updatedAt || (/* @__PURE__ */ new Date()).toISOString(),
+    phases
+  };
+}
 function loadDashboardState(rootDir = getRepoRoot()) {
   try {
     const gatedDir = findGatedChangeDir(rootDir);
     const dashboardFile = join2(gatedDir, "dashboard.json");
+    let legacyPhases = {};
     if (existsSync2(dashboardFile)) {
+      try {
+        const legacy = JSON.parse(readFileSync2(dashboardFile, "utf-8"));
+        if (legacy.phases) legacyPhases = legacy.phases;
+      } catch {
+      }
+    }
+    const stateFile = join2(gatedDir, "state.json");
+    if (!existsSync2(stateFile) && existsSync2(dashboardFile)) {
       return JSON.parse(readFileSync2(dashboardFile, "utf-8"));
     }
+    const dash = getWorkflowDashboard(rootDir);
+    if (Object.keys(legacyPhases).length > 0) {
+      dash.phases = { ...legacyPhases, ...dash.phases };
+    }
+    return dash;
   } catch {
+    return null;
   }
-  return null;
 }
 function getStatusBadge(status) {
   if (!status || status === "PENDING") return "\u26AA `PENDING`";
@@ -749,56 +805,34 @@ ${revDetails.mergeGateSummary}
 }
 function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
   try {
-    const gatedDir = findGatedChangeDir(rootDir);
-    const dashboardFile = join2(gatedDir, "dashboard.json");
-    let current = {
-      issueNumber: update.issueNumber || 0,
-      issueTitle: update.issueTitle,
-      owner: update.owner || "vamsicherukuri",
-      repo: update.repo || "prsquad",
-      activeBranch: update.activeBranch,
-      sessionId: update.sessionId,
-      lastUpdated: (/* @__PURE__ */ new Date()).toISOString(),
-      phases: {}
-    };
-    if (existsSync2(dashboardFile)) {
-      try {
-        const raw = readFileSync2(dashboardFile, "utf-8");
-        const parsed = JSON.parse(raw);
-        const isSameIssue = !update.issueNumber || update.issueNumber === parsed.issueNumber;
-        current = {
-          ...parsed,
-          phases: isSameIssue ? { ...parsed.phases } : {}
-        };
-      } catch {
-      }
-    }
-    if (update.owner) current.owner = update.owner;
-    if (update.repo) current.repo = update.repo;
+    const state = loadState(rootDir);
+    if (update.owner) state.issue.owner = update.owner;
+    if (update.repo) state.issue.repo = update.repo;
     if (update.issueNumber && update.issueNumber > 0 && update.issueNumber !== 999) {
-      current.issueNumber = update.issueNumber;
+      state.issue.number = update.issueNumber;
     }
     if (update.issueTitle && update.issueTitle !== "Test Billing Issue") {
-      current.issueTitle = update.issueTitle;
+      state.issue.title = update.issueTitle;
     }
     if (update.activeBranch && !update.activeBranch.includes("999")) {
-      current.activeBranch = update.activeBranch;
+      state.activeBranch = update.activeBranch;
     }
     if (update.sessionId) {
-      current.sessionId = update.sessionId;
+      state.sessionId = update.sessionId;
     }
-    current.lastUpdated = (/* @__PURE__ */ new Date()).toISOString();
-    const tele = getGroundTruthTelemetry(current.sessionId, current.startEventId || 0);
+    const tele = getGroundTruthTelemetry(state.sessionId, state.startEventId || 0);
     if (tele) {
-      if (!current.startEventId && tele.firstEventId) {
-        current.startEventId = tele.firstEventId;
+      if (!state.startEventId && tele.firstEventId) {
+        state.startEventId = tele.firstEventId;
       }
-      current.telemetry = tele;
+    }
+    if (!state.phases) {
+      state.phases = {};
     }
     if (update.phase) {
-      const existingPhase = current.phases[update.phase] || { status: "PENDING" };
+      const existingPhase = state.phases[update.phase] || { status: "PENDING" };
       let phaseCredits = existingPhase.credits;
-      if (current.telemetry && current.telemetry.actualAiCredits !== void 0) {
+      if (tele && tele.actualAiCredits !== void 0) {
         if (update.phase === "scopeGate" || update.phase === "mergeGate") {
           phaseCredits = 0;
         } else {
@@ -810,18 +844,18 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
             reviewer: 4
           };
           const subagentIdx = subagentIdxMap[update.phase];
-          if (subagentIdx !== void 0 && current.telemetry.subagents && current.telemetry.subagents[subagentIdx]) {
-            phaseCredits = current.telemetry.subagents[subagentIdx].credits;
+          if (subagentIdx !== void 0 && tele.subagents && tele.subagents[subagentIdx]) {
+            phaseCredits = tele.subagents[subagentIdx].credits;
           } else {
-            const recordedCredits = Object.entries(current.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
-            const computed = Math.max(0, Math.round((current.telemetry.actualAiCredits - recordedCredits) * 100) / 100);
+            const recordedCredits = Object.entries(state.phases).filter(([k]) => k !== update.phase).reduce((sum, [, p]) => sum + (p?.credits || 0), 0);
+            const computed = Math.max(0, Math.round((tele.actualAiCredits - recordedCredits) * 100) / 100);
             if (phaseCredits === void 0 || update.status !== "IN_PROGRESS") {
               phaseCredits = computed;
             }
           }
         }
       }
-      current.phases[update.phase] = {
+      state.phases[update.phase] = {
         ...existingPhase,
         status: update.status || existingPhase.status,
         summary: update.summary || existingPhase.summary,
@@ -833,8 +867,8 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         }
       };
       if (update.phase === "scopeGate" && update.details?.plan) {
-        const existingArch = current.phases.architect || { status: "PLAN_READY" };
-        current.phases.architect = {
+        const existingArch = state.phases.architect || { status: "PLAN_READY" };
+        state.phases.architect = {
           ...existingArch,
           status: "PLAN_READY",
           summary: existingArch.summary || "Technical plan approved at Scope Approval Gate",
@@ -845,13 +879,37 @@ function syncWorkflowDashboard(rootDir = getRepoRoot(), update) {
         };
       }
     }
-    writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+    saveState(state, rootDir);
+    try {
+      const gatedDir = findGatedChangeDir(rootDir);
+      const legacyDash = join2(gatedDir, "dashboard.json");
+      if (existsSync2(legacyDash)) {
+        unlinkSync(legacyDash);
+      }
+    } catch {
+    }
+    const current = {
+      issueNumber: state.issue?.number || 0,
+      issueTitle: state.issue?.title,
+      owner: state.issue?.owner || update.owner || "vamsicherukuri",
+      repo: state.issue?.repo || update.repo || "prsquad",
+      activeBranch: state.activeBranch || update.activeBranch,
+      commentId: state.commentId ?? null,
+      sessionId: state.sessionId,
+      startEventId: state.startEventId,
+      telemetry: tele || void 0,
+      lastUpdated: state.updatedAt,
+      phases: state.phases
+    };
     const isTest = process.env.NODE_ENV === "test" || process.env.GATED_CHANGE_TEST === "1" || process.env.npm_lifecycle_event?.startsWith("test");
     const isPrPhase = update.phase === "mergeGate" || current.phases.mergeGate?.status === "PR_OPEN" || current.phases.mergeGate?.status === "PR_CREATED" || current.phases.mergeGate?.status === "READY_FOR_MERGE" || Boolean(current.commentId);
     const shouldPostComment = !isTest && current.issueNumber > 0 && current.issueNumber !== 999 && Boolean(current.owner) && Boolean(current.repo) && isPrPhase && process.env.GATED_CHANGE_POST_ISSUE_COMMENT !== "0";
     if (shouldPostComment) {
       postOrPatchGitHubComment(current);
-      writeFileSync2(dashboardFile, JSON.stringify(current, null, 2), "utf-8");
+      if (current.commentId && current.commentId !== state.commentId) {
+        state.commentId = current.commentId;
+        saveState(state, rootDir);
+      }
     }
     if (process.env.GATED_CHANGE_WEBHOOK_URL && !isTest) {
       try {
@@ -1146,34 +1204,61 @@ function createPullRequest(options = {}) {
       }
       const revRecord = dashboard?.phases?.reviewer;
       const revVerdict = revRecord?.details?.assessment || revRecord?.details?.verdict || revRecord?.status;
-      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS";
+      const revRiskFlags = revRecord?.details?.riskFlags;
+      const hasBlockingConcerns = revVerdict === "CONCERNS" && Array.isArray(revRiskFlags) && revRiskFlags.some((f) => f?.blocking === true);
+      const isReviewPassing = revVerdict === "CLEAR" || revVerdict === "APPROVED" || revVerdict === "CONCERNS" && !hasBlockingConcerns;
       if (!revVerdict || !isReviewPassing) {
         return {
           success: false,
-          error: `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or CONCERNS).`
+          error: hasBlockingConcerns ? `PR_GATE_BLOCKED (BLOCKING_REVIEW_CONCERNS): Security and code review reported blocking CONCERNS. Blocking findings must be resolved by Developer before opening PR.` : `PR_GATE_BLOCKED: Security and code review audit not recorded or cleared (verdict: ${revVerdict || "NOT RECORDED"}). PR gate strictly requires Reviewer clearance (CLEAR, APPROVED, or non-blocking CONCERNS).`
         };
       }
       let currentHead = "";
       try {
-        currentHead = execSync3("git rev-parse HEAD", { cwd: rootDir, encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+        currentHead = execFileSync2("git", ["rev-parse", "--verify", "HEAD^{commit}"], {
+          cwd: rootDir,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"]
+        }).trim();
       } catch {
       }
-      if (currentHead && currentHead !== "HEAD") {
-        const isHexSha = (val) => typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
-        const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
-          };
+      if (!currentHead) {
+        return {
+          success: false,
+          error: "PR_GATE_BLOCKED (COMMIT_RESOLUTION_FAILED): Unable to resolve current branch HEAD commit for evidence verification."
+        };
+      }
+      const resolveEvidenceCommit = (val) => {
+        if (typeof val !== "string") return null;
+        const trimmed = val.trim();
+        if (!/^[0-9a-f]{7,40}$/i.test(trimmed)) return null;
+        try {
+          return execFileSync2("git", ["rev-parse", "--verify", `${trimmed}^{commit}`], {
+            cwd: rootDir,
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "ignore"]
+          }).trim();
+        } catch {
+          return null;
         }
-        const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
-          return {
-            success: false,
-            error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`
-          };
-        }
+      };
+      const qaCommitRaw = qaRecord?.details?.commitSha ?? qaRecord?.details?.headRef;
+      const qaCommitResolved = resolveEvidenceCommit(qaCommitRaw);
+      if (!qaCommitResolved || qaCommitResolved !== currentHead) {
+        const displayQa = typeof qaCommitRaw === "string" && qaCommitRaw.trim() ? qaCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${displayQa}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
+        };
+      }
+      const revCommitRaw = revRecord?.details?.commitSha ?? revRecord?.details?.headRef;
+      const revCommitResolved = resolveEvidenceCommit(revCommitRaw);
+      if (!revCommitResolved || revCommitResolved !== currentHead) {
+        const displayRev = typeof revCommitRaw === "string" && revCommitRaw.trim() ? revCommitRaw.trim().slice(0, 8) : "MISSING/INVALID";
+        return {
+          success: false,
+          error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${displayRev}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`
+        };
       }
       const searchDir = findGatedChangeDir(rootDir);
       const prAuthPath = join3(searchDir, "pr-authorization.json");
