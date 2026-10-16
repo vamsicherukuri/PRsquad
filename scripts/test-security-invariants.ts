@@ -438,6 +438,10 @@ async function runSecurityInvariants() {
 
     const preState = loadState(REPO_ROOT);
     const savedBranch = preState.activeBranch;
+    let originalGitBranch = "main";
+    try {
+      originalGitBranch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: REPO_ROOT, encoding: "utf-8" }).trim();
+    } catch {}
     try {
       execSync("git checkout -B fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
     } catch {}
@@ -472,7 +476,7 @@ async function runSecurityInvariants() {
 
     // Clean up
     try {
-      execSync(`git checkout ${savedBranch || "master"}`, { cwd: REPO_ROOT, stdio: "ignore" });
+      execSync(`git checkout ${originalGitBranch || savedBranch || "main"}`, { cwd: REPO_ROOT, stdio: "ignore" });
       execSync("git branch -D fix/issue-inv-14", { cwd: REPO_ROOT, stdio: "ignore" });
     } catch {}
     preState.activeBranch = savedBranch;

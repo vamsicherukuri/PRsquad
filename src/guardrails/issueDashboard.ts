@@ -136,8 +136,8 @@ export function loadDashboardState(rootDir: string = getRepoRoot()): DashboardSt
     }
 
     const dash = getWorkflowDashboard(rootDir);
-    if (Object.keys(dash.phases || {}).length === 0 && Object.keys(legacyPhases).length > 0) {
-      dash.phases = legacyPhases;
+    if (Object.keys(legacyPhases).length > 0) {
+      dash.phases = { ...dash.phases, ...legacyPhases };
     }
     return dash;
   } catch {

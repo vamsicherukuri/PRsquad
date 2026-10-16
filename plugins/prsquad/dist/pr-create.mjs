@@ -350,8 +350,8 @@ function loadDashboardState(rootDir = getRepoRoot()) {
       return JSON.parse(readFileSync2(dashboardFile, "utf-8"));
     }
     const dash = getWorkflowDashboard(rootDir);
-    if (Object.keys(dash.phases || {}).length === 0 && Object.keys(legacyPhases).length > 0) {
-      dash.phases = legacyPhases;
+    if (Object.keys(legacyPhases).length > 0) {
+      dash.phases = { ...dash.phases, ...legacyPhases };
     }
     return dash;
   } catch {
@@ -1217,16 +1217,16 @@ function createPullRequest(options = {}) {
       } catch {
       }
       if (currentHead && currentHead !== "HEAD") {
-        const isHexSha = (val) => typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
+        const isCommitRef = (val) => typeof val === "string" && val.trim().length >= 7 && val.trim() !== "HEAD";
         const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
+        if (isCommitRef(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`
           };
         }
         const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
+        if (isCommitRef(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`

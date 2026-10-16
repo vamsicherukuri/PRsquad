@@ -284,11 +284,11 @@ export function createPullRequest(options: PROptions = {}): PRResult {
       } catch {}
 
       if (currentHead && currentHead !== "HEAD") {
-        const isHexSha = (val: unknown): boolean =>
-          typeof val === "string" && /^[0-9a-f]{7,40}$/i.test(val.trim());
+        const isCommitRef = (val: unknown): boolean =>
+          typeof val === "string" && val.trim().length >= 7 && val.trim() !== "HEAD";
 
         const qaCommit = qaRecord?.details?.commitSha || qaRecord?.details?.headRef;
-        if (isHexSha(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
+        if (isCommitRef(qaCommit) && !currentHead.startsWith(qaCommit) && !qaCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): QA verification was executed against commit '${qaCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-verification required before opening PR.`,
@@ -296,7 +296,7 @@ export function createPullRequest(options: PROptions = {}): PRResult {
         }
 
         const revCommit = revRecord?.details?.commitSha || revRecord?.details?.headRef;
-        if (isHexSha(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
+        if (isCommitRef(revCommit) && !currentHead.startsWith(revCommit) && !revCommit.startsWith(currentHead)) {
           return {
             success: false,
             error: `PR_GATE_BLOCKED (STALE_EVIDENCE): Code review was executed against commit '${revCommit.slice(0, 8)}', but current branch HEAD is '${currentHead.slice(0, 8)}'. Re-review required before opening PR.`,
