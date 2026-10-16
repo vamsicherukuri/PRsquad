@@ -1510,8 +1510,20 @@ async function runSessionStart(input = {}) {
     process.stdout.write(JSON.stringify(output2) + "\n");
     return;
   }
-  const promptMatch = initialPrompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) || initialPrompt.match(/\bissue-?(\d+)\b/i);
-  let issueNum = promptMatch ? parseInt(promptMatch[1], 10) : null;
+  const xmlIssueMatch = initialPrompt.match(/issue_number:\s*(\d+)/i);
+  const xmlRepoMatch = initialPrompt.match(/issue_repo_full_name:\s*([^\s\n\r]+)/i);
+  let issueNum = xmlIssueMatch ? parseInt(xmlIssueMatch[1], 10) : null;
+  if (xmlRepoMatch && xmlRepoMatch[1].includes("/")) {
+    const [extOwner, extRepo] = xmlRepoMatch[1].split("/");
+    remoteInfo.owner = extOwner;
+    remoteInfo.repo = extRepo;
+  }
+  if (!issueNum) {
+    const promptMatch = initialPrompt.match(/(?:issue(?:[_\s]*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) || initialPrompt.match(/\bissue-?(\d+)\b/i);
+    if (promptMatch) {
+      issueNum = parseInt(promptMatch[1], 10);
+    }
+  }
   if (!issueNum && state.issue?.number && state.issue.number > 0) {
     issueNum = state.issue.number;
   }

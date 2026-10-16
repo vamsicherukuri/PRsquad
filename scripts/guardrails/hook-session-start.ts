@@ -70,10 +70,26 @@ export async function runSessionStart(input: HookInput = {}): Promise<void> {
     return;
   }
 
-  // 4. Extract issue number explicitly in sessionStart.ts (avoid silent branch/worktree fallback)
-  const promptMatch = initialPrompt.match(/(?:issue(?:\s*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) ||
-                      initialPrompt.match(/\bissue-?(\d+)\b/i);
-  let issueNum = promptMatch ? parseInt(promptMatch[1], 10) : null;
+  // 4. Extract issue number explicitly in sessionStart.ts
+  // 4A. Native Copilot App <copilot_issue_context> XML block parsing
+  const xmlIssueMatch = initialPrompt.match(/issue_number:\s*(\d+)/i);
+  const xmlRepoMatch = initialPrompt.match(/issue_repo_full_name:\s*([^\s\n\r]+)/i);
+
+  let issueNum: number | null = xmlIssueMatch ? parseInt(xmlIssueMatch[1], 10) : null;
+  if (xmlRepoMatch && xmlRepoMatch[1].includes("/")) {
+    const [extOwner, extRepo] = xmlRepoMatch[1].split("/");
+    remoteInfo.owner = extOwner;
+    remoteInfo.repo = extRepo;
+  }
+
+  // 4B. User chat prompt patterns (e.g. "resolve issue #42", "#42", "issue_number: 42")
+  if (!issueNum) {
+    const promptMatch = initialPrompt.match(/(?:issue(?:[_\s]*number)?\s*[:#`'"\s]*|#)\s*(\d+)/i) ||
+                        initialPrompt.match(/\bissue-?(\d+)\b/i);
+    if (promptMatch) {
+      issueNum = parseInt(promptMatch[1], 10);
+    }
+  }
 
   // Allow existing active state issue if user prompt is a generic resume/instruction
   if (!issueNum && state.issue?.number && state.issue.number > 0) {
